@@ -21,15 +21,15 @@ function navActive(href: string): boolean {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{title}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body>
 
 <header id="navbar">
   <a href="/" class="brand">
-    <span class="bracket">[</span>
-    Red Team Academy
-    <span class="bracket">]</span>
+    <img src="/images/samurai.svg" alt="Red Team Academy" class="brand-icon" />
+    <span class="brand-name">Red Team</span><span class="brand-accent"> Academy</span>
   </a>
   <span class="status-dot"></span>
   <nav>
@@ -43,7 +43,7 @@ function navActive(href: string): boolean {
     <div class="sidebar-header">// modules</div>
 
     <details open={isActive('/fundamentals')}>
-      <summary><span class="module-icon">🎯</span> Fundamentals</summary>
+      <summary><span class="module-num">01</span> Fundamentals</summary>
       <ul>
         <li><a href="/fundamentals/methodology" class={isActive('/fundamentals/methodology') ? 'active' : ''}>Red Team Methodology</a></li>
         <li><a href="/fundamentals/engagement-planning" class={isActive('/fundamentals/engagement-planning') ? 'active' : ''}>Engagement Planning</a></li>
@@ -56,7 +56,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/recon')}>
-      <summary><span class="module-icon">🔍</span> Reconnaissance</summary>
+      <summary><span class="module-num">02</span> Reconnaissance</summary>
       <ul>
         <li><a href="/recon/passive-recon" class={isActive('/recon/passive-recon') ? 'active' : ''}>Passive Recon (OSINT)</a></li>
         <li><a href="/recon/active-recon" class={isActive('/recon/active-recon') ? 'active' : ''}>Active Recon (Scanning)</a></li>
@@ -69,7 +69,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/active-directory')}>
-      <summary><span class="module-icon">🏰</span> Active Directory</summary>
+      <summary><span class="module-num">03</span> Active Directory</summary>
       <ul>
         <li><a href="/active-directory/ad-enumeration" class={isActive('/active-directory/ad-enumeration') ? 'active' : ''}>AD Enumeration</a></li>
         <li><a href="/active-directory/goad" class={isActive('/active-directory/goad') ? 'active' : ''}>Game of Active Directory</a></li>
@@ -89,7 +89,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/pivoting')}>
-      <summary><span class="module-icon">🔀</span> Pivoting &amp; Tunneling</summary>
+      <summary><span class="module-num">04</span> Pivoting &amp; Tunneling</summary>
       <ul>
         <li><a href="/pivoting/ssh-tunneling" class={isActive('/pivoting/ssh-tunneling') ? 'active' : ''}>SSH Tunneling</a></li>
         <li><a href="/pivoting/chisel-socks" class={isActive('/pivoting/chisel-socks') ? 'active' : ''}>Chisel &amp; SOCKS5</a></li>
@@ -101,7 +101,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/evasion')}>
-      <summary><span class="module-icon">🕶️</span> Evasion</summary>
+      <summary><span class="module-num">05</span> Evasion</summary>
       <ul>
         <li><a href="/evasion/amsi-bypass" class={isActive('/evasion/amsi-bypass') ? 'active' : ''}>AMSI Bypass</a></li>
         <li><a href="/evasion/av-edr-evasion" class={isActive('/evasion/av-edr-evasion') ? 'active' : ''}>AV / EDR Evasion</a></li>
@@ -122,7 +122,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/exploitation')}>
-      <summary><span class="module-icon">💥</span> Exploitation</summary>
+      <summary><span class="module-num">06</span> Exploitation</summary>
       <ul>
         <li><a href="/exploitation/metasploitable" class={isActive('/exploitation/metasploitable') ? 'active' : ''}>Metasploitable</a></li>
         <li><a href="/exploitation/web-attacks" class={isActive('/exploitation/web-attacks') ? 'active' : ''}>Web Attacks (OWASP)</a></li>
@@ -133,7 +133,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/post-exploitation')}>
-      <summary><span class="module-icon">🐚</span> Post-Exploitation</summary>
+      <summary><span class="module-num">07</span> Post-Exploitation</summary>
       <ul>
         <li><a href="/post-exploitation/privesc-linux" class={isActive('/post-exploitation/privesc-linux') ? 'active' : ''}>Privesc — Linux</a></li>
         <li><a href="/post-exploitation/privesc-windows" class={isActive('/post-exploitation/privesc-windows') ? 'active' : ''}>Privesc — Windows</a></li>
@@ -144,7 +144,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/c2-frameworks')}>
-      <summary><span class="module-icon">🎛️</span> C2 Frameworks</summary>
+      <summary><span class="module-num">08</span> C2 Frameworks</summary>
       <ul>
         <li><a href="/c2-frameworks/metasploit" class={isActive('/c2-frameworks/metasploit') ? 'active' : ''}>Metasploit Framework</a></li>
         <li><a href="/c2-frameworks/cobalt-strike" class={isActive('/c2-frameworks/cobalt-strike') ? 'active' : ''}>Cobalt Strike</a></li>
@@ -160,7 +160,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/web')}>
-      <summary><span class="module-icon">🌐</span> Web Hacking</summary>
+      <summary><span class="module-num">09</span> Web Hacking</summary>
       <ul>
         <li><a href="/web/sql-injection" class={isActive('/web/sql-injection') ? 'active' : ''}>SQL Injection</a></li>
         <li><a href="/web/xss" class={isActive('/web/xss') ? 'active' : ''}>XSS &amp; CSP Bypass</a></li>
@@ -177,7 +177,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/iot')}>
-      <summary><span class="module-icon">📡</span> IoT Hacking</summary>
+      <summary><span class="module-num">10</span> IoT Hacking</summary>
       <ul>
         <li><a href="/iot/firmware-extraction" class={isActive('/iot/firmware-extraction') ? 'active' : ''}>Firmware Extraction</a></li>
         <li><a href="/iot/hardware-hacking" class={isActive('/iot/hardware-hacking') ? 'active' : ''}>Hardware Hacking</a></li>
@@ -191,7 +191,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/ai-agents')}>
-      <summary><span class="module-icon">🤖</span> AI Red Team Agents</summary>
+      <summary><span class="module-num">11</span> AI Red Team Agents</summary>
       <ul>
         <li><a href="/ai-agents/edge-llm-setup" class={isActive('/ai-agents/edge-llm-setup') ? 'active' : ''}>Edge LLM Setup</a></li>
         <li><a href="/ai-agents/red-team-agents" class={isActive('/ai-agents/red-team-agents') ? 'active' : ''}>AI Red Team Agents</a></li>
@@ -199,7 +199,7 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/reporting')}>
-      <summary><span class="module-icon">📋</span> Reporting</summary>
+      <summary><span class="module-num">12</span> Reporting</summary>
       <ul>
         <li><a href="/reporting/findings" class={isActive('/reporting/findings') ? 'active' : ''}>Documenting Findings</a></li>
         <li><a href="/reporting/executive-report" class={isActive('/reporting/executive-report') ? 'active' : ''}>Executive Report</a></li>

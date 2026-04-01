@@ -1,18 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <!-- Red Team Academy favicon — Samurai Kabuto -->
+  <!-- Red Team Academy — Samurai Kabuto -->
 
-  <!-- Maedate (crest) -->
+  <!-- Maedate (crest) — rendered behind dome -->
   <path d="M58,24 L64,2 L70,24 Z" fill="#1a1a1a"/>
 
   <!-- Helmet dome -->
   <path d="M20,72 Q20,28 64,24 Q108,28 108,72 Z" fill="#cc2200"/>
 
-  <!-- Dome depth band -->
+  <!-- Dome depth band (lower dome shadow) -->
   <path d="M24,55 Q64,50 104,55 L108,72 Q64,68 20,72 Z" fill="#991a00"/>
 
   <!-- Visor slit -->
   <rect x="28" y="62" width="72" height="10" rx="2" fill="#1a1a1a"/>
 
-  <!-- Shikoro (neck guard) -->
+  <!-- Shikoro (neck guard) — flares wider than dome -->
   <path d="M20,72 L8,100 L120,100 L108,72 Z" fill="#991a00"/>
 </svg>

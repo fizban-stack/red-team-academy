@@ -1,29 +1,29 @@
 /* Red Team Academy — styles.css */
 
 :root {
-  --bg-primary: #0d0d0d;
-  --bg-secondary: #111111;
-  --bg-tertiary: #1a1a1a;
-  --bg-card: #161616;
-  --border: #2a2a2a;
-  --border-accent: #1e3a1e;
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #0f0f0f;
+  --bg-tertiary: #161616;
+  --bg-card: #121212;
+  --border: #282828;
+  --border-accent: #3a1210;
 
-  --green: #00ff41;
-  --green-dim: #00c732;
-  --green-dark: #003d10;
-  --cyan: #00e5ff;
-  --cyan-dim: #00b3cc;
+  --green: #ff3333;
+  --green-dim: #cc2200;
+  --green-dark: #2a0800;
+  --cyan: #e86060;
+  --cyan-dim: #c45040;
   --red: #ff4444;
   --yellow: #ffcc00;
   --gray: #888888;
   --gray-light: #aaaaaa;
 
-  --text-primary: #e0e0e0;
+  --text-primary: #e8e8e8;
   --text-secondary: #aaaaaa;
   --text-muted: #666666;
 
   --font-mono: 'Courier New', 'Lucida Console', monospace;
-  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
 
   --navbar-height: 56px;
   --sidebar-width: 280px;
@@ -87,6 +87,7 @@ a:hover {
   height: var(--navbar-height);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-accent);
+  border-top: 3px solid var(--green-dim);
   display: flex;
   align-items: center;
   padding: 0 20px;
@@ -95,24 +96,33 @@ a:hover {
 }
 
 #navbar .brand {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: bold;
-  color: var(--green);
-  letter-spacing: 1px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
   white-space: nowrap;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   text-decoration: none;
 }
 
-#navbar .brand .bracket {
-  color: var(--green-dim);
-  opacity: 0.6;
+#navbar .brand .brand-icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
 }
 
-#navbar .brand:hover {
+#navbar .brand .brand-name {
+  color: var(--text-primary);
+}
+
+#navbar .brand .brand-accent {
+  color: var(--green-dim);
+}
+
+#navbar .brand:hover .brand-name {
   color: var(--green);
 }
 
@@ -234,8 +244,14 @@ a:hover {
   color: var(--green-dim);
 }
 
-#sidebar details > summary .module-icon {
-  font-size: 14px;
+#sidebar details > summary .module-num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--green-dim);
+  opacity: 0.75;
+  flex-shrink: 0;
+  min-width: 22px;
+  letter-spacing: 0.5px;
 }
 
 #sidebar details[open] > summary {
@@ -261,13 +277,13 @@ a:hover {
 
 #sidebar details ul li a:hover {
   color: var(--green-dim);
-  background: rgba(0, 200, 50, 0.04);
+  background: rgba(204, 34, 0, 0.05);
   border-left-color: var(--green-dark);
 }
 
 #sidebar details ul li a.active {
   color: var(--green);
-  background: rgba(0, 255, 65, 0.06);
+  background: rgba(255, 51, 51, 0.07);
   border-left-color: var(--green);
 }
 
@@ -334,13 +350,23 @@ a:hover {
 
 .module-card:hover {
   border-color: var(--green-dark);
-  background: #0f1f0f;
+  background: #1e0800;
   color: inherit;
 }
 
 .module-card .card-icon {
-  font-size: 24px;
-  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--green-dim);
+  background: var(--green-dark);
+  border: 1px solid var(--border-accent);
+  padding: 3px 8px;
+  display: inline-block;
+  border-radius: 2px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
 }
 
 .module-card .card-title {

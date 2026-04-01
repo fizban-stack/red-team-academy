@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 280" width="800" height="280">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00c732"/>
+    </marker>
+  </defs>
+  <rect width="800" height="280" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">AV/EDR Detection Stack and Evasion Points</text>
+
+  <!-- Stack layers (left column) -->
+  <text x="30" y="48" font-family="Courier New, monospace" font-size="10" fill="#555555">DETECTION LAYERS</text>
+  <text x="410" y="48" font-family="Courier New, monospace" font-size="10" fill="#555555">EVASION TECHNIQUES</text>
+
+  <!-- Layer 1: Static AV Signatures -->
+  <rect x="30" y="55" width="330" height="38" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="195" y="73" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">① STATIC SIGNATURES (AV)</text>
+  <text x="195" y="87" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">file scanning, hash matching, YARA</text>
+
+  <rect x="410" y="55" width="360" height="38" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="590" y="70" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">Obfuscate / pack / encrypt payload</text>
+  <text x="590" y="84" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">LLVM-obfuscator, custom encoders, shellcode encryption</text>
+
+  <!-- Layer 2: AMSI / Memory Scanning -->
+  <rect x="30" y="105" width="330" height="38" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="195" y="123" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">② AMSI / IN-MEMORY SCAN</text>
+  <text x="195" y="137" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">scripts scanned before execution</text>
+
+  <rect x="410" y="105" width="360" height="38" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="590" y="120" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">Patch AmsiScanBuffer / string split</text>
+  <text x="590" y="134" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">amsiContext corruption, obfuscated strings</text>
+
+  <!-- Layer 3: EDR Userland Hooks -->
+  <rect x="30" y="155" width="330" height="38" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="195" y="173" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">③ EDR USERLAND HOOKS</text>
+  <text x="195" y="187" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">ntdll.dll functions hooked (NtCreateProcess)</text>
+
+  <rect x="410" y="155" width="360" height="38" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="590" y="170" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">Direct syscalls (SysWhispers2/3)</text>
+  <text x="590" y="184" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">bypass hooked ntdll by calling kernel directly</text>
+
+  <!-- Layer 4: Kernel / ETW -->
+  <rect x="30" y="205" width="330" height="38" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="195" y="223" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">④ ETW / KERNEL CALLBACKS</text>
+  <text x="195" y="237" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">Event Tracing for Windows, minifilter</text>
+
+  <rect x="410" y="205" width="360" height="38" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="590" y="220" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">ETW patching / kernel driver load</text>
+  <text x="590" y="234" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">EtwEventWrite patch, vulnerable driver abuse</text>
+
+  <!-- Arrows between layers and bypasses -->
+  <line x1="360" y1="74" x2="410" y2="74" stroke="#333333" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="360" y1="124" x2="410" y2="124" stroke="#333333" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="360" y1="174" x2="410" y2="174" stroke="#333333" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="360" y1="224" x2="410" y2="224" stroke="#333333" stroke-width="1" marker-end="url(#arr)"/>
+</svg>

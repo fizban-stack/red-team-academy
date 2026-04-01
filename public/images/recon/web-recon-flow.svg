@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="200" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">WEB RECONNAISSANCE — ATTACK SURFACE MAPPING</text>
+
+  <!-- Target web server -->
+  <rect x="20" y="70" width="120" height="60" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.5"/>
+  <text x="80" y="92" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">TARGET</text>
+  <text x="80" y="106" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">web application</text>
+  <text x="80" y="118" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">:80 / :443</text>
+
+  <!-- Step 1: Fingerprint -->
+  <line x1="140" y1="100" x2="175" y2="70" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <rect x="175" y="40" width="145" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="247" y="58" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">FINGERPRINT</text>
+  <text x="247" y="71" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">whatweb / Wappalyzer</text>
+  <text x="247" y="81" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">CMS / framework / server</text>
+
+  <!-- Step 2: Dir brute -->
+  <line x1="140" y1="100" x2="175" y2="105" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <rect x="175" y="83" width="145" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="247" y="101" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">DIR BRUTE</text>
+  <text x="247" y="114" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">gobuster / feroxbuster</text>
+  <text x="247" y="124" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">ffuf / dirsearch</text>
+
+  <!-- Step 3: Headers/Certs -->
+  <line x1="140" y1="100" x2="175" y2="140" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <rect x="175" y="128" width="145" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="247" y="146" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">HEADERS / TLS</text>
+  <text x="247" y="159" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">curl -I / testssl.sh</text>
+  <text x="247" y="169" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">version leaks / misconfigs</text>
+
+  <!-- Arrows to findings -->
+  <line x1="320" y1="62" x2="395" y2="62" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="320" y1="105" x2="395" y2="105" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="320" y1="150" x2="395" y2="150" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Findings -->
+  <rect x="395" y="38" width="390" height="44" rx="3" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="590" y="56" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">WordPress 5.8 / Apache 2.4.49 / PHP 7.4</text>
+  <text x="590" y="69" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ CVE lookup, plugin enum, xmlrpc.php, wp-login.php</text>
+
+  <rect x="395" y="83" width="390" height="44" rx="3" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="590" y="101" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">/admin /backup /api/v1 /.env /phpinfo.php</text>
+  <text x="590" y="114" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ auth bypass, credential files, API keys, debug info</text>
+
+  <rect x="395" y="128" width="390" height="44" rx="3" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="590" y="146" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">X-Powered-By: PHP/7.4.3  Server: Apache/2.4.49</text>
+  <text x="590" y="159" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ path traversal CVE, outdated cipher suites, cert SANs</text>
+</svg>

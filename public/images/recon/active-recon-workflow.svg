@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 190" width="800" height="190">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="190" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">ACTIVE RECON WORKFLOW — DISCOVERY TO ENUMERATION</text>
+
+  <!-- Step 1: Fast port discovery -->
+  <rect x="15" y="42" width="155" height="60" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="92" y="60" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">1. FAST DISCOVERY</text>
+  <text x="92" y="74" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">masscan -p1-65535</text>
+  <text x="92" y="86" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">nmap -T4 --top-ports</text>
+  <text x="92" y="97" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">get open port list fast</text>
+  <line x1="170" y1="72" x2="195" y2="72" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Step 2: Service fingerprint -->
+  <rect x="196" y="42" width="155" height="60" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="273" y="60" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">2. SERVICE ENUM</text>
+  <text x="273" y="74" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">nmap -sV -sC -p</text>
+  <text x="273" y="86" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">targeted open ports</text>
+  <text x="273" y="97" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">banners / versions / scripts</text>
+  <line x1="351" y1="72" x2="376" y2="72" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Step 3: OS detection -->
+  <rect x="377" y="42" width="155" height="60" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="454" y="60" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">3. OS DETECTION</text>
+  <text x="454" y="74" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">nmap -O / TTL / TCP</text>
+  <text x="454" y="86" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">fingerprint options</text>
+  <text x="454" y="97" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">Linux / Windows / ver</text>
+  <line x1="532" y1="72" x2="557" y2="72" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Step 4: Vuln scan -->
+  <rect x="558" y="42" width="155" height="60" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="635" y="60" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">4. VULN SCAN</text>
+  <text x="635" y="74" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">nmap --script vuln</text>
+  <text x="635" y="86" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">Nessus / OpenVAS</text>
+  <text x="635" y="97" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">known CVEs / misconfigs</text>
+
+  <!-- Output box -->
+  <rect x="15" y="130" width="770" height="42" rx="3" fill="#111" stroke="#333" stroke-width="1"/>
+  <text x="400" y="148" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">OUTPUT: open ports → service versions → OS fingerprint → known vulnerabilities → exploitation targets</text>
+  <text x="400" y="163" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">nmap -sS -p- --min-rate 5000 TARGET  →  nmap -sV -sC -p 22,80,443,3389 TARGET  →  nmap --script vuln TARGET</text>
+</svg>

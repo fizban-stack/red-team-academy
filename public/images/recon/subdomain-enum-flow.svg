@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 210" width="800" height="210">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="garr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00c732"/>
+    </marker>
+  </defs>
+  <rect width="800" height="210" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">SUBDOMAIN ENUMERATION — LAYERED APPROACH</text>
+
+  <!-- Target domain -->
+  <rect x="325" y="40" width="150" height="35" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.5"/>
+  <text x="400" y="58" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">target.com</text>
+  <text x="400" y="70" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">root domain</text>
+
+  <!-- Passive sources -->
+  <rect x="20" y="115" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="85" y="133" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">PASSIVE</text>
+  <text x="85" y="146" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">crt.sh / subfinder</text>
+  <text x="85" y="156" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">Amass intel / Shodan</text>
+  <line x1="325" y1="62" x2="153" y2="128" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Brute force sources -->
+  <rect x="175" y="115" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="240" y="133" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">BRUTE FORCE</text>
+  <text x="240" y="146" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">dnsx / shuffledns</text>
+  <text x="240" y="156" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">SecLists wordlists</text>
+  <line x1="350" y1="75" x2="275" y2="113" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Virtual host probing -->
+  <rect x="330" y="115" width="140" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="400" y="133" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">VHOST PROBE</text>
+  <text x="400" y="146" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">ffuf / gobuster vhost</text>
+  <text x="400" y="156" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">Host: header fuzzing</text>
+  <line x1="400" y1="75" x2="400" y2="113" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- DNS Zone Transfer -->
+  <rect x="495" y="115" width="130" height="44" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="560" y="133" font-family="Courier New, monospace" font-size="9" fill="#ffcc00" text-anchor="middle">ZONE TRANSFER</text>
+  <text x="560" y="146" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">dig AXFR (if allowed)</text>
+  <text x="560" y="156" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">reveals all DNS records</text>
+  <line x1="450" y1="75" x2="527" y2="113" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Permutation -->
+  <rect x="650" y="115" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="715" y="133" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">PERMUTATION</text>
+  <text x="715" y="146" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">altdns / dnsgen</text>
+  <text x="715" y="156" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">dev-/api-/staging- mutate</text>
+  <line x1="475" y1="62" x2="650" y2="120" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Results -->
+  <rect x="16" y="182" width="768" height="22" rx="2" fill="#111" stroke="#333" stroke-width="1"/>
+  <text x="400" y="197" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">→ httpx probe for live hosts  →  nmap/nuclei scan live  →  attack surface: forgotten devs, admin panels, staging servers</text>
+</svg>

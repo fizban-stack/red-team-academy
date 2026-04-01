@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 190" width="900" height="190">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="900" height="190" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">MITRE ATT&amp;CK — 14 ENTERPRISE TACTICS</text>
+
+  <!-- Row 1: tactics 1-7 -->
+  <!-- TA0043: Recon -->
+  <rect x="10" y="38" width="115" height="38" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="67" y="53" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">TA0043</text>
+  <text x="67" y="65" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Reconnaissance</text>
+  <line x1="125" y1="57" x2="136" y2="57" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0042: Resource Dev -->
+  <rect x="137" y="38" width="115" height="38" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="194" y="53" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">TA0042</text>
+  <text x="194" y="65" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Resource Dev</text>
+  <line x1="252" y1="57" x2="263" y2="57" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0001: Initial Access -->
+  <rect x="264" y="38" width="115" height="38" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="321" y="53" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">TA0001</text>
+  <text x="321" y="65" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Initial Access</text>
+  <line x1="379" y1="57" x2="390" y2="57" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0002: Execution -->
+  <rect x="391" y="38" width="115" height="38" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="448" y="53" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">TA0002</text>
+  <text x="448" y="65" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Execution</text>
+  <line x1="506" y1="57" x2="517" y2="57" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0003: Persistence -->
+  <rect x="518" y="38" width="115" height="38" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="575" y="53" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">TA0003</text>
+  <text x="575" y="65" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Persistence</text>
+  <line x1="633" y1="57" x2="644" y2="57" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0004: Privesc -->
+  <rect x="645" y="38" width="115" height="38" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="702" y="53" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">TA0004</text>
+  <text x="702" y="65" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Priv Escalation</text>
+  <line x1="760" y1="57" x2="771" y2="57" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0005: Defense Evasion -->
+  <rect x="772" y="38" width="118" height="38" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="831" y="53" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">TA0005</text>
+  <text x="831" y="65" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Def Evasion</text>
+
+  <!-- Row 2: tactics 8-14 -->
+  <!-- TA0006: Credential Access -->
+  <rect x="10" y="105" width="115" height="38" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="67" y="120" font-family="Courier New, monospace" font-size="8" fill="#ffcc00" text-anchor="middle">TA0006</text>
+  <text x="67" y="132" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Cred Access</text>
+  <line x1="125" y1="124" x2="136" y2="124" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0007: Discovery -->
+  <rect x="137" y="105" width="115" height="38" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="194" y="120" font-family="Courier New, monospace" font-size="8" fill="#ffcc00" text-anchor="middle">TA0007</text>
+  <text x="194" y="132" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Discovery</text>
+  <line x1="252" y1="124" x2="263" y2="124" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0008: Lateral Movement -->
+  <rect x="264" y="105" width="115" height="38" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="321" y="120" font-family="Courier New, monospace" font-size="8" fill="#ffcc00" text-anchor="middle">TA0008</text>
+  <text x="321" y="132" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Lateral Mvmt</text>
+  <line x1="379" y1="124" x2="390" y2="124" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0009: Collection -->
+  <rect x="391" y="105" width="115" height="38" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="448" y="120" font-family="Courier New, monospace" font-size="8" fill="#ff4444" text-anchor="middle">TA0009</text>
+  <text x="448" y="132" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Collection</text>
+  <line x1="506" y1="124" x2="517" y2="124" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0011: C2 -->
+  <rect x="518" y="105" width="115" height="38" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="575" y="120" font-family="Courier New, monospace" font-size="8" fill="#ff4444" text-anchor="middle">TA0011</text>
+  <text x="575" y="132" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Command &amp; Ctrl</text>
+  <line x1="633" y1="124" x2="644" y2="124" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0010: Exfiltration -->
+  <rect x="645" y="105" width="115" height="38" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="702" y="120" font-family="Courier New, monospace" font-size="8" fill="#ff4444" text-anchor="middle">TA0010</text>
+  <text x="702" y="132" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Exfiltration</text>
+  <line x1="760" y1="124" x2="771" y2="124" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- TA0040: Impact -->
+  <rect x="772" y="105" width="118" height="38" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="831" y="120" font-family="Courier New, monospace" font-size="8" fill="#ff4444" text-anchor="middle">TA0040</text>
+  <text x="831" y="132" font-family="Courier New, monospace" font-size="9" fill="#e0e0e0" text-anchor="middle">Impact</text>
+
+  <!-- Continue arrow from row 1 to row 2 -->
+  <line x1="831" y1="76" x2="831" y2="88" stroke="#555" stroke-width="1"/>
+  <line x1="831" y1="88" x2="67" y2="88" stroke="#555" stroke-width="1"/>
+  <line x1="67" y1="88" x2="67" y2="103" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+</svg>

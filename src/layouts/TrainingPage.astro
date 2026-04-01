@@ -1,0 +1,38 @@
+---
+import Base from './Base.astro';
+
+interface Props {
+  title: string;
+  module: string;
+  tags: string[];
+  pageKey: string;
+}
+
+const { title, module, tags, pageKey } = Astro.props;
+---
+<Base title={title}>
+  <div class="training-layout">
+
+    <div class="notes-panel">
+      <div class="notes-header">
+        <span class="notes-title">// my notes</span>
+        <span class="notes-saved" id="notes-saved">saved ✓</span>
+      </div>
+      <textarea id="notes-textarea" placeholder={"Take notes here...\n\nNotes are saved to the server."}></textarea>
+    </div>
+
+    <div class="content-panel">
+      <div class="page-meta">
+        <span>{module}</span>
+        {tags.map(tag => <span class="tag">{tag}</span>)}
+      </div>
+      <slot />
+    </div>
+
+  </div>
+</Base>
+
+<script is:inline src="/js/main.js"></script>
+<script is:inline define:vars={{ pageKey }}>
+  initNotes(pageKey);
+</script>

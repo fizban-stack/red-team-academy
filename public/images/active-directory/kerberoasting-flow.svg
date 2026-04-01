@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 280" width="800" height="280">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="280" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">Kerberoasting Attack Flow</text>
+
+  <!-- Step labels -->
+  <text x="60" y="55" font-family="Courier New, monospace" font-size="10" fill="#444444" text-anchor="middle">1. request TGT</text>
+  <text x="270" y="55" font-family="Courier New, monospace" font-size="10" fill="#444444" text-anchor="middle">2. TGT granted</text>
+  <text x="420" y="55" font-family="Courier New, monospace" font-size="10" fill="#444444" text-anchor="middle">3. request TGS (SPN)</text>
+  <text x="600" y="55" font-family="Courier New, monospace" font-size="10" fill="#444444" text-anchor="middle">4. TGS enc w/ svc hash</text>
+
+  <!-- Nodes -->
+  <!-- Attacker -->
+  <rect x="20" y="100" width="120" height="50" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="80" y="122" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="80" y="138" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">domain user</text>
+
+  <!-- KDC -->
+  <rect x="220" y="100" width="120" height="50" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="280" y="122" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">KDC / DC</text>
+  <text x="280" y="138" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">domain controller</text>
+
+  <!-- TGS Ticket -->
+  <rect x="420" y="95" width="130" height="60" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="485" y="117" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">TGS TICKET</text>
+  <text x="485" y="132" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">enc w/ service</text>
+  <text x="485" y="145" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">account hash</text>
+
+  <!-- Hashcat -->
+  <rect x="590" y="100" width="100" height="50" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="640" y="122" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">HASHCAT</text>
+  <text x="640" y="138" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">offline crack</text>
+
+  <!-- Password result -->
+  <rect x="710" y="100" width="75" height="50" fill="#161616" stroke="#ffcc00" stroke-width="1.5" rx="2"/>
+  <text x="747" y="122" font-family="Courier New, monospace" font-size="11" fill="#ffcc00" text-anchor="middle">PASSWORD</text>
+  <text x="747" y="138" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">plaintext</text>
+
+  <!-- Arrows -->
+  <line x1="140" y1="125" x2="220" y2="125" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="340" y1="125" x2="420" y2="125" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="550" y1="125" x2="590" y2="125" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="690" y1="125" x2="710" y2="125" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Return arrow from KDC back to Attacker (below) -->
+  <path d="M280,150 Q280,200 80,200 L80,150" fill="none" stroke="#333333" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="190" y="218" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">TGT returned</text>
+
+  <!-- Key fact -->
+  <rect x="20" y="245" width="760" height="22" fill="#111111" rx="2"/>
+  <text x="30" y="260" font-family="Courier New, monospace" font-size="10" fill="#444444">KEY: Any domain user can request a TGS for any SPN — no admin rights needed. Ticket cracked offline, no lockout.</text>
+</svg>

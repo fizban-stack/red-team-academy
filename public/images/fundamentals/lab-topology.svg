@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240" width="800" height="240">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="240" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">LAB TOPOLOGY — LOCAL RED TEAM ENVIRONMENT</text>
+
+  <!-- Hypervisor box -->
+  <rect x="15" y="35" width="770" height="185" rx="4" fill="#0d0d0d" stroke="#333" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="25" y="52" font-family="Courier New, monospace" font-size="9" fill="#444">HYPERVISOR (VMware / VirtualBox / Proxmox)</text>
+
+  <!-- Kali/Attacker -->
+  <rect x="30" y="60" width="130" height="60" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="95" y="83" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">KALI LINUX</text>
+  <text x="95" y="97" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">attacker / tools</text>
+  <text x="95" y="108" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">192.168.56.10</text>
+
+  <!-- Windows 10 victim -->
+  <rect x="195" y="60" width="130" height="60" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="260" y="83" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">WIN10 CLIENT</text>
+  <text x="260" y="97" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">domain joined</text>
+  <text x="260" y="108" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">192.168.56.20</text>
+
+  <!-- DC -->
+  <rect x="360" y="60" width="130" height="60" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="425" y="78" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">WIN SERVER</text>
+  <text x="425" y="91" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">domain controller</text>
+  <text x="425" y="102" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">AD DS / DNS</text>
+  <text x="425" y="113" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">192.168.56.21</text>
+
+  <!-- Metasploitable -->
+  <rect x="525" y="60" width="130" height="60" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="590" y="78" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">METASPLOITABLE</text>
+  <text x="590" y="91" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">intentionally vuln</text>
+  <text x="590" y="102" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">Linux / Ubuntu</text>
+  <text x="590" y="113" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">192.168.56.30</text>
+
+  <!-- C2 -->
+  <rect x="660" y="60" width="110" height="60" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="715" y="78" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">C2 SERVER</text>
+  <text x="715" y="91" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">Sliver / CS</text>
+  <text x="715" y="102" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">listener</text>
+  <text x="715" y="113" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">192.168.56.50</text>
+
+  <!-- Network line -->
+  <line x1="30" y1="160" x2="770" y2="160" stroke="#333" stroke-width="1.5"/>
+  <text x="400" y="175" font-family="Courier New, monospace" font-size="9" fill="#444" text-anchor="middle">HOST-ONLY NETWORK — 192.168.56.0/24</text>
+
+  <!-- Drop lines from VMs to network -->
+  <line x1="95" y1="120" x2="95" y2="160" stroke="#333" stroke-width="1"/>
+  <line x1="260" y1="120" x2="260" y2="160" stroke="#333" stroke-width="1"/>
+  <line x1="425" y1="120" x2="425" y2="160" stroke="#333" stroke-width="1"/>
+  <line x1="590" y1="120" x2="590" y2="160" stroke="#333" stroke-width="1"/>
+  <line x1="715" y1="120" x2="715" y2="160" stroke="#333" stroke-width="1"/>
+
+  <!-- NAT note -->
+  <text x="95" y="200" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">NAT adapter</text>
+  <text x="95" y="210" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">for internet</text>
+</svg>

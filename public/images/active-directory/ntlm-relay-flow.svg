@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff4444"/>
+    </marker>
+  </defs>
+  <rect width="800" height="270" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">NTLM Relay Attack Chain</text>
+
+  <!-- Victim -->
+  <rect x="20" y="90" width="120" height="55" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="80" y="112" font-family="Courier New, monospace" font-size="11" fill="#ff4444" text-anchor="middle">VICTIM</text>
+  <text x="80" y="127" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">triggered via:</text>
+  <text x="80" y="140" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">LLMNR/NBT-NS</text>
+
+  <!-- Attacker / Responder -->
+  <rect x="240" y="85" width="160" height="65" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="320" y="107" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="320" y="122" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">Responder + ntlmrelayx</text>
+  <text x="320" y="137" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">captures and relays auth</text>
+
+  <!-- Target -->
+  <rect x="510" y="85" width="160" height="65" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="590" y="107" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">TARGET SERVER</text>
+  <text x="590" y="122" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">SMB / LDAP / HTTP</text>
+  <text x="590" y="137" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">SMB signing disabled</text>
+
+  <!-- Result -->
+  <rect x="690" y="95" width="95" height="45" fill="#161616" stroke="#ffcc00" stroke-width="1.5" rx="2"/>
+  <text x="737" y="115" font-family="Courier New, monospace" font-size="11" fill="#ffcc00" text-anchor="middle">ACCESS</text>
+  <text x="737" y="130" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">shell / dump</text>
+
+  <!-- Step labels -->
+  <text x="185" y="82" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">① NTLM challenge</text>
+  <text x="430" y="82" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">② relay auth</text>
+  <text x="650" y="82" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">③ success</text>
+
+  <!-- Arrows -->
+  <line x1="140" y1="117" x2="240" y2="117" stroke="#ff4444" stroke-width="1.5" marker-end="url(#arr-red)"/>
+  <line x1="400" y1="117" x2="510" y2="117" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="670" y1="117" x2="690" y2="117" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Requirement -->
+  <rect x="20" y="175" width="760" height="50" fill="#0d1a0d" stroke="#1e3a1e" rx="2"/>
+  <text x="30" y="192" font-family="Courier New, monospace" font-size="10" fill="#666666">Requirements: SMB signing disabled on target  |  victim authenticates to attacker-controlled host</text>
+  <text x="30" y="208" font-family="Courier New, monospace" font-size="10" fill="#444444">  Responder -I eth0 --no-smb  +  ntlmrelayx.py -tf targets.txt -smb2support</text>
+</svg>

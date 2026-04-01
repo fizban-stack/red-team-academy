@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff4444"/>
+    </marker>
+  </defs>
+  <rect width="800" height="270" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">Azure AD / Entra ID — Hybrid Architecture &amp; Attack Paths</text>
+
+  <!-- On-prem AD -->
+  <rect x="20" y="90" width="150" height="60" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="95" y="113" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">ON-PREM AD</text>
+  <text x="95" y="128" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">corp.local</text>
+  <text x="95" y="141" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">Domain Controllers</text>
+
+  <!-- AAD Connect -->
+  <rect x="240" y="100" width="140" height="40" fill="#161616" stroke="#666666" stroke-width="1.5" rx="2"/>
+  <text x="310" y="117" font-family="Courier New, monospace" font-size="10" fill="#888888" text-anchor="middle">AAD Connect</text>
+  <text x="310" y="130" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">hash sync / pass-through</text>
+
+  <!-- Azure AD -->
+  <rect x="450" y="80" width="160" height="70" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="530" y="103" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">AZURE AD</text>
+  <text x="530" y="118" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">Entra ID</text>
+  <text x="530" y="133" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">tenant: corp.onmicrosoft.com</text>
+
+  <!-- M365 apps -->
+  <rect x="650" y="60" width="130" height="40" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="715" y="80" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">M365 / Teams</text>
+  <text x="715" y="93" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">SharePoint / Exchange</text>
+
+  <!-- Conditional access -->
+  <rect x="650" y="115" width="130" height="35" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="715" y="132" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">Conditional Access</text>
+  <text x="715" y="145" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">MFA / device policies</text>
+
+  <!-- Sync arrow -->
+  <line x1="170" y1="120" x2="240" y2="120" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="380" y1="120" x2="450" y2="115" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="610" y1="100" x2="650" y2="82" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="610" y1="115" x2="650" y2="130" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Attack path arrows (red) -->
+  <path d="M95,150 Q95,200 310,200 Q450,200 530,150" fill="none" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-red)"/>
+  <text x="310" y="215" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">ATTACK PATH: on-prem compromise → hash sync abuse → cloud admin</text>
+
+  <!-- Bottom notes -->
+  <rect x="20" y="230" width="760" height="28" fill="#0d1a0d" stroke="#1e3a1e" rx="2"/>
+  <text x="30" y="247" font-family="Courier New, monospace" font-size="10" fill="#444444">Key attacks: Password spray, device code phishing, token theft, Primary Refresh Token (PRT) abuse, AAD Connect cred dump</text>
+</svg>

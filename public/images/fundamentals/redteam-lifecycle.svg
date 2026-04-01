@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" width="900" height="200">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="900" height="200" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">RED TEAM ENGAGEMENT LIFECYCLE</text>
+
+  <!-- Phase boxes -->
+  <!-- 1: Planning -->
+  <rect x="20" y="50" width="100" height="50" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="70" y="72" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">PLANNING</text>
+  <text x="70" y="86" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">scope / rules</text>
+
+  <!-- 2: Recon -->
+  <rect x="140" y="50" width="100" height="50" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="190" y="72" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">RECON</text>
+  <text x="190" y="86" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">OSINT / enum</text>
+
+  <!-- 3: Initial Access -->
+  <rect x="260" y="50" width="110" height="50" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="315" y="72" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">INITIAL ACCESS</text>
+  <text x="315" y="86" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">phish / exploit</text>
+
+  <!-- 4: Execution -->
+  <rect x="390" y="50" width="100" height="50" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="440" y="72" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">EXECUTION</text>
+  <text x="440" y="86" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">payload / C2</text>
+
+  <!-- 5: Persist -->
+  <rect x="510" y="50" width="100" height="50" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="560" y="72" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">PERSISTENCE</text>
+  <text x="560" y="86" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">implant / creds</text>
+
+  <!-- 6: Lateral -->
+  <rect x="630" y="50" width="100" height="50" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="680" y="72" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">LATERAL MOV</text>
+  <text x="680" y="86" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">pivot / escalate</text>
+
+  <!-- 7: Objective -->
+  <rect x="750" y="50" width="100" height="50" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="800" y="72" font-family="Courier New, monospace" font-size="10" fill="#ffcc00" text-anchor="middle">OBJECTIVE</text>
+  <text x="800" y="86" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">exfil / impact</text>
+
+  <!-- Arrows -->
+  <line x1="120" y1="75" x2="138" y2="75" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="240" y1="75" x2="258" y2="75" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="370" y1="75" x2="388" y2="75" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="490" y1="75" x2="508" y2="75" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="610" y1="75" x2="628" y2="75" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="730" y1="75" x2="748" y2="75" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Report -->
+  <text x="450" y="160" font-family="Courier New, monospace" font-size="10" fill="#888" text-anchor="middle">→ debrief → report → remediation tracking → retest</text>
+  <line x1="800" y1="100" x2="800" y2="145" stroke="#555" stroke-width="1"/>
+  <line x1="800" y1="145" x2="450" y2="145" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+</svg>

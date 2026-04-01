@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 230" width="800" height="230">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="230" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">LINUX FILESYSTEM — RED TEAM HIGH-VALUE PATHS</text>
+
+  <!-- Root node -->
+  <rect x="355" y="38" width="90" height="28" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="400" y="57" font-family="Courier New, monospace" font-size="12" fill="#00c732" text-anchor="middle">/</text>
+
+  <!-- Branch lines from root -->
+  <line x1="400" y1="66" x2="400" y2="80" stroke="#333" stroke-width="1"/>
+  <line x1="90" y1="80" x2="710" y2="80" stroke="#333" stroke-width="1"/>
+
+  <!-- /etc -->
+  <line x1="90" y1="80" x2="90" y2="95" stroke="#333" stroke-width="1"/>
+  <rect x="30" y="95" width="120" height="44" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="90" y="113" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">/etc</text>
+  <text x="90" y="125" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">passwd shadow sudoers</text>
+  <text x="90" y="135" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">crontab ssh sshd_config</text>
+
+  <!-- /home -->
+  <line x1="230" y1="80" x2="230" y2="95" stroke="#333" stroke-width="1"/>
+  <rect x="170" y="95" width="120" height="44" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="230" y="113" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">/home</text>
+  <text x="230" y="125" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">.ssh/authorized_keys</text>
+  <text x="230" y="135" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">.bash_history .env creds</text>
+
+  <!-- /var -->
+  <line x1="370" y1="80" x2="370" y2="95" stroke="#333" stroke-width="1"/>
+  <rect x="310" y="95" width="120" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="370" y="113" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">/var/log</text>
+  <text x="370" y="125" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">auth.log syslog</text>
+  <text x="370" y="135" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">evidence — tamper/clear</text>
+
+  <!-- /tmp -->
+  <line x1="510" y1="80" x2="510" y2="95" stroke="#333" stroke-width="1"/>
+  <rect x="450" y="95" width="120" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="510" y="113" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">/tmp /dev/shm</text>
+  <text x="510" y="125" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">writable by all users</text>
+  <text x="510" y="135" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">drop payloads here</text>
+
+  <!-- /proc /sys -->
+  <line x1="650" y1="80" x2="650" y2="95" stroke="#333" stroke-width="1"/>
+  <rect x="585" y="95" width="130" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="650" y="113" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">/proc /sys</text>
+  <text x="650" y="125" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">kernel / process info</text>
+  <text x="650" y="135" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">environ maps cmdline</text>
+
+  <!-- Permission model -->
+  <text x="16" y="175" font-family="Courier New, monospace" font-size="9" fill="#888">PERMISSION MODEL</text>
+  <text x="16" y="190" font-family="Courier New, monospace" font-size="9" fill="#555">rwxrwxrwx  →  owner | group | other</text>
+  <text x="16" y="203" font-family="Courier New, monospace" font-size="9" fill="#555">4000 = SUID (run as owner)   2000 = SGID (run as group)   1000 = sticky</text>
+  <text x="16" y="216" font-family="Courier New, monospace" font-size="9" fill="#ff4444">SUID on interpreter = instant privesc path → check GTFOBins</text>
+</svg>

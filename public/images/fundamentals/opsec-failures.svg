@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" width="800" height="220">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="redarr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff4444"/>
+    </marker>
+  </defs>
+  <rect width="800" height="220" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">OPSEC — COMMON FAILURE POINTS</text>
+
+  <!-- Operator -->
+  <rect x="340" y="40" width="120" height="36" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="400" y="55" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">RED TEAM</text>
+  <text x="400" y="68" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">operator activity</text>
+
+  <!-- Failure 1: Static C2 -->
+  <rect x="30" y="110" width="130" height="44" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="95" y="127" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">STATIC C2 IP</text>
+  <text x="95" y="140" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">burned by threat intel feeds</text>
+  <text x="95" y="150" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">use redirectors / CDN</text>
+  <line x1="340" y1="62" x2="160" y2="115" stroke="#ff4444" stroke-width="1" marker-end="url(#redarr)"/>
+
+  <!-- Failure 2: Reuse tooling -->
+  <rect x="185" y="110" width="130" height="44" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="250" y="127" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">TOOL SIGNATURES</text>
+  <text x="250" y="140" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">default Cobalt Strike profile</text>
+  <text x="250" y="150" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">custom malleable C2 profiles</text>
+  <line x1="370" y1="76" x2="300" y2="112" stroke="#ff4444" stroke-width="1" marker-end="url(#redarr)"/>
+
+  <!-- Failure 3: Noisy scans -->
+  <rect x="340" y="110" width="130" height="44" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="405" y="127" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">NOISY SCANNING</text>
+  <text x="405" y="140" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">mass nmap triggers IDS/SIEM</text>
+  <text x="405" y="150" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">slow scan / target selectively</text>
+  <line x1="400" y1="76" x2="400" y2="108" stroke="#ff4444" stroke-width="1" marker-end="url(#redarr)"/>
+
+  <!-- Failure 4: Known hashes -->
+  <rect x="495" y="110" width="130" height="44" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="560" y="127" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">KNOWN HASHES</text>
+  <text x="560" y="140" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">Mimikatz / Meterpreter AV hit</text>
+  <text x="560" y="150" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">obfuscate / compile custom</text>
+  <line x1="430" y1="76" x2="515" y2="112" stroke="#ff4444" stroke-width="1" marker-end="url(#redarr)"/>
+
+  <!-- Failure 5: Attribution -->
+  <rect x="640" y="110" width="140" height="44" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="710" y="127" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">ATTRIBUTION LEAK</text>
+  <text x="710" y="140" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">real IP in logs / WHOIS</text>
+  <text x="710" y="150" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">VPS / Tor / CDN relay</text>
+  <line x1="460" y1="62" x2="640" y2="115" stroke="#ff4444" stroke-width="1" marker-end="url(#redarr)"/>
+
+  <!-- Bottom: OPSEC process -->
+  <text x="16" y="188" font-family="Courier New, monospace" font-size="9" fill="#888">5-STEP OPSEC PROCESS:</text>
+  <text x="16" y="203" font-family="Courier New, monospace" font-size="9" fill="#555">1. Identify critical info  →  2. Analyze threats  →  3. Analyze vulnerabilities  →  4. Assess risk  →  5. Apply countermeasures</text>
+</svg>

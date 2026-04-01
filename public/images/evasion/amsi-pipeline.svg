@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff4444"/>
+    </marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00c732"/>
+    </marker>
+  </defs>
+  <rect width="800" height="270" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">AMSI Architecture and Bypass Techniques</text>
+
+  <!-- Normal AMSI flow (top row) -->
+  <text x="30" y="55" font-family="Courier New, monospace" font-size="10" fill="#555555">NORMAL FLOW:</text>
+
+  <rect x="120" y="62" width="110" height="38" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="175" y="79" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">SCRIPT/CODE</text>
+  <text x="175" y="93" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">PowerShell</text>
+
+  <rect x="290" y="62" width="130" height="38" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="355" y="79" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">AmsiScanBuffer</text>
+  <text x="355" y="93" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">amsi.dll function</text>
+
+  <rect x="480" y="62" width="110" height="38" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="535" y="79" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">AV PROVIDER</text>
+  <text x="535" y="93" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">scans content</text>
+
+  <rect x="650" y="62" width="95" height="38" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="697" y="79" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">BLOCKED</text>
+  <text x="697" y="93" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">AMSI_RESULT_DETECT</text>
+
+  <line x1="230" y1="81" x2="290" y2="81" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="420" y1="81" x2="480" y2="81" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="590" y1="81" x2="650" y2="81" stroke="#ff4444" stroke-width="1.5" marker-end="url(#arr-red)"/>
+
+  <!-- Bypass techniques (bottom rows) -->
+  <text x="30" y="135" font-family="Courier New, monospace" font-size="10" fill="#555555">BYPASS TECHNIQUES:</text>
+
+  <!-- Bypass 1: Patch AmsiScanBuffer -->
+  <rect x="30" y="145" width="220" height="50" fill="#0d1a0d" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="140" y="163" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">① Patch AmsiScanBuffer</text>
+  <text x="140" y="177" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">overwrite with ret 0 / AMSI_RESULT_CLEAN</text>
+
+  <!-- Bypass 2: Obfuscation -->
+  <rect x="265" y="145" width="220" height="50" fill="#0d1a0d" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="375" y="163" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">② String Obfuscation</text>
+  <text x="375" y="177" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">encode, concat, base64 payload strings</text>
+
+  <!-- Bypass 3: Force error -->
+  <rect x="500" y="145" width="270" height="50" fill="#0d1a0d" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="635" y="163" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">③ Force Error (AmsiUtils)</text>
+  <text x="635" y="177" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">set amsiContext / amsiSession to null</text>
+
+  <!-- Example code -->
+  <rect x="30" y="215" width="740" height="40" fill="#0d1a0d" stroke="#1e3a1e" rx="2"/>
+  <text x="40" y="232" font-family="Courier New, monospace" font-size="10" fill="#666666">Classic patch: [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true)</text>
+</svg>

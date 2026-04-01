@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 215" width="800" height="215">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="215" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">NETWORK ENUMERATION — PROTOCOL TO DATA EXTRACTED</text>
+
+  <!-- Attacker -->
+  <rect x="20" y="80" width="100" height="50" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="70" y="100" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="70" y="114" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">enum tools</text>
+
+  <!-- SMB -->
+  <line x1="120" y1="100" x2="175" y2="60" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <rect x="175" y="38" width="175" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="262" y="56" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">SMB :445</text>
+  <text x="262" y="68" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">users / shares / sessions</text>
+  <text x="262" y="78" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">crackmapexec / smbclient</text>
+
+  <!-- LDAP -->
+  <line x1="120" y1="100" x2="175" y2="105" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <rect x="175" y="83" width="175" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="262" y="101" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">LDAP :389/636</text>
+  <text x="262" y="113" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">AD users / groups / GPOs</text>
+  <text x="262" y="123" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">ldapsearch / bloodhound</text>
+
+  <!-- SNMP -->
+  <line x1="120" y1="100" x2="175" y2="150" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <rect x="175" y="128" width="175" height="44" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="262" y="146" font-family="Courier New, monospace" font-size="9" fill="#ffcc00" text-anchor="middle">SNMP :161 UDP</text>
+  <text x="262" y="158" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">processes / interfaces / ARP</text>
+  <text x="262" y="168" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">snmpwalk -v2c community</text>
+
+  <!-- Arrow to results -->
+  <line x1="350" y1="60" x2="440" y2="60" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="350" y1="105" x2="440" y2="105" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="350" y1="150" x2="440" y2="150" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Results column -->
+  <rect x="441" y="38" width="340" height="44" rx="3" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="611" y="55" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">username lists, share contents, password hashes</text>
+  <text x="611" y="67" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ spray creds, access shares, dump SAM/LSA</text>
+
+  <rect x="441" y="83" width="340" height="44" rx="3" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="611" y="100" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">full AD schema: users, groups, OUs, trusts, SPN</text>
+  <text x="611" y="112" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ kerberoasting targets, delegation, ACL paths</text>
+
+  <rect x="441" y="128" width="340" height="44" rx="3" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="611" y="145" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">network topology, routing, running services</text>
+  <text x="611" y="157" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ pivot hosts, credential reuse opportunities</text>
+
+  <!-- Bottom -->
+  <text x="16" y="198" font-family="Courier New, monospace" font-size="8" fill="#555">Also: RPC :135 (rpcclient), NFS :2049 (showmount), DNS :53 AXFR, FTP :21 anon, HTTP :80/443 (gobuster)</text>
+</svg>

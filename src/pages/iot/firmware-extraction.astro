@@ -1,0 +1,161 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="Firmware Extraction — Red Team Academy"
+  module="IoT Hacking"
+  tags={['firmware', 'binwalk', 'qemu', 'ghidra', 'embedded']}
+  pageKey="iot-firmware-extraction"
+>
+  <h1>Firmware Extraction &amp; Analysis</h1>
+  <p>Firmware analysis is the starting point for IoT security assessments. Extract the firmware image, unpack the filesystem, find hardcoded credentials, exposed APIs, debug interfaces, and vulnerabilities in the application binaries. Tools: binwalk, QEMU, firmwalker, Ghidra.</p>
+
+  <h2>Obtaining Firmware</h2>
+  <pre><code># Method 1: Download from vendor (easiest):
+# Check manufacturer support page, FTP, or firmware update server
+# Intercept OTA update traffic (see OTA attacks page)
+
+# Method 2: Extract via web interface (authenticated):
+# Some routers expose firmware download at /backup or /firmware
+
+# Method 3: UART/JTAG (see Hardware Hacking page):
+# Boot to bootloader (U-Boot) and dump flash via tftp or serial
+
+# Method 4: Chip-off (destructive — physical flash extraction):
+# Desolder NOR/NAND flash chip, use programmer (Bus Pirate, Flashrom):
+flashrom -p buspirate_spi:dev=/dev/ttyUSB0 -r firmware.bin
+# Common flash chips: W25Q64, MX25L6406, EN25Q64
+
+# Method 5: Vendor SDK/GPL dump:
+# GPL-licensed routers must release source — often includes filesystem hints
+
+# Method 6: Emulation NVRAM (check nvram_get calls):
+strings firmware.bin | grep -E "^[a-z_]+=.&#123;3,&#125;" | head -50</code></pre>
+
+  <h2>Firmware Analysis with Binwalk</h2>
+  <pre><code># Install:
+pip3 install binwalk
+apt install binwalk
+
+# Identify firmware structure:
+binwalk firmware.bin
+
+# Common output:
+# DECIMAL   HEXADECIMAL   DESCRIPTION
+# 0         0x0           TRX firmware header
+# 28        0x1C          LZMA compressed data
+# 1441792   0x160000      Squashfs filesystem
+
+# Extract everything (recursive):
+binwalk -e firmware.bin
+binwalk -Me firmware.bin   # recursive extraction
+
+# Extract specific offset:
+dd if=firmware.bin bs=1 skip=1441792 | unsquashfs -f -d squashfs_out -
+
+# List extracted contents:
+find _firmware.bin.extracted/ -type f | head -50
+
+# Manual extraction:
+# Squashfs:
+unsquashfs squashfs.img
+
+# JFFS2:
+modprobe jffs2 mtdram mtdblock
+dd if=firmware.bin of=/dev/mtdblock0
+mount -t jffs2 /dev/mtdblock0 /mnt/jffs2
+
+# CramFS:
+mount -o loop cramfs.img /mnt/cramfs</code></pre>
+
+  <h2>Firmwalker — Automated Sensitive File Hunt</h2>
+  <pre><code># firmwalker searches extracted FS for:
+# passwords, SSH keys, SSL certs, config files, hardcoded IPs
+git clone https://github.com/craigz28/firmwalker
+chmod +x firmwalker/firmwalker.sh
+./firmwalker/firmwalker.sh _firmware.bin.extracted/squashfs-root
+
+# Manual sensitive file hunt:
+find . -name "*.conf" -o -name "*.cfg" -o -name "*.xml" | xargs grep -li "password\|passwd\|secret\|key"
+grep -r "password\|passwd" . --include="*.conf" -l
+find . -name "shadow" -o -name "passwd"
+
+# Hardcoded credentials:
+strings firmware.bin | grep -E "(admin|root|password|default).*[:=]"
+grep -r "password" . 2>/dev/null | grep -v "Binary" | grep -v "\.git"
+
+# SSH keys:
+find . -name "id_rsa" -o -name "authorized_keys" -o -name "*.pem"
+
+# SSL certificates:
+find . -name "*.crt" -o -name "*.key" -o -name "*.pem" -o -name "*.p12"
+# Check for default/self-signed certs with hardcoded private keys
+
+# Interesting paths to check:
+# /etc/passwd, /etc/shadow
+# /etc/config/* (OpenWRT)
+# /usr/sbin/httpd (web server binary)
+# /usr/lib/lua/luci/ (LuCI router interface)</code></pre>
+
+  <h2>QEMU Emulation</h2>
+  <pre><code># Emulate ARM/MIPS firmware without real hardware:
+apt install qemu-user-static qemu-system-arm qemu-system-mips
+
+# Determine architecture:
+file _firmware.bin.extracted/squashfs-root/bin/busybox
+# → ELF 32-bit MSB executable, MIPS (big-endian)
+
+# Userspace emulation (single binary):
+cp $(which qemu-mips-static) _firmware.bin.extracted/squashfs-root/usr/bin/
+chroot _firmware.bin.extracted/squashfs-root/ /usr/bin/qemu-mips-static /bin/sh
+
+# Full system emulation with Firmadyne:
+git clone --recursive https://github.com/firmadyne/firmadyne
+cd firmadyne
+# Install dependencies, configure DB
+./scripts/getArch.sh ./images/1.tar.gz
+./scripts/makeImage.sh 1
+./scripts/inferNetwork.sh 1
+./scripts/run.sh 1
+
+# FAT (Firmware Analysis Toolkit) — easier:
+git clone https://github.com/attify/firmware-analysis-toolkit
+cd firmware-analysis-toolkit
+./setup.sh
+./fat.py firmware.bin</code></pre>
+
+  <h2>Binary Analysis with Ghidra</h2>
+  <pre><code># Install Ghidra:
+# Download from https://ghidra-sre.org/
+# Run: ./ghidraRun
+
+# Key analysis targets:
+# 1. Web server binary (httpd, uhttpd, mini_httpd)
+# 2. Firmware update handler
+# 3. Authentication modules
+
+# Find interesting strings in binary:
+strings httpd | grep -E "(password|admin|secret|eval|system|exec)"
+
+# radare2 for quick analysis:
+r2 -A httpd                    # analyze
+afl | grep main                # list functions
+pdf @ main                     # disassemble main
+iz | grep password             # find strings
+
+# Look for:
+# - Hardcoded credentials in binary
+# - Command injection via system() with user input
+# - Buffer overflows in string handling (strcpy, sprintf without bounds)
+# - Authentication logic that can be bypassed</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Binwalk — <code>github.com/ReFirmLabs/binwalk</code></li>
+    <li>Firmadyne — <code>github.com/firmadyne/firmadyne</code></li>
+    <li>Firmwalker — <code>github.com/craigz28/firmwalker</code></li>
+    <li>FAT — <code>github.com/attify/firmware-analysis-toolkit</code></li>
+    <li>OWASP IoT Top 10 — <code>owasp.org/www-project-internet-of-things/</code></li>
+    <li>EMBA — <code>github.com/e-m-b-a/emba</code> — automated firmware security scanner</li>
+  </ul>
+</TrainingPage>

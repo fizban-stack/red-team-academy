@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 210" width="800" height="210">
+  <rect width="800" height="210" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">FINDING STRUCTURE — SIX REQUIRED COMPONENTS</text>
+
+  <!-- Finding card border -->
+  <rect x="16" y="35" width="768" height="155" rx="4" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+
+  <!-- 1: Title + severity -->
+  <rect x="25" y="44" width="245" height="35" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="35" y="58" font-family="Courier New, monospace" font-size="8" fill="#888">1. TITLE + SEVERITY</text>
+  <text x="35" y="71" font-family="Courier New, monospace" font-size="9" fill="#ff4444">CRITICAL — Unauthenticated RCE via Log4Shell</text>
+
+  <!-- Severity badge -->
+  <rect x="660" y="44" width="115" height="35" rx="2" fill="#0d0d0d" stroke="#ff4444" stroke-width="1"/>
+  <text x="717" y="58" font-family="Courier New, monospace" font-size="8" fill="#ff4444" text-anchor="middle">CVSS 10.0</text>
+  <text x="717" y="72" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">CRITICAL (AV:N/AC:L/PR:N)</text>
+
+  <!-- 2: Summary -->
+  <rect x="25" y="84" width="245" height="35" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="35" y="98" font-family="Courier New, monospace" font-size="8" fill="#888">2. EXECUTIVE SUMMARY</text>
+  <text x="35" y="111" font-family="Courier New, monospace" font-size="8" fill="#555">1-2 sentences, business impact, no jargon</text>
+
+  <!-- 3: Technical detail -->
+  <rect x="280" y="44" width="245" height="75" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="290" y="58" font-family="Courier New, monospace" font-size="8" fill="#888">3. TECHNICAL DETAIL</text>
+  <text x="290" y="71" font-family="Courier New, monospace" font-size="7" fill="#555">affected host / path / parameter</text>
+  <text x="290" y="83" font-family="Courier New, monospace" font-size="7" fill="#555">root cause / vulnerable version</text>
+  <text x="290" y="95" font-family="Courier New, monospace" font-size="7" fill="#555">attack vector description</text>
+  <text x="290" y="107" font-family="Courier New, monospace" font-size="7" fill="#555">CVE reference if applicable</text>
+
+  <!-- 4: Evidence -->
+  <rect x="25" y="124" width="245" height="57" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="35" y="138" font-family="Courier New, monospace" font-size="8" fill="#888">4. EVIDENCE</text>
+  <text x="35" y="151" font-family="Courier New, monospace" font-size="7" fill="#555">screenshots of exploitation</text>
+  <text x="35" y="162" font-family="Courier New, monospace" font-size="7" fill="#555">HTTP request/response</text>
+  <text x="35" y="173" font-family="Courier New, monospace" font-size="7" fill="#555">proof file / hostname / timestamp</text>
+
+  <!-- 5: Impact -->
+  <rect x="280" y="124" width="245" height="57" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="290" y="138" font-family="Courier New, monospace" font-size="8" fill="#888">5. IMPACT</text>
+  <text x="290" y="151" font-family="Courier New, monospace" font-size="7" fill="#555">data exposed / systems compromised</text>
+  <text x="290" y="162" font-family="Courier New, monospace" font-size="7" fill="#555">confidentiality / integrity / availability</text>
+  <text x="290" y="173" font-family="Courier New, monospace" font-size="7" fill="#555">blast radius if chained</text>
+
+  <!-- 6: Remediation -->
+  <rect x="535" y="84" width="240" height="97" rx="2" fill="#0d0d0d" stroke="#00c732" stroke-width="0.8"/>
+  <text x="545" y="98" font-family="Courier New, monospace" font-size="8" fill="#00c732">6. REMEDIATION</text>
+  <text x="545" y="111" font-family="Courier New, monospace" font-size="7" fill="#555">short-term: patch version X.Y.Z</text>
+  <text x="545" y="123" font-family="Courier New, monospace" font-size="7" fill="#555">long-term: WAF rule / disable JNDI</text>
+  <text x="545" y="135" font-family="Courier New, monospace" font-size="7" fill="#555">reference: CVE-2021-44228</text>
+  <text x="545" y="147" font-family="Courier New, monospace" font-size="7" fill="#555">difficulty: LOW</text>
+  <text x="545" y="159" font-family="Courier New, monospace" font-size="7" fill="#555">priority: IMMEDIATE</text>
+  <text x="545" y="171" font-family="Courier New, monospace" font-size="7" fill="#555">retest: required</text>
+
+  <!-- Bottom -->
+  <text x="16" y="202" font-family="Courier New, monospace" font-size="8" fill="#555">CVSS v3.1: Base score driven by AV (network=highest) / AC (low=easier) / PR (none=worst) / UI (none=worst) / scope / C/I/A impact</text>
+</svg>

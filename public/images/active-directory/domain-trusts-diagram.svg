@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="arr2" markerWidth="8" markerHeight="8" refX="2" refY="3" orient="auto">
+      <path d="M8,0 L8,6 L0,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="270" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">Active Directory Trust Relationships</text>
+
+  <!-- Parent domain -->
+  <rect x="290" y="60" width="220" height="55" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="400" y="82" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">CORP.LOCAL</text>
+  <text x="400" y="97" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">Parent Domain (Forest Root)</text>
+
+  <!-- Child domain -->
+  <rect x="120" y="175" width="200" height="55" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="220" y="197" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">US.CORP.LOCAL</text>
+  <text x="220" y="212" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">Child Domain (auto bidirectional)</text>
+
+  <!-- Another child -->
+  <rect x="480" y="175" width="200" height="55" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="580" y="197" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">EU.CORP.LOCAL</text>
+  <text x="580" y="212" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">Child Domain (auto bidirectional)</text>
+
+  <!-- External forest -->
+  <rect x="10" y="60" width="200" height="55" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="110" y="82" font-family="Courier New, monospace" font-size="11" fill="#ff4444" text-anchor="middle">PARTNER.COM</text>
+  <text x="110" y="97" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">External Forest (one-way)</text>
+
+  <!-- Bidirectional trust arrows (parent-child) -->
+  <line x1="330" y1="115" x2="250" y2="175" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)" marker-start="url(#arr2)"/>
+  <line x1="470" y1="115" x2="530" y2="175" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)" marker-start="url(#arr2)"/>
+
+  <!-- One-way trust arrow (external) -->
+  <line x1="210" y1="87" x2="290" y2="87" stroke="#ff4444" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="250" y="80" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">one-way</text>
+
+  <!-- Labels on trust arrows -->
+  <text x="270" y="150" font-family="Courier New, monospace" font-size="9" fill="#555555" text-anchor="middle">transitive</text>
+  <text x="510" y="150" font-family="Courier New, monospace" font-size="9" fill="#555555" text-anchor="middle">transitive</text>
+
+  <!-- Key insight -->
+  <rect x="10" y="245" width="780" height="20" fill="#111111" rx="2"/>
+  <text x="20" y="259" font-family="Courier New, monospace" font-size="10" fill="#444444">Attack path: compromise child → SID history injection / ExtraSids → Enterprise Admin in parent forest</text>
+</svg>

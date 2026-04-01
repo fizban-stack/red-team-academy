@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" width="800" height="220">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="220" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">ENGAGEMENT PLANNING FLOW</text>
+
+  <!-- Step 1: Kick-off -->
+  <rect x="20" y="45" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="85" y="63" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">KICKOFF CALL</text>
+  <text x="85" y="77" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">scope / threat model</text>
+
+  <!-- Step 2: RoE -->
+  <rect x="180" y="45" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="245" y="63" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">DRAFT RoE</text>
+  <text x="245" y="77" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">legal / auth / scope</text>
+
+  <!-- Step 3: Sign -->
+  <rect x="340" y="45" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="405" y="63" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">SIGN &amp; APPROVE</text>
+  <text x="405" y="77" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">client authorization</text>
+
+  <!-- Step 4: Infra -->
+  <rect x="500" y="45" width="130" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="565" y="63" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">PREP INFRA</text>
+  <text x="565" y="77" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">C2 / redirectors</text>
+
+  <!-- Step 5: Execute -->
+  <rect x="660" y="45" width="120" height="44" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="720" y="63" font-family="Courier New, monospace" font-size="10" fill="#ffcc00" text-anchor="middle">EXECUTE</text>
+  <text x="720" y="77" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">test window opens</text>
+
+  <!-- Arrows top row -->
+  <line x1="150" y1="67" x2="178" y2="67" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="310" y1="67" x2="338" y2="67" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="470" y1="67" x2="498" y2="67" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="630" y1="67" x2="658" y2="67" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Bottom: key docs -->
+  <text x="16" y="130" font-family="Courier New, monospace" font-size="10" fill="#888">KEY DOCUMENTS</text>
+  <rect x="20" y="142" width="140" height="32" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1"/>
+  <text x="90" y="158" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">Rules of Engagement</text>
+  <text x="90" y="169" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">signed before any testing</text>
+
+  <rect x="175" y="142" width="140" height="32" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1"/>
+  <text x="245" y="158" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">Scope Document</text>
+  <text x="245" y="169" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">IP ranges / domains / apps</text>
+
+  <rect x="330" y="142" width="140" height="32" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1"/>
+  <text x="400" y="158" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">Threat Model</text>
+  <text x="400" y="169" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">APT / insider / opportunist</text>
+
+  <rect x="485" y="142" width="140" height="32" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1"/>
+  <text x="555" y="158" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">Deconfliction Plan</text>
+  <text x="555" y="169" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">emergency stop / contacts</text>
+
+  <rect x="640" y="142" width="140" height="32" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1"/>
+  <text x="710" y="158" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">Data Handling Policy</text>
+  <text x="710" y="169" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">storage / destruction</text>
+</svg>

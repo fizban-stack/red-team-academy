@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 215" width="800" height="215">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="garr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00c732"/>
+    </marker>
+  </defs>
+  <rect width="800" height="215" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">WINDOWS PIVOTING — NATIVE TOOLS &amp; TECHNIQUES</text>
+
+  <!-- Attacker -->
+  <rect x="20" y="45" width="110" height="120" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="75" y="65" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="75" y="80" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">Linux / Kali</text>
+  <text x="75" y="110" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">xfreerdp</text>
+  <text x="75" y="122" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">proxychains</text>
+  <text x="75" y="134" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">nmap -sT</text>
+  <text x="75" y="146" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">impacket tools</text>
+
+  <!-- Arrows -->
+  <line x1="130" y1="105" x2="175" y2="105" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)"/>
+
+  <!-- Windows pivot -->
+  <rect x="175" y="45" width="200" height="120" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.5"/>
+  <text x="275" y="65" font-family="Courier New, monospace" font-size="10" fill="#00b3cc" text-anchor="middle">WINDOWS PIVOT</text>
+  <text x="275" y="80" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">compromised Windows host</text>
+
+  <!-- netsh -->
+  <rect x="185" y="90" width="80" height="26" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="225" y="102" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">netsh portproxy</text>
+  <text x="225" y="112" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">native — no tools</text>
+
+  <!-- plink -->
+  <rect x="280" y="90" width="80" height="26" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="320" y="102" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">Plink.exe</text>
+  <text x="320" y="112" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">PuTTY SSH client</text>
+
+  <!-- socat -->
+  <rect x="185" y="125" width="80" height="26" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="225" y="137" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">socat.exe</text>
+  <text x="225" y="148" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">TCP relay</text>
+
+  <!-- RDP tunnel -->
+  <rect x="280" y="125" width="80" height="26" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="320" y="137" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">RDP tunnel</text>
+  <text x="320" y="148" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">drive redirect</text>
+
+  <!-- Arrow to internal -->
+  <line x1="375" y1="105" x2="415" y2="105" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Internal network -->
+  <rect x="415" y="35" width="365" height="140" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="597" y="55" font-family="Courier New, monospace" font-size="9" fill="#444" text-anchor="middle">INTERNAL WINDOWS NETWORK</text>
+
+  <!-- Domain hosts -->
+  <rect x="430" y="65" width="100" height="40" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="480" y="81" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">DC</text>
+  <text x="480" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">:445 :88 :389</text>
+
+  <rect x="545" y="65" width="100" height="40" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="595" y="81" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">File Server</text>
+  <text x="595" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">:445 SMB</text>
+
+  <rect x="660" y="65" width="100" height="40" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="710" y="81" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">Workstation</text>
+  <text x="710" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">:3389 RDP</text>
+
+  <rect x="430" y="118" width="330" height="42" rx="2" fill="#0d0d0d" stroke="#222" stroke-width="0.8"/>
+  <text x="595" y="134" font-family="Courier New, monospace" font-size="8" fill="#444" text-anchor="middle">netsh portproxy: listenaddress=0.0.0.0 listenport=8080</text>
+  <text x="595" y="148" font-family="Courier New, monospace" font-size="7" fill="#444" text-anchor="middle">connectaddress=172.16.5.25 connectport=3389  → attacker RDP to pivot:8080</text>
+
+  <!-- Bottom -->
+  <text x="16" y="200" font-family="Courier New, monospace" font-size="8" fill="#555">netsh advfirewall firewall add rule name=pivot dir=in action=allow protocol=tcp localport=8080   →   netsh interface portproxy show all</text>
+</svg>

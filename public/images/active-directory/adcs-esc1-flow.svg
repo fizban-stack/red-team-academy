@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="270" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">ADCS ESC1 — Certificate Template Abuse</text>
+
+  <!-- Low-priv user -->
+  <rect x="20" y="90" width="130" height="55" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="85" y="112" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">LOW-PRIV USER</text>
+  <text x="85" y="127" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">can enroll in template</text>
+
+  <!-- CA Server -->
+  <rect x="215" y="85" width="140" height="65" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="285" y="107" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">CA SERVER</text>
+  <text x="285" y="122" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">ESC1 template:</text>
+  <text x="285" y="135" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">allows SAN override</text>
+
+  <!-- Certificate -->
+  <rect x="415" y="90" width="140" height="55" fill="#161616" stroke="#ffcc00" stroke-width="1.5" rx="2"/>
+  <text x="485" y="112" font-family="Courier New, monospace" font-size="11" fill="#ffcc00" text-anchor="middle">CERTIFICATE</text>
+  <text x="485" y="127" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">UPN: Administrator</text>
+
+  <!-- PKINIT / KDC -->
+  <rect x="615" y="90" width="80" height="55" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="655" y="112" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">KDC</text>
+  <text x="655" y="127" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">PKINIT auth</text>
+
+  <!-- DA TGT -->
+  <rect x="715" y="90" width="70" height="55" fill="#161616" stroke="#ffcc00" stroke-width="1.5" rx="2"/>
+  <text x="750" y="112" font-family="Courier New, monospace" font-size="11" fill="#ffcc00" text-anchor="middle">TGT as</text>
+  <text x="750" y="127" font-family="Courier New, monospace" font-size="11" fill="#ffcc00" text-anchor="middle">ADMIN</text>
+
+  <!-- Arrows -->
+  <line x1="150" y1="117" x2="215" y2="117" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="182" y="110" font-family="Courier New, monospace" font-size="9" fill="#666666" text-anchor="middle">enroll request</text>
+
+  <line x1="355" y1="117" x2="415" y2="117" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="385" y="110" font-family="Courier New, monospace" font-size="9" fill="#666666" text-anchor="middle">cert issued</text>
+
+  <line x1="555" y1="117" x2="615" y2="117" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="585" y="110" font-family="Courier New, monospace" font-size="9" fill="#666666" text-anchor="middle">authenticate</text>
+
+  <line x1="695" y1="117" x2="715" y2="117" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ESC conditions -->
+  <rect x="20" y="170" width="760" height="70" fill="#0d1a0d" stroke="#1e3a1e" rx="2"/>
+  <text x="30" y="187" font-family="Courier New, monospace" font-size="10" fill="#666666">ESC1 conditions (all must be true):</text>
+  <text x="30" y="202" font-family="Courier New, monospace" font-size="10" fill="#444444">  ① Client Authentication EKU present  ② CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT enabled (enrollee can set SAN)</text>
+  <text x="30" y="217" font-family="Courier New, monospace" font-size="10" fill="#444444">  ③ Low-privilege users have Enroll rights  ④ Manager approval not required</text>
+  <text x="30" y="232" font-family="Courier New, monospace" font-size="10" fill="#666666">  Certipy find -u user -p pass -dc-ip DC  →  certipy req -template VulnTemplate -upn Administrator@corp.local</text>
+</svg>

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" width="800" height="220">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="220" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">INFRASTRUCTURE MAPPING — ATTACK SURFACE DISCOVERY</text>
+
+  <!-- Target org center -->
+  <rect x="315" y="80" width="170" height="50" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.5"/>
+  <text x="400" y="101" font-family="Courier New, monospace" font-size="10" fill="#ff4444" text-anchor="middle">TARGET.COM</text>
+  <text x="400" y="116" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">what do they own?</text>
+
+  <!-- ASN block -->
+  <rect x="20" y="42" width="145" height="48" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="92" y="60" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">ASN LOOKUP</text>
+  <text x="92" y="73" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">bgp.he.net / whois</text>
+  <text x="92" y="84" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ all IP ranges owned</text>
+  <line x1="165" y1="66" x2="313" y2="95" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Cloud assets -->
+  <rect x="20" y="110" width="145" height="48" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="92" y="128" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">CLOUD ASSETS</text>
+  <text x="92" y="141" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">AWS S3 / Azure Blob</text>
+  <text x="92" y="152" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">cloud_enum / s3recon</text>
+  <line x1="165" y1="134" x2="313" y2="110" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Shodan -->
+  <rect x="20" y="178" width="145" height="30" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="92" y="197" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">SHODAN org:</text>
+  <line x1="165" y1="193" x2="313" y2="125" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Reverse DNS -->
+  <rect x="635" y="42" width="145" height="48" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="712" y="60" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">REVERSE DNS</text>
+  <text x="712" y="73" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">PTR records on CIDR</text>
+  <text x="712" y="84" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ hostnames on IPs</text>
+  <line x1="635" y1="66" x2="487" y2="95" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Cert SANs -->
+  <rect x="635" y="110" width="145" height="48" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="712" y="128" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">CERT SANs</text>
+  <text x="712" y="141" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">crt.sh on IP ranges</text>
+  <text x="712" y="152" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">→ vhosts on same IP</text>
+  <line x1="635" y1="134" x2="487" y2="110" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- GitHub -->
+  <rect x="635" y="178" width="145" height="30" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="712" y="197" font-family="Courier New, monospace" font-size="9" fill="#ffcc00" text-anchor="middle">GITHUB org search</text>
+  <line x1="635" y1="193" x2="487" y2="125" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Bottom output -->
+  <text x="230" y="218" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">OUTPUT: IP ranges / live hosts / cloud buckets / forgotten subdomains / source code leaks / API keys</text>
+</svg>

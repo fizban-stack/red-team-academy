@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" width="800" height="260">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="260" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">AS-REP Roasting Attack Flow</text>
+
+  <!-- Attacker -->
+  <rect x="20" y="90" width="120" height="50" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="80" y="112" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="80" y="128" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">no creds needed</text>
+
+  <!-- Target user box -->
+  <rect x="190" y="90" width="140" height="50" fill="#161616" stroke="#ff4444" stroke-width="1.5" rx="2"/>
+  <text x="260" y="110" font-family="Courier New, monospace" font-size="11" fill="#ff4444" text-anchor="middle">VULNERABLE USER</text>
+  <text x="260" y="126" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">Do not require Kerberos</text>
+  <text x="260" y="139" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">preauthentication = TRUE</text>
+
+  <!-- KDC -->
+  <rect x="390" y="90" width="120" height="50" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="450" y="112" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">KDC / DC</text>
+  <text x="450" y="128" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">no auth check</text>
+
+  <!-- Hash -->
+  <rect x="560" y="90" width="120" height="50" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="620" y="110" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">AS-REP HASH</text>
+  <text x="620" y="126" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">$krb5asrep$23$...</text>
+
+  <!-- Cracked -->
+  <rect x="700" y="90" width="85" height="50" fill="#161616" stroke="#ffcc00" stroke-width="1.5" rx="2"/>
+  <text x="742" y="112" font-family="Courier New, monospace" font-size="11" fill="#ffcc00" text-anchor="middle">CRACKED</text>
+  <text x="742" y="128" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">hashcat -m 18200</text>
+
+  <!-- Arrows -->
+  <line x1="140" y1="115" x2="190" y2="115" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="165" y="108" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">AS-REQ</text>
+
+  <line x1="330" y1="115" x2="390" y2="115" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="360" y="108" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">AS-REQ</text>
+
+  <line x1="510" y1="115" x2="560" y2="115" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="535" y="108" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">AS-REP</text>
+
+  <line x1="680" y1="115" x2="700" y2="115" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Key fact -->
+  <rect x="20" y="165" width="760" height="22" fill="#111111" rx="2"/>
+  <text x="30" y="180" font-family="Courier New, monospace" font-size="10" fill="#444444">KEY: Accounts with pre-auth disabled respond to AS-REQ without verifying identity — hash captured without credentials.</text>
+
+  <rect x="20" y="192" width="760" height="40" fill="#0f1a0f" stroke="#1e3a1e" rx="2"/>
+  <text x="30" y="209" font-family="Courier New, monospace" font-size="10" fill="#666666">GetNPUsers.py 'domain/user:pass' -dc-ip DC_IP -request  →  outputs $krb5asrep$23$ hashes</text>
+  <text x="30" y="224" font-family="Courier New, monospace" font-size="10" fill="#666666">hashcat -a 0 -m 18200 hash.txt wordlist.txt</text>
+</svg>

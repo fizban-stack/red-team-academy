@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 185" width="800" height="185">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="185" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">EMAIL OSINT PIPELINE — FROM DOMAIN TO PHISHING LIST</text>
+
+  <!-- Step 1: Discover format -->
+  <rect x="15" y="40" width="140" height="55" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="85" y="58" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">1. DISCOVER FORMAT</text>
+  <text x="85" y="71" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">hunter.io / phonebook.cz</text>
+  <text x="85" y="82" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">github / job postings</text>
+  <text x="85" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">f.last / first.last@co</text>
+  <line x1="155" y1="67" x2="178" y2="67" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Step 2: Build list -->
+  <rect x="179" y="40" width="140" height="55" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="249" y="58" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">2. BUILD LIST</text>
+  <text x="249" y="71" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">LinkedIn scrape</text>
+  <text x="249" y="82" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">theHarvester / OSINT</text>
+  <text x="249" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">apply format to names</text>
+  <line x1="319" y1="67" x2="342" y2="67" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Step 3: Validate -->
+  <rect x="343" y="40" width="140" height="55" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="413" y="58" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">3. VALIDATE</text>
+  <text x="413" y="71" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">SMTP VRFY / RCPT TO</text>
+  <text x="413" y="82" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">EmailHippo / verify-email</text>
+  <text x="413" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">MX record / bounce test</text>
+  <line x1="483" y1="67" x2="506" y2="67" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Step 4: Breach check -->
+  <rect x="507" y="40" width="140" height="55" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="577" y="58" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">4. BREACH CHECK</text>
+  <text x="577" y="71" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">HaveIBeenPwned</text>
+  <text x="577" y="82" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">dehashed / intelx.io</text>
+  <text x="577" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">leaked passwords</text>
+  <line x1="647" y1="67" x2="670" y2="67" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- Step 5: Phish -->
+  <rect x="671" y="40" width="110" height="55" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="726" y="58" font-family="Courier New, monospace" font-size="9" fill="#ffcc00" text-anchor="middle">5. ENGAGE</text>
+  <text x="726" y="71" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">targeted phish</text>
+  <text x="726" y="82" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">password spray</text>
+  <text x="726" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">credential stuffing</text>
+
+  <!-- Bottom context row -->
+  <text x="16" y="125" font-family="Courier New, monospace" font-size="9" fill="#888">PRETEXT BUILDING (for phishing):</text>
+  <text x="16" y="140" font-family="Courier New, monospace" font-size="8" fill="#555">LinkedIn role + tenure → tailor lure topic   |   Recent job postings → reveal tech stack (Salesforce admin? DocuSign?)   |   OOO messages → timing</text>
+  <text x="16" y="158" font-family="Courier New, monospace" font-size="8" fill="#555">Target CFO + recent M&amp;A news → wire transfer pretext   |   IT admin + known tool (Jira/VPN) → credential harvest lure</text>
+</svg>

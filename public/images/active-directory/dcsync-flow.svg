@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" width="800" height="260">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff4444"/>
+    </marker>
+  </defs>
+  <rect width="800" height="260" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="13" font-weight="bold" fill="#e0e0e0">DCSync Attack Flow</text>
+
+  <!-- Attacker / mimikatz -->
+  <rect x="20" y="95" width="150" height="55" fill="#161616" stroke="#00c732" stroke-width="1.5" rx="2"/>
+  <text x="95" y="116" font-family="Courier New, monospace" font-size="11" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="95" y="131" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">mimikatz / impacket</text>
+  <text x="95" y="144" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">has replication rights</text>
+
+  <!-- Domain Controller -->
+  <rect x="310" y="85" width="180" height="65" fill="#161616" stroke="#00b3cc" stroke-width="1.5" rx="2"/>
+  <text x="400" y="108" font-family="Courier New, monospace" font-size="11" fill="#00b3cc" text-anchor="middle">DOMAIN CONTROLLER</text>
+  <text x="400" y="124" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">receives replication request</text>
+  <text x="400" y="139" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">believes attacker is another DC</text>
+
+  <!-- Hashes result -->
+  <rect x="580" y="95" width="180" height="55" fill="#161616" stroke="#ffcc00" stroke-width="1.5" rx="2"/>
+  <text x="670" y="116" font-family="Courier New, monospace" font-size="11" fill="#ffcc00" text-anchor="middle">ALL DOMAIN HASHES</text>
+  <text x="670" y="131" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">krbtgt, domain admins,</text>
+  <text x="670" y="144" font-family="Courier New, monospace" font-size="9" fill="#888888" text-anchor="middle">all user NTLM hashes</text>
+
+  <!-- Arrow: request -->
+  <line x1="170" y1="122" x2="310" y2="117" stroke="#ff4444" stroke-width="1.5" marker-end="url(#arr-red)"/>
+  <text x="240" y="108" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">DS-Replication-Get-Changes-All</text>
+
+  <!-- Arrow: response -->
+  <line x1="490" y1="122" x2="580" y2="122" stroke="#555555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="535" y="115" font-family="Courier New, monospace" font-size="9" fill="#444444" text-anchor="middle">hashes returned</text>
+
+  <!-- Required rights box -->
+  <rect x="20" y="175" width="370" height="50" fill="#0d1a0d" stroke="#1e3a1e" rx="2"/>
+  <text x="30" y="192" font-family="Courier New, monospace" font-size="10" fill="#666666">Required rights (any one of):</text>
+  <text x="30" y="207" font-family="Courier New, monospace" font-size="10" fill="#444444">  • Replicating Directory Changes All  • Domain Admin  • Enterprise Admin</text>
+
+  <!-- Command box -->
+  <rect x="400" y="175" width="380" height="50" fill="#0d1a0d" stroke="#1e3a1e" rx="2"/>
+  <text x="410" y="192" font-family="Courier New, monospace" font-size="10" fill="#666666">lsadump::dcsync /user:krbtgt</text>
+  <text x="410" y="207" font-family="Courier New, monospace" font-size="10" fill="#666666">secretsdump.py domain/user:pass@DC_IP</text>
+</svg>

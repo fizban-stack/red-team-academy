@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 210" width="800" height="210">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="garr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00c732"/>
+    </marker>
+  </defs>
+  <rect width="800" height="210" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">METASPLOIT PIVOTING — AUTOROUTE + SOCKS PROXY</text>
+
+  <!-- msfconsole -->
+  <rect x="20" y="45" width="140" height="80" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="90" y="65" font-family="Courier New, monospace" font-size="10" fill="#00c732" text-anchor="middle">msfconsole</text>
+  <text x="90" y="80" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">autoroute → subnet</text>
+  <text x="90" y="93" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">socks_proxy :1080</text>
+  <text x="90" y="106" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">portfwd add -l/-r</text>
+  <text x="90" y="117" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">proxychains tools</text>
+
+  <!-- Arrow to meterpreter session -->
+  <line x1="160" y1="85" x2="200" y2="85" stroke="#00c732" stroke-width="1.5" marker-end="url(#garr)"/>
+  <text x="180" y="78" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">session</text>
+
+  <!-- Pivot host -->
+  <rect x="200" y="45" width="160" height="80" rx="3" fill="#111" stroke="#888" stroke-width="1.2"/>
+  <text x="280" y="65" font-family="Courier New, monospace" font-size="10" fill="#888" text-anchor="middle">PIVOT HOST</text>
+  <text x="280" y="80" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">Meterpreter session</text>
+  <text x="280" y="93" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">eth0: 10.129.x.x (internet)</text>
+  <text x="280" y="106" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">eth1: 172.16.5.x (internal)</text>
+
+  <!-- Arrow to internal network -->
+  <line x1="360" y1="85" x2="400" y2="85" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <text x="380" y="78" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">routed</text>
+
+  <!-- Internal network box -->
+  <rect x="400" y="35" width="370" height="100" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="585" y="52" font-family="Courier New, monospace" font-size="9" fill="#444" text-anchor="middle">172.16.5.0/24 — INTERNAL NETWORK</text>
+
+  <!-- Internal hosts -->
+  <rect x="415" y="60" width="100" height="30" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="465" y="74" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">DC :445</text>
+  <text x="465" y="84" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">172.16.5.19</text>
+
+  <rect x="530" y="60" width="100" height="30" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="580" y="74" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">RDP :3389</text>
+  <text x="580" y="84" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">172.16.5.25</text>
+
+  <rect x="648" y="60" width="108" height="30" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="702" y="74" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">WEB :80/443</text>
+  <text x="702" y="84" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">172.16.5.50</text>
+
+  <!-- Commands -->
+  <text x="16" y="158" font-family="Courier New, monospace" font-size="9" fill="#888">KEY COMMANDS</text>
+  <text x="16" y="172" font-family="Courier New, monospace" font-size="8" fill="#555">run post/multi/manage/autoroute SUBNET=172.16.5.0/24   →   use auxiliary/server/socks_proxy; set SRVPORT 1080; run</text>
+  <text x="16" y="186" font-family="Courier New, monospace" font-size="8" fill="#555">portfwd add -l 3389 -p 3389 -r 172.16.5.25   →   portfwd flush   →   proxychains nmap -sT 172.16.5.0/24</text>
+</svg>

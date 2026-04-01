@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 215" width="800" height="215">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="garr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00c732"/>
+    </marker>
+    <marker id="yarr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ffcc00"/>
+    </marker>
+  </defs>
+  <rect width="800" height="215" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">COVERT CHANNEL TUNNELING — DNS &amp; ICMP</text>
+
+  <!-- DNS Tunnel section -->
+  <text x="16" y="44" font-family="Courier New, monospace" font-size="10" fill="#00c732">DNS TUNNEL (dnscat2 / iodine)</text>
+
+  <!-- Victim -->
+  <rect x="16" y="52" width="110" height="44" rx="3" fill="#111" stroke="#888" stroke-width="1.2"/>
+  <text x="71" y="70" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">PIVOT HOST</text>
+  <text x="71" y="84" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">dnscat2 client</text>
+
+  <!-- DNS query arrow up -->
+  <line x1="126" y1="68" x2="200" y2="68" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)"/>
+  <text x="163" y="62" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">DNS query</text>
+  <text x="163" y="80" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">(data.ns.evil.com)</text>
+
+  <!-- Firewall -->
+  <rect x="200" y="52" width="70" height="44" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="235" y="70" font-family="Courier New, monospace" font-size="9" fill="#ffcc00" text-anchor="middle">FIREWALL</text>
+  <text x="235" y="84" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">allows UDP/53</text>
+
+  <!-- Arrow through firewall -->
+  <line x1="270" y1="74" x2="310" y2="74" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)" stroke-dasharray="3,2"/>
+
+  <!-- Internet -->
+  <rect x="310" y="52" width="70" height="44" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1"/>
+  <text x="345" y="78" font-family="Courier New, monospace" font-size="9" fill="#444" text-anchor="middle">INTERNET</text>
+
+  <!-- Arrow to NS -->
+  <line x1="380" y1="74" x2="420" y2="74" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)"/>
+
+  <!-- Attacker NS -->
+  <rect x="420" y="52" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="485" y="70" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">ATTACKER NS</text>
+  <text x="485" y="84" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">dnscat2-server / iodined</text>
+
+  <!-- ICMP Tunnel section -->
+  <text x="16" y="125" font-family="Courier New, monospace" font-size="10" fill="#ffcc00">ICMP TUNNEL (ptunnel-ng)</text>
+
+  <!-- Victim ICMP -->
+  <rect x="16" y="133" width="110" height="44" rx="3" fill="#111" stroke="#888" stroke-width="1.2"/>
+  <text x="71" y="151" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">PIVOT HOST</text>
+  <text x="71" y="165" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">ptunnel-ng client</text>
+
+  <!-- Ping arrow -->
+  <line x1="126" y1="155" x2="200" y2="155" stroke="#ffcc00" stroke-width="1.2" marker-end="url(#yarr)"/>
+  <text x="163" y="149" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">ICMP echo req</text>
+  <text x="163" y="168" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">(data in payload)</text>
+
+  <!-- Firewall ICMP -->
+  <rect x="200" y="133" width="70" height="44" rx="3" fill="#111" stroke="#ffcc00" stroke-width="1.2"/>
+  <text x="235" y="151" font-family="Courier New, monospace" font-size="9" fill="#ffcc00" text-anchor="middle">FIREWALL</text>
+  <text x="235" y="165" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">allows ICMP</text>
+
+  <line x1="270" y1="155" x2="310" y2="155" stroke="#ffcc00" stroke-width="1.2" marker-end="url(#yarr)" stroke-dasharray="3,2"/>
+  <rect x="310" y="133" width="70" height="44" rx="3" fill="#0d0d0d" stroke="#333" stroke-width="1"/>
+  <text x="345" y="159" font-family="Courier New, monospace" font-size="9" fill="#444" text-anchor="middle">INTERNET</text>
+  <line x1="380" y1="155" x2="420" y2="155" stroke="#ffcc00" stroke-width="1.2" marker-end="url(#yarr)"/>
+  <rect x="420" y="133" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="485" y="151" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="485" y="165" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">ptunnel-ng proxy server</text>
+
+  <!-- Bottom note -->
+  <text x="16" y="200" font-family="Courier New, monospace" font-size="8" fill="#555">DNS: ~3 Kbps effective throughput   |   ICMP: ~64 Kbps   |   Both: slow but bypass strict egress controls</text>
+</svg>

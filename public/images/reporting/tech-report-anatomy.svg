@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 215" width="800" height="215">
+  <rect width="800" height="215" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">TECHNICAL REPORT ANATOMY</text>
+
+  <!-- Left column -->
+  <rect x="15" y="38" width="235" height="25" rx="2" fill="#111" stroke="#888" stroke-width="0.8"/>
+  <text x="22" y="55" font-family="Courier New, monospace" font-size="8" fill="#888">COVER PAGE  (title / dates / classification)</text>
+
+  <rect x="15" y="68" width="235" height="25" rx="2" fill="#111" stroke="#888" stroke-width="0.8"/>
+  <text x="22" y="85" font-family="Courier New, monospace" font-size="8" fill="#888">EXECUTIVE SUMMARY  (business audience)</text>
+
+  <rect x="15" y="98" width="235" height="25" rx="2" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="22" y="115" font-family="Courier New, monospace" font-size="8" fill="#00c732">SCOPE &amp; METHODOLOGY  (what was tested)</text>
+
+  <rect x="15" y="128" width="235" height="25" rx="2" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="22" y="145" font-family="Courier New, monospace" font-size="8" fill="#00c732">ATTACK NARRATIVE  (full breach story)</text>
+
+  <rect x="15" y="158" width="235" height="25" rx="2" fill="#111" stroke="#ff4444" stroke-width="1.5"/>
+  <text x="22" y="175" font-family="Courier New, monospace" font-size="8" fill="#ff4444">DETAILED FINDINGS  (bulk of document)</text>
+
+  <!-- Right column -->
+  <rect x="265" y="38" width="520" height="25" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="275" y="55" font-family="Courier New, monospace" font-size="7" fill="#555">report title / engagement dates / client name / classification level / version</text>
+
+  <rect x="265" y="68" width="520" height="25" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="275" y="85" font-family="Courier New, monospace" font-size="7" fill="#555">risk rating / breach narrative / top findings / strategic recommendations (non-technical)</text>
+
+  <rect x="265" y="98" width="520" height="25" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="275" y="115" font-family="Courier New, monospace" font-size="7" fill="#555">in-scope IPs / domains / apps / testing windows / tools used / ATT&amp;CK mapping</text>
+
+  <rect x="265" y="128" width="520" height="25" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="275" y="145" font-family="Courier New, monospace" font-size="7" fill="#555">step-by-step: initial access → lateral movement → objective — with timestamps + tool output</text>
+
+  <rect x="265" y="158" width="520" height="25" rx="2" fill="#0d0d0d" stroke="#ff4444" stroke-width="1"/>
+  <text x="275" y="175" font-family="Courier New, monospace" font-size="7" fill="#555">each finding: title + CVSS + desc + evidence + impact + remediation + retest requirement</text>
+
+  <!-- Appendix -->
+  <rect x="15" y="188" width="235" height="20" rx="2" fill="#111" stroke="#888" stroke-width="0.8"/>
+  <text x="22" y="202" font-family="Courier New, monospace" font-size="8" fill="#888">APPENDIX  (tool output / raw data / IOCs)</text>
+  <rect x="265" y="188" width="520" height="20" rx="2" fill="#0d0d0d" stroke="#444" stroke-width="0.8"/>
+  <text x="275" y="202" font-family="Courier New, monospace" font-size="7" fill="#555">nmap output / credentials captured / C2 logs / hashes / IOC list for blue team</text>
+</svg>

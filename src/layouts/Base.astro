@@ -1,0 +1,226 @@
+---
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+const path = Astro.url.pathname;
+
+function isActive(href: string): boolean {
+  return path === href || path.startsWith(href + '/');
+}
+
+function navActive(href: string): boolean {
+  if (href === '/') return path === '/' || path === '/index';
+  return path.startsWith(href);
+}
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+
+<header id="navbar">
+  <a href="/" class="brand">
+    <span class="bracket">[</span>
+    Red Team Academy
+    <span class="bracket">]</span>
+  </a>
+  <span class="status-dot"></span>
+  <nav>
+    <a href="/" class={navActive('/') && path === '/' ? 'active' : ''}>Home</a>
+    <a href="/about" class={navActive('/about') ? 'active' : ''}>About</a>
+  </nav>
+</header>
+
+<div id="layout">
+  <aside id="sidebar">
+    <div class="sidebar-header">// modules</div>
+
+    <details open={isActive('/fundamentals')}>
+      <summary><span class="module-icon">🎯</span> Fundamentals</summary>
+      <ul>
+        <li><a href="/fundamentals/methodology" class={isActive('/fundamentals/methodology') ? 'active' : ''}>Red Team Methodology</a></li>
+        <li><a href="/fundamentals/engagement-planning" class={isActive('/fundamentals/engagement-planning') ? 'active' : ''}>Engagement Planning</a></li>
+        <li><a href="/fundamentals/mitre-attack" class={isActive('/fundamentals/mitre-attack') ? 'active' : ''}>MITRE ATT&amp;CK Framework</a></li>
+        <li><a href="/fundamentals/lab-setup" class={isActive('/fundamentals/lab-setup') ? 'active' : ''}>Lab Setup &amp; Environment</a></li>
+        <li><a href="/fundamentals/linux-basics" class={isActive('/fundamentals/linux-basics') ? 'active' : ''}>Linux Fundamentals</a></li>
+        <li><a href="/fundamentals/windows-basics" class={isActive('/fundamentals/windows-basics') ? 'active' : ''}>Windows Fundamentals</a></li>
+        <li><a href="/fundamentals/opsec" class={isActive('/fundamentals/opsec') ? 'active' : ''}>OPSEC Basics</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/recon')}>
+      <summary><span class="module-icon">🔍</span> Reconnaissance</summary>
+      <ul>
+        <li><a href="/recon/passive-recon" class={isActive('/recon/passive-recon') ? 'active' : ''}>Passive Recon (OSINT)</a></li>
+        <li><a href="/recon/active-recon" class={isActive('/recon/active-recon') ? 'active' : ''}>Active Recon (Scanning)</a></li>
+        <li><a href="/recon/network-enum" class={isActive('/recon/network-enum') ? 'active' : ''}>Network Enumeration</a></li>
+        <li><a href="/recon/subdomain-enum" class={isActive('/recon/subdomain-enum') ? 'active' : ''}>Subdomain Enumeration</a></li>
+        <li><a href="/recon/web-recon" class={isActive('/recon/web-recon') ? 'active' : ''}>Web Reconnaissance</a></li>
+        <li><a href="/recon/email-osint" class={isActive('/recon/email-osint') ? 'active' : ''}>Email OSINT</a></li>
+        <li><a href="/recon/infrastructure-mapping" class={isActive('/recon/infrastructure-mapping') ? 'active' : ''}>Infrastructure Mapping</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/active-directory')}>
+      <summary><span class="module-icon">🏰</span> Active Directory</summary>
+      <ul>
+        <li><a href="/active-directory/ad-enumeration" class={isActive('/active-directory/ad-enumeration') ? 'active' : ''}>AD Enumeration</a></li>
+        <li><a href="/active-directory/goad" class={isActive('/active-directory/goad') ? 'active' : ''}>Game of Active Directory</a></li>
+        <li><a href="/active-directory/kerberoasting" class={isActive('/active-directory/kerberoasting') ? 'active' : ''}>Kerberoasting &amp; AS-REP</a></li>
+        <li><a href="/active-directory/pass-the-hash" class={isActive('/active-directory/pass-the-hash') ? 'active' : ''}>Pass-the-Hash / PTT</a></li>
+        <li><a href="/active-directory/bloodhound" class={isActive('/active-directory/bloodhound') ? 'active' : ''}>BloodHound / SharpHound</a></li>
+        <li><a href="/active-directory/dcsync" class={isActive('/active-directory/dcsync') ? 'active' : ''}>DCSync &amp; Golden Ticket</a></li>
+        <li><a href="/active-directory/acl-abuse" class={isActive('/active-directory/acl-abuse') ? 'active' : ''}>ACL / ACE Abuse</a></li>
+        <li><a href="/active-directory/ntlm-relay" class={isActive('/active-directory/ntlm-relay') ? 'active' : ''}>NTLM Relay Attacks</a></li>
+        <li><a href="/active-directory/domain-trusts" class={isActive('/active-directory/domain-trusts') ? 'active' : ''}>Domain Trusts</a></li>
+        <li><a href="/active-directory/asreproasting" class={isActive('/active-directory/asreproasting') ? 'active' : ''}>AS-REProasting</a></li>
+        <li><a href="/active-directory/adcs-attacks" class={isActive('/active-directory/adcs-attacks') ? 'active' : ''}>ADCS Attacks</a></li>
+        <li><a href="/active-directory/azure-ad" class={isActive('/active-directory/azure-ad') ? 'active' : ''}>Azure AD / Entra ID</a></li>
+        <li><a href="/active-directory/shadow-credentials" class={isActive('/active-directory/shadow-credentials') ? 'active' : ''}>Shadow Credentials</a></li>
+        <li><a href="/active-directory/coercion-attacks" class={isActive('/active-directory/coercion-attacks') ? 'active' : ''}>Coercion Attacks</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/pivoting')}>
+      <summary><span class="module-icon">🔀</span> Pivoting &amp; Tunneling</summary>
+      <ul>
+        <li><a href="/pivoting/ssh-tunneling" class={isActive('/pivoting/ssh-tunneling') ? 'active' : ''}>SSH Tunneling</a></li>
+        <li><a href="/pivoting/chisel-socks" class={isActive('/pivoting/chisel-socks') ? 'active' : ''}>Chisel &amp; SOCKS5</a></li>
+        <li><a href="/pivoting/metasploit-pivoting" class={isActive('/pivoting/metasploit-pivoting') ? 'active' : ''}>Metasploit Pivoting</a></li>
+        <li><a href="/pivoting/dns-icmp-tunneling" class={isActive('/pivoting/dns-icmp-tunneling') ? 'active' : ''}>DNS &amp; ICMP Tunneling</a></li>
+        <li><a href="/pivoting/sshuttle-rpivot" class={isActive('/pivoting/sshuttle-rpivot') ? 'active' : ''}>sshuttle &amp; rpivot</a></li>
+        <li><a href="/pivoting/windows-pivoting" class={isActive('/pivoting/windows-pivoting') ? 'active' : ''}>Windows Pivoting</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/evasion')}>
+      <summary><span class="module-icon">🕶️</span> Evasion</summary>
+      <ul>
+        <li><a href="/evasion/amsi-bypass" class={isActive('/evasion/amsi-bypass') ? 'active' : ''}>AMSI Bypass</a></li>
+        <li><a href="/evasion/av-edr-evasion" class={isActive('/evasion/av-edr-evasion') ? 'active' : ''}>AV / EDR Evasion</a></li>
+        <li><a href="/evasion/lolbins" class={isActive('/evasion/lolbins') ? 'active' : ''}>LOLBins &amp; LOLBAS</a></li>
+        <li><a href="/evasion/fileless-techniques" class={isActive('/evasion/fileless-techniques') ? 'active' : ''}>Fileless Techniques</a></li>
+        <li><a href="/evasion/windows-defender" class={isActive('/evasion/windows-defender') ? 'active' : ''}>Windows Defender</a></li>
+        <li><a href="/evasion/malware-dev" class={isActive('/evasion/malware-dev') ? 'active' : ''}>Malware Development</a></li>
+        <li><a href="/evasion/kernel-exploitation" class={isActive('/evasion/kernel-exploitation') ? 'active' : ''}>Kernel Exploitation</a></li>
+        <li><a href="/evasion/indirect-syscalls" class={isActive('/evasion/indirect-syscalls') ? 'active' : ''}>Indirect Syscalls</a></li>
+        <li><a href="/evasion/sleep-obfuscation" class={isActive('/evasion/sleep-obfuscation') ? 'active' : ''}>Sleep Obfuscation</a></li>
+        <li><a href="/evasion/stack-spoofing" class={isActive('/evasion/stack-spoofing') ? 'active' : ''}>Stack Spoofing</a></li>
+        <li><a href="/evasion/etw-bypass" class={isActive('/evasion/etw-bypass') ? 'active' : ''}>ETW Bypass</a></li>
+        <li><a href="/evasion/dll-unhooking" class={isActive('/evasion/dll-unhooking') ? 'active' : ''}>DLL Unhooking</a></li>
+        <li><a href="/evasion/process-ghosting" class={isActive('/evasion/process-ghosting') ? 'active' : ''}>Process Ghosting</a></li>
+        <li><a href="/evasion/apc-injection" class={isActive('/evasion/apc-injection') ? 'active' : ''}>APC Injection</a></li>
+        <li><a href="/evasion/pe-obfuscation" class={isActive('/evasion/pe-obfuscation') ? 'active' : ''}>PE Obfuscation</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/exploitation')}>
+      <summary><span class="module-icon">💥</span> Exploitation</summary>
+      <ul>
+        <li><a href="/exploitation/metasploitable" class={isActive('/exploitation/metasploitable') ? 'active' : ''}>Metasploitable</a></li>
+        <li><a href="/exploitation/web-attacks" class={isActive('/exploitation/web-attacks') ? 'active' : ''}>Web Attacks (OWASP)</a></li>
+        <li><a href="/exploitation/service-exploits" class={isActive('/exploitation/service-exploits') ? 'active' : ''}>Service Exploitation</a></li>
+        <li><a href="/exploitation/password-attacks" class={isActive('/exploitation/password-attacks') ? 'active' : ''}>Password Attacks</a></li>
+        <li><a href="/exploitation/offensive-python" class={isActive('/exploitation/offensive-python') ? 'active' : ''}>Offensive Python</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/post-exploitation')}>
+      <summary><span class="module-icon">🐚</span> Post-Exploitation</summary>
+      <ul>
+        <li><a href="/post-exploitation/privesc-linux" class={isActive('/post-exploitation/privesc-linux') ? 'active' : ''}>Privesc — Linux</a></li>
+        <li><a href="/post-exploitation/privesc-windows" class={isActive('/post-exploitation/privesc-windows') ? 'active' : ''}>Privesc — Windows</a></li>
+        <li><a href="/post-exploitation/lateral-movement" class={isActive('/post-exploitation/lateral-movement') ? 'active' : ''}>Lateral Movement</a></li>
+        <li><a href="/post-exploitation/persistence" class={isActive('/post-exploitation/persistence') ? 'active' : ''}>Persistence</a></li>
+        <li><a href="/post-exploitation/data-exfil" class={isActive('/post-exploitation/data-exfil') ? 'active' : ''}>Data Exfiltration</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/c2-frameworks')}>
+      <summary><span class="module-icon">🎛️</span> C2 Frameworks</summary>
+      <ul>
+        <li><a href="/c2-frameworks/metasploit" class={isActive('/c2-frameworks/metasploit') ? 'active' : ''}>Metasploit Framework</a></li>
+        <li><a href="/c2-frameworks/cobalt-strike" class={isActive('/c2-frameworks/cobalt-strike') ? 'active' : ''}>Cobalt Strike</a></li>
+        <li><a href="/c2-frameworks/sliver" class={isActive('/c2-frameworks/sliver') ? 'active' : ''}>Sliver</a></li>
+        <li><a href="/c2-frameworks/havoc" class={isActive('/c2-frameworks/havoc') ? 'active' : ''}>Havoc C2</a></li>
+        <li><a href="/c2-frameworks/brute-ratel" class={isActive('/c2-frameworks/brute-ratel') ? 'active' : ''}>Brute Ratel C4</a></li>
+        <li><a href="/c2-frameworks/bof" class={isActive('/c2-frameworks/bof') ? 'active' : ''}>Beacon Object Files</a></li>
+        <li><a href="/c2-frameworks/mythic" class={isActive('/c2-frameworks/mythic') ? 'active' : ''}>Mythic C2</a></li>
+        <li><a href="/c2-frameworks/malleable-c2" class={isActive('/c2-frameworks/malleable-c2') ? 'active' : ''}>Malleable C2 Profiles</a></li>
+        <li><a href="/c2-frameworks/redirectors" class={isActive('/c2-frameworks/redirectors') ? 'active' : ''}>C2 Redirectors</a></li>
+        <li><a href="/c2-frameworks/c2-opsec" class={isActive('/c2-frameworks/c2-opsec') ? 'active' : ''}>C2 OPSEC</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/web')}>
+      <summary><span class="module-icon">🌐</span> Web Hacking</summary>
+      <ul>
+        <li><a href="/web/sql-injection" class={isActive('/web/sql-injection') ? 'active' : ''}>SQL Injection</a></li>
+        <li><a href="/web/xss" class={isActive('/web/xss') ? 'active' : ''}>XSS &amp; CSP Bypass</a></li>
+        <li><a href="/web/ssrf" class={isActive('/web/ssrf') ? 'active' : ''}>SSRF</a></li>
+        <li><a href="/web/jwt-attacks" class={isActive('/web/jwt-attacks') ? 'active' : ''}>JWT Attacks</a></li>
+        <li><a href="/web/graphql" class={isActive('/web/graphql') ? 'active' : ''}>GraphQL Attacks</a></li>
+        <li><a href="/web/http-smuggling" class={isActive('/web/http-smuggling') ? 'active' : ''}>HTTP Smuggling</a></li>
+        <li><a href="/web/oauth-attacks" class={isActive('/web/oauth-attacks') ? 'active' : ''}>OAuth / OIDC</a></li>
+        <li><a href="/web/xxe" class={isActive('/web/xxe') ? 'active' : ''}>XXE Injection</a></li>
+        <li><a href="/web/prototype-pollution" class={isActive('/web/prototype-pollution') ? 'active' : ''}>Prototype Pollution</a></li>
+        <li><a href="/web/api-testing" class={isActive('/web/api-testing') ? 'active' : ''}>API Testing</a></li>
+        <li><a href="/web/file-upload" class={isActive('/web/file-upload') ? 'active' : ''}>File Upload Attacks</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/iot')}>
+      <summary><span class="module-icon">📡</span> IoT Hacking</summary>
+      <ul>
+        <li><a href="/iot/firmware-extraction" class={isActive('/iot/firmware-extraction') ? 'active' : ''}>Firmware Extraction</a></li>
+        <li><a href="/iot/hardware-hacking" class={isActive('/iot/hardware-hacking') ? 'active' : ''}>Hardware Hacking</a></li>
+        <li><a href="/iot/mqtt-coap" class={isActive('/iot/mqtt-coap') ? 'active' : ''}>MQTT / CoAP Attacks</a></li>
+        <li><a href="/iot/ble-rf" class={isActive('/iot/ble-rf') ? 'active' : ''}>BLE &amp; RF Attacks</a></li>
+        <li><a href="/iot/default-creds" class={isActive('/iot/default-creds') ? 'active' : ''}>Default Credentials</a></li>
+        <li><a href="/iot/ota-attacks" class={isActive('/iot/ota-attacks') ? 'active' : ''}>OTA Firmware Attacks</a></li>
+        <li><a href="/iot/router-exploitation" class={isActive('/iot/router-exploitation') ? 'active' : ''}>Router Exploitation</a></li>
+        <li><a href="/iot/industrial" class={isActive('/iot/industrial') ? 'active' : ''}>Industrial Protocols</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/ai-agents')}>
+      <summary><span class="module-icon">🤖</span> AI Red Team Agents</summary>
+      <ul>
+        <li><a href="/ai-agents/edge-llm-setup" class={isActive('/ai-agents/edge-llm-setup') ? 'active' : ''}>Edge LLM Setup</a></li>
+        <li><a href="/ai-agents/red-team-agents" class={isActive('/ai-agents/red-team-agents') ? 'active' : ''}>AI Red Team Agents</a></li>
+      </ul>
+    </details>
+
+    <details open={isActive('/reporting')}>
+      <summary><span class="module-icon">📋</span> Reporting</summary>
+      <ul>
+        <li><a href="/reporting/findings" class={isActive('/reporting/findings') ? 'active' : ''}>Documenting Findings</a></li>
+        <li><a href="/reporting/executive-report" class={isActive('/reporting/executive-report') ? 'active' : ''}>Executive Report</a></li>
+        <li><a href="/reporting/technical-report" class={isActive('/reporting/technical-report') ? 'active' : ''}>Technical Report</a></li>
+      </ul>
+    </details>
+  </aside>
+
+  <main id="content">
+    <slot />
+  </main>
+</div>
+
+<footer id="footer">
+  <span class="footer-brand">Red Team Academy</span>
+  <span class="footer-sep">|</span>
+  <span>Personal Training Platform</span>
+  <span class="footer-right">
+    <span>&copy; {new Date().getFullYear()}</span>
+  </span>
+</footer>
+
+</body>
+</html>

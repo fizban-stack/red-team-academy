@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <rect width="800" height="200" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">EXECUTIVE REPORT — AUDIENCE &amp; STRUCTURE</text>
+
+  <!-- Audience left -->
+  <rect x="15" y="38" width="165" height="145" rx="3" fill="#111" stroke="#888" stroke-width="1.2"/>
+  <text x="97" y="56" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">AUDIENCE</text>
+  <text x="97" y="72" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">CISO / CTO / CEO</text>
+  <text x="97" y="86" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">Board members</text>
+  <text x="97" y="100" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">Budget owners</text>
+  <text x="97" y="118" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">No tech jargon</text>
+  <text x="97" y="131" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">Business impact</text>
+  <text x="97" y="144" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">first language</text>
+  <text x="97" y="157" font-family="Courier New, monospace" font-size="8" fill="#555" text-anchor="middle">1–3 pages max</text>
+  <text x="97" y="170" font-family="Courier New, monospace" font-size="7" fill="#444" text-anchor="middle">reads pages 1–2 only</text>
+
+  <!-- Arrow -->
+  <line x1="180" y1="110" x2="205" y2="110" stroke="#555" stroke-width="1.2"/>
+
+  <!-- Structure sections -->
+  <rect x="205" y="38" width="575" height="25" rx="2" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="492" y="55" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">1. ENGAGEMENT OVERVIEW — scope, dates, team, methodology (1 paragraph)</text>
+
+  <rect x="205" y="68" width="575" height="25" rx="2" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="492" y="85" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">2. OVERALL RISK RATING — Critical / High / Medium / Low with one-line rationale</text>
+
+  <rect x="205" y="98" width="575" height="25" rx="2" fill="#0d0d0d" stroke="#ff4444" stroke-width="1.2"/>
+  <text x="492" y="115" font-family="Courier New, monospace" font-size="9" fill="#ff4444" text-anchor="middle">3. BREACH NARRATIVE — what attackers did in plain English (most important)</text>
+
+  <rect x="205" y="128" width="575" height="25" rx="2" fill="#0d0d0d" stroke="#00b3cc" stroke-width="1"/>
+  <text x="492" y="145" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">4. KEY FINDINGS SUMMARY — 3–5 bullet critical findings with business impact</text>
+
+  <rect x="205" y="158" width="575" height="25" rx="2" fill="#0d0d0d" stroke="#00c732" stroke-width="1"/>
+  <text x="492" y="175" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">5. STRATEGIC RECOMMENDATIONS — prioritized by risk, not technical complexity</text>
+</svg>

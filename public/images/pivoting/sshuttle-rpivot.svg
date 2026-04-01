@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 210" width="800" height="210">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="garr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00c732"/>
+    </marker>
+    <marker id="yarr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ffcc00"/>
+    </marker>
+  </defs>
+  <rect width="800" height="210" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">SSHUTTLE (TRANSPARENT) vs RPIVOT (REVERSE SOCKS)</text>
+
+  <!-- sshuttle -->
+  <text x="16" y="44" font-family="Courier New, monospace" font-size="9" fill="#00c732">SSHUTTLE — no proxychains needed, transparent iptables routing</text>
+  <rect x="16" y="52" width="100" height="40" rx="3" fill="#111" stroke="#00c732" stroke-width="1.2"/>
+  <text x="66" y="68" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="66" y="81" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">iptables intercept</text>
+
+  <line x1="116" y1="72" x2="170" y2="72" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)" stroke-dasharray="4,2"/>
+  <text x="143" y="66" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">SSH</text>
+
+  <rect x="170" y="52" width="100" height="40" rx="3" fill="#111" stroke="#888" stroke-width="1"/>
+  <text x="220" y="68" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">PIVOT</text>
+  <text x="220" y="81" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">Python helper</text>
+
+  <line x1="270" y1="72" x2="320" y2="72" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <rect x="320" y="52" width="120" height="40" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1"/>
+  <text x="380" y="68" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">INTERNAL NET</text>
+  <text x="380" y="81" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">172.16.5.0/24</text>
+  <text x="66" y="105" font-family="Courier New, monospace" font-size="7" fill="#555">sudo sshuttle -r user@pivot 172.16.5.0/24   →   direct: xfreerdp /v:172.16.5.19 (no proxychains)</text>
+
+  <!-- rpivot -->
+  <text x="16" y="130" font-family="Courier New, monospace" font-size="9" fill="#ffcc00">RPIVOT — reverse HTTP CONNECT → SOCKS4 proxy (Python)</text>
+  <rect x="16" y="138" width="130" height="40" rx="3" fill="#111" stroke="#00c732" stroke-width="1.5"/>
+  <text x="81" y="154" font-family="Courier New, monospace" font-size="9" fill="#00c732" text-anchor="middle">ATTACKER SERVER</text>
+  <text x="81" y="167" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">server.py :9999 :1080</text>
+
+  <line x1="310" y1="158" x2="150" y2="158" stroke="#ffcc00" stroke-width="1.2" marker-end="url(#yarr)"/>
+  <text x="230" y="150" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">TCP outbound (HTTP CONNECT)</text>
+
+  <rect x="310" y="138" width="130" height="40" rx="3" fill="#111" stroke="#888" stroke-width="1.2"/>
+  <text x="375" y="154" font-family="Courier New, monospace" font-size="9" fill="#888" text-anchor="middle">PIVOT CLIENT</text>
+  <text x="375" y="167" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">client.py ATTACKER 9999</text>
+
+  <line x1="440" y1="158" x2="490" y2="158" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <rect x="490" y="138" width="120" height="40" rx="3" fill="#111" stroke="#00b3cc" stroke-width="1"/>
+  <text x="550" y="154" font-family="Courier New, monospace" font-size="9" fill="#00b3cc" text-anchor="middle">INTERNAL NET</text>
+  <text x="550" y="167" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">172.16.5.0/24</text>
+  <text x="16" y="197" font-family="Courier New, monospace" font-size="7" fill="#555">proxychains -q firefox http://172.16.5.135:8080   →   useful when only HTTP/S proxy allowed outbound (NTLM proxy support)</text>
+</svg>

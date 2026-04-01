@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 230" width="800" height="230">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555555"/>
+    </marker>
+    <marker id="garr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#00c732"/>
+    </marker>
+  </defs>
+  <rect width="800" height="230" fill="#0d0d0d"/>
+  <text x="16" y="22" font-family="Courier New, monospace" font-size="12" font-weight="bold" fill="#e0e0e0">SSH TUNNELING — LOCAL / REMOTE / DYNAMIC</text>
+
+  <!-- LOCAL FORWARDING -->
+  <text x="16" y="50" font-family="Courier New, monospace" font-size="9" fill="#00c732">-L LOCAL FORWARD</text>
+  <rect x="16" y="56" width="80" height="26" rx="2" fill="#111" stroke="#00c732" stroke-width="1"/>
+  <text x="56" y="73" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <line x1="96" y1="69" x2="140" y2="69" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)" stroke-dasharray="4,2"/>
+  <rect x="141" y="56" width="70" height="26" rx="2" fill="#111" stroke="#888" stroke-width="1"/>
+  <text x="176" y="73" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">PIVOT</text>
+  <line x1="211" y1="69" x2="255" y2="69" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)"/>
+  <rect x="256" y="56" width="80" height="26" rx="2" fill="#111" stroke="#00b3cc" stroke-width="1"/>
+  <text x="296" y="73" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">TARGET</text>
+  <text x="56" y="95" font-family="Courier New, monospace" font-size="7" fill="#555">localhost:1337 → pivot → 172.16.x.x:3389</text>
+
+  <!-- REMOTE FORWARDING -->
+  <text x="16" y="120" font-family="Courier New, monospace" font-size="9" fill="#00c732">-R REMOTE FORWARD</text>
+  <rect x="16" y="126" width="80" height="26" rx="2" fill="#111" stroke="#00b3cc" stroke-width="1"/>
+  <text x="56" y="143" font-family="Courier New, monospace" font-size="8" fill="#00b3cc" text-anchor="middle">TARGET</text>
+  <line x1="96" y1="139" x2="140" y2="139" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)"/>
+  <rect x="141" y="126" width="70" height="26" rx="2" fill="#111" stroke="#888" stroke-width="1"/>
+  <text x="176" y="143" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">PIVOT</text>
+  <line x1="211" y1="139" x2="255" y2="139" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)" stroke-dasharray="4,2"/>
+  <rect x="256" y="126" width="80" height="26" rx="2" fill="#111" stroke="#00c732" stroke-width="1"/>
+  <text x="296" y="143" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="56" y="165" font-family="Courier New, monospace" font-size="7" fill="#555">pivot exposes port on attacker → reverse access</text>
+
+  <!-- DYNAMIC / SOCKS -->
+  <text x="430" y="50" font-family="Courier New, monospace" font-size="9" fill="#00c732">-D DYNAMIC (SOCKS5)</text>
+  <rect x="430" y="56" width="80" height="26" rx="2" fill="#111" stroke="#00c732" stroke-width="1"/>
+  <text x="470" y="73" font-family="Courier New, monospace" font-size="8" fill="#00c732" text-anchor="middle">ATTACKER</text>
+  <text x="470" y="86" font-family="Courier New, monospace" font-size="7" fill="#555" text-anchor="middle">:1080 SOCKS</text>
+  <line x1="510" y1="69" x2="554" y2="69" stroke="#00c732" stroke-width="1.2" marker-end="url(#garr)" stroke-dasharray="4,2"/>
+  <rect x="555" y="56" width="70" height="26" rx="2" fill="#111" stroke="#888" stroke-width="1"/>
+  <text x="590" y="73" font-family="Courier New, monospace" font-size="8" fill="#888" text-anchor="middle">PIVOT</text>
+  <!-- branches to multiple targets -->
+  <line x1="625" y1="69" x2="650" y2="55" stroke="#00c732" stroke-width="1" marker-end="url(#garr)"/>
+  <line x1="625" y1="69" x2="650" y2="69" stroke="#00c732" stroke-width="1" marker-end="url(#garr)"/>
+  <line x1="625" y1="69" x2="650" y2="83" stroke="#00c732" stroke-width="1" marker-end="url(#garr)"/>
+  <rect x="651" y="43" width="60" height="20" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="681" y="57" font-family="Courier New, monospace" font-size="7" fill="#00b3cc" text-anchor="middle">HOST-A</text>
+  <rect x="651" y="58" width="60" height="20" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="681" y="72" font-family="Courier New, monospace" font-size="7" fill="#00b3cc" text-anchor="middle">HOST-B</text>
+  <rect x="651" y="73" width="60" height="20" rx="2" fill="#111" stroke="#00b3cc" stroke-width="0.8"/>
+  <text x="681" y="87" font-family="Courier New, monospace" font-size="7" fill="#00b3cc" text-anchor="middle">HOST-C</text>
+  <text x="430" y="112" font-family="Courier New, monospace" font-size="7" fill="#555">proxychains → any tool through SOCKS proxy</text>
+
+  <!-- Bottom: key notes -->
+  <line x1="16" y1="185" x2="784" y2="185" stroke="#222" stroke-width="1"/>
+  <text x="16" y="200" font-family="Courier New, monospace" font-size="9" fill="#888">KEY COMMANDS</text>
+  <text x="16" y="214" font-family="Courier New, monospace" font-size="8" fill="#555">-L 1337:172.16.5.19:3389 pivot   →   -R 4444:localhost:4444 pivot   →   -D 1080 pivot  (add -N -f for background)</text>
+</svg>

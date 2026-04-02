@@ -85,6 +85,7 @@ function navActive(href: string): boolean {
         <li><a href="/active-directory/azure-ad" class={isActive('/active-directory/azure-ad') ? 'active' : ''}>Azure AD / Entra ID</a></li>
         <li><a href="/active-directory/shadow-credentials" class={isActive('/active-directory/shadow-credentials') ? 'active' : ''}>Shadow Credentials</a></li>
         <li><a href="/active-directory/coercion-attacks" class={isActive('/active-directory/coercion-attacks') ? 'active' : ''}>Coercion Attacks</a></li>
+        <li><a href="/active-directory/ad-lotl" class={isActive('/active-directory/ad-lotl') ? 'active' : ''}>AD Living Off the Land</a></li>
       </ul>
     </details>
 
@@ -118,6 +119,8 @@ function navActive(href: string): boolean {
         <li><a href="/evasion/process-ghosting" class={isActive('/evasion/process-ghosting') ? 'active' : ''}>Process Ghosting</a></li>
         <li><a href="/evasion/apc-injection" class={isActive('/evasion/apc-injection') ? 'active' : ''}>APC Injection</a></li>
         <li><a href="/evasion/pe-obfuscation" class={isActive('/evasion/pe-obfuscation') ? 'active' : ''}>PE Obfuscation</a></li>
+        <li><a href="/evasion/lotl-advanced" class={isActive('/evasion/lotl-advanced') ? 'active' : ''}>Advanced LOTL Techniques</a></li>
+        <li><a href="/evasion/sophos-xdr" class={isActive('/evasion/sophos-xdr') ? 'active' : ''}>Sophos XDR Evasion</a></li>
       </ul>
     </details>
 
@@ -176,8 +179,19 @@ function navActive(href: string): boolean {
       </ul>
     </details>
 
+    <details open={isActive('/wireless')}>
+      <summary><span class="module-num">10</span> Wireless Attacks</summary>
+      <ul>
+        <li><a href="/wireless/wireless-overview" class={isActive('/wireless/wireless-overview') ? 'active' : ''}>Overview &amp; Hardware</a></li>
+        <li><a href="/wireless/wifi-attacks" class={isActive('/wireless/wifi-attacks') ? 'active' : ''}>Wi-Fi Attacks</a></li>
+        <li><a href="/wireless/bluetooth-attacks" class={isActive('/wireless/bluetooth-attacks') ? 'active' : ''}>Bluetooth Attacks</a></li>
+        <li><a href="/wireless/nfc-attacks" class={isActive('/wireless/nfc-attacks') ? 'active' : ''}>NFC Attacks</a></li>
+        <li><a href="/wireless/rfid-attacks" class={isActive('/wireless/rfid-attacks') ? 'active' : ''}>RFID Attacks</a></li>
+      </ul>
+    </details>
+
     <details open={isActive('/iot')}>
-      <summary><span class="module-num">10</span> IoT Hacking</summary>
+      <summary><span class="module-num">11</span> IoT Hacking</summary>
       <ul>
         <li><a href="/iot/firmware-extraction" class={isActive('/iot/firmware-extraction') ? 'active' : ''}>Firmware Extraction</a></li>
         <li><a href="/iot/hardware-hacking" class={isActive('/iot/hardware-hacking') ? 'active' : ''}>Hardware Hacking</a></li>
@@ -191,15 +205,33 @@ function navActive(href: string): boolean {
     </details>
 
     <details open={isActive('/ai-agents')}>
-      <summary><span class="module-num">11</span> AI Red Team Agents</summary>
+      <summary><span class="module-num">12</span> AI Red Team Agents</summary>
       <ul>
         <li><a href="/ai-agents/edge-llm-setup" class={isActive('/ai-agents/edge-llm-setup') ? 'active' : ''}>Edge LLM Setup</a></li>
         <li><a href="/ai-agents/red-team-agents" class={isActive('/ai-agents/red-team-agents') ? 'active' : ''}>AI Red Team Agents</a></li>
       </ul>
     </details>
 
+    <details open={isActive('/tool-dev')}>
+      <summary><span class="module-num">14</span> Tool Development</summary>
+      <ul>
+        <li><a href="/tool-dev/python-network-recon" class={isActive('/tool-dev/python-network-recon') ? 'active' : ''}>Python: Network Recon</a></li>
+        <li><a href="/tool-dev/python-ad-tools" class={isActive('/tool-dev/python-ad-tools') ? 'active' : ''}>Python: AD Attack Tools</a></li>
+        <li><a href="/tool-dev/python-c2-shells" class={isActive('/tool-dev/python-c2-shells') ? 'active' : ''}>Python: C2 &amp; Reverse Shells</a></li>
+        <li><a href="/tool-dev/python-payload-dev" class={isActive('/tool-dev/python-payload-dev') ? 'active' : ''}>Python: Payload Development</a></li>
+        <li><a href="/tool-dev/powershell-network-recon" class={isActive('/tool-dev/powershell-network-recon') ? 'active' : ''}>PS: Network &amp; Recon</a></li>
+        <li><a href="/tool-dev/powershell-ad-attacks" class={isActive('/tool-dev/powershell-ad-attacks') ? 'active' : ''}>PS: AD Attack Tools</a></li>
+        <li><a href="/tool-dev/powershell-post-exploitation" class={isActive('/tool-dev/powershell-post-exploitation') ? 'active' : ''}>PS: Post-Exploitation</a></li>
+        <li><a href="/tool-dev/powershell-evasion" class={isActive('/tool-dev/powershell-evasion') ? 'active' : ''}>PS: Evasion Techniques</a></li>
+        <li><a href="/tool-dev/go-network-tools" class={isActive('/tool-dev/go-network-tools') ? 'active' : ''}>Go: Network Tools</a></li>
+        <li><a href="/tool-dev/go-c2-implants" class={isActive('/tool-dev/go-c2-implants') ? 'active' : ''}>Go: C2 Implant Dev</a></li>
+        <li><a href="/tool-dev/go-windows-api" class={isActive('/tool-dev/go-windows-api') ? 'active' : ''}>Go: Windows API</a></li>
+        <li><a href="/tool-dev/go-evasion" class={isActive('/tool-dev/go-evasion') ? 'active' : ''}>Go: Evasion &amp; Obfuscation</a></li>
+      </ul>
+    </details>
+
     <details open={isActive('/reporting')}>
-      <summary><span class="module-num">12</span> Reporting</summary>
+      <summary><span class="module-num">15</span> Reporting</summary>
       <ul>
         <li><a href="/reporting/findings" class={isActive('/reporting/findings') ? 'active' : ''}>Documenting Findings</a></li>
         <li><a href="/reporting/executive-report" class={isActive('/reporting/executive-report') ? 'active' : ''}>Executive Report</a></li>

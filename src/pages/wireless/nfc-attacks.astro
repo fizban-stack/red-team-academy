@@ -61,11 +61,11 @@ import nfc
 import ndef
 
 def on_connect(tag):
-    print(f"Tag UID: {tag.identifier.hex()}")
+    print(f"Tag UID: &#123;tag.identifier.hex()&#125;")
     if tag.ndef:
         for record in tag.ndef.records:
-            print(f"  Record type: {record.type}")
-            print(f"  Data: {record}")
+            print(f"  Record type: &#123;record.type&#125;")
+            print(f"  Data: &#123;record&#125;")
 
 with nfc.ContactlessFrontend('usb') as clf:
     clf.connect(rdwr=&#123;'on-connect': on_connect&#125;)
@@ -256,7 +256,7 @@ EOF
 # App processes APDUs in software — logic bugs possible
 
 # Enumerate HCE apps on Android device (requires ADB access or reverse engineering):
-adb shell pm list packages | xargs -I{} adb shell pm dump {} | grep -l "HCE\|NfcHce"
+adb shell pm list packages | xargs -I&#123;&#125; adb shell pm dump &#123;&#125; | grep -l "HCE\|NfcHce"
 # Check AndroidManifest.xml for: android.nfc.cardemulation.action.HOST_APDU_SERVICE
 
 # Extract AID registrations (requires app decompile or dumpsys):

@@ -68,15 +68,15 @@ async def scan_and_connect(target_mac):
     client = BleakClient(target_mac)
     await client.connect()
     for service in client.services:
-        print(f"Service: {service.uuid}")
+        print(f"Service: &#123;service.uuid&#125;")
         for char in service.characteristics:
-            print(f"  Char: {char.uuid} | Props: {char.properties}")
+            print(f"  Char: &#123;char.uuid&#125; | Props: &#123;char.properties&#125;")
             if "read" in char.properties:
                 try:
                     val = await client.read_gatt_char(char.uuid)
-                    print(f"    Value: {val}")
+                    print(f"    Value: &#123;val&#125;")
                 except Exception as e:
-                    print(f"    Read error: {e}")
+                    print(f"    Read error: &#123;e&#125;")
     await client.disconnect()
 
 asyncio.run(scan_and_connect("CC:DD:EE:FF:00:11"))
@@ -101,9 +101,9 @@ from scapy.layers.bluetooth4LE import *
 
 def ble_handler(pkt):
     if BTLE_ADV in pkt:
-        print(f"ADV from: {pkt.AdvA} Type: {pkt.PDU_type}")
+        print(f"ADV from: &#123;pkt.AdvA&#125; Type: &#123;pkt.PDU_type&#125;")
         if BTLE_SCAN_RSP in pkt:
-            print(f"  Scan Response: {bytes(pkt.data).hex()}")
+            print(f"  Scan Response: &#123;bytes(pkt.data).hex()&#125;")
 
 sniff(iface="hci0", prn=ble_handler, store=0)
 EOF</code></pre>
@@ -300,7 +300,7 @@ async def read_all(mac):
                 if "read" in char.properties:
                     try:
                         data = await client.read_gatt_char(char.uuid)
-                        print(f"{char.uuid}: {data.hex()}")
+                        print(f"&#123;char.uuid&#125;: &#123;data.hex()&#125;")
                     except:
                         pass
 

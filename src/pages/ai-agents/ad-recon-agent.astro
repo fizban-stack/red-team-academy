@@ -172,8 +172,8 @@ class ADReconAgent:
         )
 
         messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": f"Objective: {objective}"}
+            &#123;"role": "system", "content": system&#125;,
+            &#123;"role": "user", "content": f"Objective: &#123;objective&#125;"&#125;
         ]
 
         for iteration in range(self.max_iterations):
@@ -195,17 +195,17 @@ class ADReconAgent:
             tool_args = content.get("args", &#123;&#125;)
             thought = content.get("thought", "")
 
-            print(f"[{iteration+1}] Thought: {thought}")
-            print(f"[{iteration+1}] Action: {tool_name}({tool_args})")
+            print(f"[&#123;iteration+1&#125;] Thought: &#123;thought&#125;")
+            print(f"[&#123;iteration+1&#125;] Action: &#123;tool_name&#125;(&#123;tool_args&#125;)")
 
             observation = self.tools.call(tool_name, tool_args)
-            print(f"[{iteration+1}] Observation: {str(observation)[:200]}...")
+            print(f"[&#123;iteration+1&#125;] Observation: &#123;str(observation)[:200]&#125;...")
 
             # Add to history and context
             step = &#123;"thought": thought, "action": tool_name, "args": tool_args, "obs": observation&#125;
             self.history.append(step)
             messages.append(&#123;"role": "assistant", "content": json.dumps(content)&#125;)
-            messages.append(&#123;"role": "user", "content": f"Observation: {json.dumps(observation)}"&#125;)
+            messages.append(&#123;"role": "user", "content": f"Observation: &#123;json.dumps(observation)&#125;"&#125;)
 
             # Context management: summarize if getting long
             if len(messages) > 40:
@@ -241,7 +241,7 @@ class ToolRegistry:
 
     def call(self, name: str, args: dict) -> Any:
         if name not in self._tools:
-            return &#123;"error": f"Unknown tool: {name}"&#125;
+            return &#123;"error": f"Unknown tool: &#123;name&#125;"&#125;
         try:
             return self._tools[name](**args)
         except Exception as e:
@@ -346,11 +346,11 @@ class ToolRegistry:
   <h2>System Prompt Design</h2>
   <pre><code># agent/prompts.py
 
-SYSTEM_PROMPT = """You are an Active Directory reconnaissance agent running on {current_time}.
+SYSTEM_PROMPT = """You are an Active Directory reconnaissance agent running on &#123;current_time&#125;.
 Your goal is to systematically enumerate an AD environment and identify attack paths.
 
 ## Available Tools
-{tool_descriptions}
+&#123;tool_descriptions&#125;
 
 ## Response Format
 You MUST respond with valid JSON only. No markdown, no extra text.
@@ -426,7 +426,7 @@ class KnowledgeBase:
         chunks = [c.strip() for c in content.split("##") if c.strip()]
         self.collection.add(
             documents=chunks,
-            ids=[f"{doc_id_prefix}_{i}" for i in range(len(chunks))]
+            ids=[f"&#123;doc_id_prefix&#125;_&#123;i&#125;" for i in range(len(chunks))]
         )
 
 # rag/loader.py — build the knowledge base
@@ -614,7 +614,7 @@ def main(objective, server, domain, model, ollama_url, output):
 
     with open(output, "w") as f:
         f.write(report)
-    print(f"\nReport saved to: {output}")
+    print(f"\nReport saved to: &#123;output&#125;")
 
 if __name__ == "__main__":
     main()

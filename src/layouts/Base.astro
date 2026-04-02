@@ -213,6 +213,22 @@ function navActive(href: string): boolean {
       </ul>
     </details>
 
+    <details open={isActive('/tools')}>
+      <summary><span class="module-num">13</span> Red Team Tools</summary>
+      <ul>
+        <li><a href="/tools/overview" class={isActive('/tools/overview') ? 'active' : ''}>Tool Overview</a></li>
+        <li><a href="/tools/recon-tools" class={isActive('/tools/recon-tools') ? 'active' : ''}>Reconnaissance Tools</a></li>
+        <li><a href="/tools/ad-tools" class={isActive('/tools/ad-tools') ? 'active' : ''}>Active Directory Tools</a></li>
+        <li><a href="/tools/exploitation-tools" class={isActive('/tools/exploitation-tools') ? 'active' : ''}>Exploitation Tools</a></li>
+        <li><a href="/tools/post-exploitation-tools" class={isActive('/tools/post-exploitation-tools') ? 'active' : ''}>Post-Exploitation Tools</a></li>
+        <li><a href="/tools/evasion-tools" class={isActive('/tools/evasion-tools') ? 'active' : ''}>Evasion &amp; Obfuscation</a></li>
+        <li><a href="/tools/network-tools" class={isActive('/tools/network-tools') ? 'active' : ''}>Network &amp; Pivoting Tools</a></li>
+        <li><a href="/tools/password-tools" class={isActive('/tools/password-tools') ? 'active' : ''}>Password &amp; Credential Tools</a></li>
+        <li><a href="/tools/web-tools" class={isActive('/tools/web-tools') ? 'active' : ''}>Web Hacking Tools</a></li>
+        <li><a href="/tools/wireless-tools" class={isActive('/tools/wireless-tools') ? 'active' : ''}>Wireless Attack Tools</a></li>
+      </ul>
+    </details>
+
     <details open={isActive('/tool-dev')}>
       <summary><span class="module-num">14</span> Tool Development</summary>
       <ul>

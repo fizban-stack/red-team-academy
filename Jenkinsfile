@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    agent { label 'remote-web-server' }
 
     tools {
         nodejs 'node22' // must match your NodeJS plugin config name
@@ -13,8 +13,8 @@ pipeline {
     }
 
     environment {
-        DEPLOY_HOST = 'web-dev'
-        DEPLOY_USER = 'deploy'
+        DEPLOY_HOST = 'localhost'
+        DEPLOY_USER = 'root'
         DEPLOY_PATH = '/var/www/red-team'
         SSH_CRED_ID = 'james' // Jenkins credential ID
     }

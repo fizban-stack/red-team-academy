@@ -2,7 +2,7 @@ pipeline {
     agent { label 'remote-web-server' }
 
     tools {
-        nodejs 'node22' // must match your NodeJS plugin config name
+        nodejs 'node22'
     }
 
     stages {
@@ -21,23 +21,22 @@ pipeline {
         stage('Build') {
             steps {
                 sh 'npm run build'
-                // Astro outputs to ./dist by default
             }
         }
 
         stage('Deploy') {
             steps {
-                sshagent(credentials: [env.SSH_CRED_ID]) {
-                    sh """
+                sh '''
                     rsync -avz --delete \
                         --chmod=D755,F644 \
                         dist/ \
                         /var/www/red-team/
-                        'sudo systemctl reload apache2'
-                """
-                }
+                    sudo systemctl reload apache2
+                '''
             }
         }
+
+    } // <-- closes stages block (this was missing)
 
     post {
         success {

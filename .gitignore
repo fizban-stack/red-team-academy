@@ -16,3 +16,6 @@ jekyll-site/vendor/
 
 # Editor
 .idea/
+
+# Repositories
+repo

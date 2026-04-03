@@ -5,20 +5,6 @@ pipeline {
         nodejs 'node22' // must match your NodeJS plugin config name
     }
 
-    triggers {
-        // If using Gitea plugin:
-        // gitlabPush(branchFilterType: 'All')
-        // Otherwise generic SCM polling as fallback:
-        pollSCM('* * * * *')
-    }
-
-    environment {
-        DEPLOY_HOST = 'localhost'
-        DEPLOY_USER = 'root'
-        DEPLOY_PATH = '/var/www/red-team'
-        SSH_CRED_ID = 'james' // Jenkins credential ID
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -45,12 +31,8 @@ pipeline {
                     sh """
                     rsync -avz --delete \
                         --chmod=D755,F644 \
-                        -e 'ssh -o StrictHostKeyChecking=no' \
                         dist/ \
-                        ${env.DEPLOY_USER}@${env.DEPLOY_HOST}:${env.DEPLOY_PATH}/
-
-                    ssh -o StrictHostKeyChecking=no \
-                        ${env.DEPLOY_USER}@${env.DEPLOY_HOST} \
+                        /var/www/red-team/
                         'sudo systemctl reload apache2'
                 """
                 }

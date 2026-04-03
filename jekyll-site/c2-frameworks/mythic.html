@@ -1,0 +1,252 @@
+---
+layout: training-page
+title: "Mythic C2 Framework — Red Team Academy"
+module: "C2 Frameworks"
+tags:
+  - mythic
+  - c2
+  - apollo
+  - poseidon
+  - mythic-cli
+  - docker
+  - bof
+  - pkinit
+page_key: "c2-mythic"
+---
+<h1>Mythic C2 Framework</h1>
+  <p>Mythic is a free, open-source, multi-operator C2 platform built on Docker microservices. It decouples <strong>agents</strong> (implant logic) from <strong>C2 profiles</strong> (transport protocols), enabling a diverse ecosystem of implants across Windows, Linux, and macOS over 10+ protocol channels. Actively maintained by Cody Thomas (SpecterOps). Used in real red team engagements where Cobalt Strike licensing is not available, multi-language implant diversity is needed, or team operations require role-based access control.</p>
+
+  <h2>Architecture</h2>
+  <h3>Core Components</h3>
+  <table>
+    <thead><tr><th>Component</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><strong>GoLang server</strong></td><td>Core backend — GraphQL APIs, WebSockets, auth, task routing</td></tr>
+      <tr><td><strong>PostgreSQL</strong></td><td>Persistent storage: operations, tasks, callbacks, artifacts, credentials</td></tr>
+      <tr><td><strong>RabbitMQ</strong></td><td>Async message broker between server and agent/C2 containers</td></tr>
+      <tr><td><strong>Nginx</strong></td><td>Reverse proxy unifying all services behind a single port (default 7443)</td></tr>
+      <tr><td><strong>React frontend</strong></td><td>Web UI served through Nginx — operator interface for tasking, callbacks, artifacts</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Agent/C2 Profile Separation</h3>
+  <p>The key architectural decision: payload type (what runs on target) and C2 profile (how it communicates) are separate Docker containers that register independently via RabbitMQ. A single payload build can stack multiple C2 channels (e.g., HTTP primary + SMB P2P fallback). New agents or profiles can be added without touching the core server.</p>
+  <pre><code>Agent (target) &lt;-- HTTP/DNS/SMB --&gt; C2 Profile Container
+                                            |  RabbitMQ
+                                   GoLang Server -- PostgreSQL
+                                            |
+                                   React Web UI (Nginx:7443)</code></pre>
+
+  <h2>Installation</h2>
+  <pre><code># 1. Clone repository
+git clone https://github.com/its-a-feature/Mythic --depth 1
+cd Mythic
+
+# 2. Install Docker (Ubuntu/Debian — skip if Docker 20.10.22+ already present)
+sudo ./install_docker_ubuntu.sh
+
+# 3. Build mythic-cli binary (canonical management tool)
+sudo make
+
+# 4. Start Mythic (generates .env on first run)
+sudo ./mythic-cli start
+
+# 5. Get auto-generated admin password
+cat Mythic/.env | grep MYTHIC_ADMIN_PASSWORD
+
+# 6. Install an agent and C2 profile (minimum required before payload generation)
+sudo ./mythic-cli install github https://github.com/MythicAgents/Apollo
+sudo ./mythic-cli install github https://github.com/MythicC2Profiles/http
+
+# 7. Access web UI
+# https://127.0.0.1:7443  (username: mythic_admin, password: from .env)</code></pre>
+
+  <p><strong>System requirements:</strong> Linux (Ubuntu/Debian preferred), Docker 20.10.22+, Docker Compose plugin, minimum 2 CPU / 4 GB RAM.</p>
+  <p><strong>Note:</strong> <code>install_docker_ubuntu.sh</code> only sets up Docker. It does NOT start Mythic. <code>mythic-cli</code> is the canonical management tool — avoid direct docker-compose invocations.</p>
+
+  <h2>Agent Ecosystem</h2>
+
+  <h3>Apollo (Windows — primary Windows agent)</h3>
+  <table>
+    <thead><tr><th>Property</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Language</td><td>C# / .NET Framework 4.0</td></tr>
+      <tr><td>Targets</td><td>Windows only</td></tr>
+      <tr><td>Mythic compat</td><td>3.2 (August 2024)</td></tr>
+    </tbody>
+  </table>
+  <p>80+ commands. The Cobalt Strike Beacon analogue in Mythic. Key capabilities: <code>execute_coff</code> (BOF execution), <code>execute_assembly</code>, <code>execute_pe</code>, process injection (CRT, QueueUserAPC), credential ops (mimikatz, dcsync, pass-the-hash, token steal/make), PPID spoofing, ETW patching, blockdlls, sleep obfuscation, SOCKSv5 proxy, P2P via SMB/TCP named pipes.</p>
+  <pre><code>sudo ./mythic-cli install github https://github.com/MythicAgents/Apollo</code></pre>
+
+  <h3>Poseidon (Linux/macOS)</h3>
+  <table>
+    <thead><tr><th>Property</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Language</td><td>Go</td></tr>
+      <tr><td>Targets</td><td>Linux x64, macOS x64</td></tr>
+      <tr><td>Mythic compat</td><td>3.0.0+</td></tr>
+    </tbody>
+  </table>
+  <p>Standard file ops, shell execution, launchd persistence (macOS), AES encryption, custom C2 profile support. Low-footprint native binary. Preferred over Apfell for modern macOS engagements.</p>
+  <pre><code>sudo ./mythic-cli install github https://github.com/MythicAgents/poseidon</code></pre>
+
+  <h3>Medusa (Cross-platform Python)</h3>
+  <p>Python 2.7/3.8. Windows, Linux, macOS. No external dependencies. Dynamic function load/unload, in-memory Python module execution, AES256 HMAC, SOCKSv5, <code>eval()</code>-based code execution. Use when arbitrary Python execution at agent level is needed, or for cross-platform targets where Python is present. HTTP profile only.</p>
+  <pre><code>sudo ./mythic-cli install github https://github.com/MythicAgents/Medusa</code></pre>
+
+  <h3>Thanatos (Windows/Linux Rust)</h3>
+  <p>Rust. Windows/Linux. Latest: v0.1.14 (September 2025). SSH client with exec, SFTP, agent hijacking, remote agent spawn. Streaming port scanner, TCP redirector setup, background jobs. Use when Rust detection profile is desired or SSH-based lateral movement is central.</p>
+  <pre><code>sudo ./mythic-cli install github https://github.com/MythicAgents/thanatos</code></pre>
+
+  <h3>Apfell (macOS JavaScript for Automation)</h3>
+  <p>JXA / macOS only. osascript execution, dylib format. Less actively maintained — prefer Poseidon for modern macOS ops. Use when script-based access avoids native binary detection.</p>
+  <pre><code>sudo ./mythic-cli install github https://github.com/MythicAgents/apfell</code></pre>
+
+  <h2>C2 Profiles</h2>
+  <table>
+    <thead><tr><th>Profile</th><th>Protocol</th><th>Use Case</th></tr></thead>
+    <tbody>
+      <tr><td><code>http</code></td><td>HTTP GET/POST</td><td>Standard async comms, redirector-friendly</td></tr>
+      <tr><td><code>httpx</code></td><td>HTTP (malleable)</td><td>Configurable headers, URIs, transforms</td></tr>
+      <tr><td><code>websocket</code></td><td>WebSocket</td><td>Push-based, persistent connections</td></tr>
+      <tr><td><code>smb</code></td><td>Named Pipes</td><td>P2P lateral movement, no internet egress</td></tr>
+      <tr><td><code>tcp</code></td><td>TCP sockets</td><td>P2P network pivoting</td></tr>
+      <tr><td><code>dns</code></td><td>DNS TXT queries</td><td>Covert channel through restrictive firewalls</td></tr>
+      <tr><td><code>discord</code></td><td>Discord API</td><td>Legitimate cloud service blend-in</td></tr>
+      <tr><td><code>github</code></td><td>GitHub issues/files</td><td>Cloud platform C2</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Install Common Profiles</h3>
+  <pre><code>sudo ./mythic-cli install github https://github.com/MythicC2Profiles/http
+sudo ./mythic-cli install github https://github.com/MythicC2Profiles/httpx
+sudo ./mythic-cli install github https://github.com/MythicC2Profiles/dns
+sudo ./mythic-cli install github https://github.com/MythicC2Profiles/smb
+sudo ./mythic-cli install github https://github.com/MythicC2Profiles/websocket</code></pre>
+
+  <h3>HTTP Profile Key Parameters</h3>
+  <table>
+    <thead><tr><th>Parameter</th><th>Example</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>callback_host</code></td><td><code>https://cdn.corp.com</code></td><td>Full URL to C2 listener / redirector</td></tr>
+      <tr><td><code>callback_port</code></td><td><code>443</code></td><td>Port on callback_host</td></tr>
+      <tr><td><code>callback_interval</code></td><td><code>60</code></td><td>Base polling interval in seconds</td></tr>
+      <tr><td><code>callback_jitter</code></td><td><code>23</code></td><td>% randomization applied to interval (0–99)</td></tr>
+      <tr><td><code>kill_date</code></td><td><code>2025-12-31</code></td><td>Agent exits if system date &gt;= this</td></tr>
+      <tr><td><code>use_ssl</code></td><td><code>true</code></td><td>Auto-generates self-signed cert (use real cert in prod)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Payload Generation (Web UI Workflow)</h2>
+  <ol>
+    <li>Click biohazard icon (top bar) → <strong>Actions</strong> → <strong>Generate New Payload</strong></li>
+    <li>Select target OS (Windows / Linux / macOS)</li>
+    <li>Select agent type (Apollo, Poseidon, Medusa, Thanatos, etc.)</li>
+    <li>Configure agent parameters: output format (exe/dll/shellcode/binary), PPID spoofing, ETW bypass, proxy settings</li>
+    <li>Select commands to include (reduces footprint — omit unused commands)</li>
+    <li>Select C2 profile and configure: callback host, port, interval, jitter, kill date, User-Agent, custom URIs</li>
+    <li>Click <strong>Build</strong> — agent container compiles/packages asynchronously</li>
+    <li>Download from <strong>Created Payloads</strong> page when build completes</li>
+  </ol>
+
+  <h2>Operator Workflow</h2>
+  <h3>Initial Setup</h3>
+  <pre><code># Must create an Operation before any data is visible
+# Web UI: hamburger menu → Operations → Modify Operations → Create New
+
+# Role levels:
+# Lead    — full operational control
+# Operator — can task, create payloads, lock callbacks
+# Spectator — read-only, cannot task
+
+# Block lists restrict specific commands per operator per payload type
+# Slack webhook configurable per-operation for callback alerts</code></pre>
+
+  <h3>Callback Management</h3>
+  <p>Each agent check-in creates a callback entry showing: payload lineage (who created it, when, which C2 profile), current status (active/stalled/dead), and operator assignments. Task via the Callbacks page — select callback → type command in input field → output streams via WebSocket in real time.</p>
+  <p>MITRE ATT&amp;CK technique IDs are auto-tagged on tasks. Artifacts (process creation, file writes, network connections, API calls) are auto-recorded per callback for deconfliction and reporting.</p>
+
+  <h2>BOF (Beacon Object File) Support</h2>
+  <p>Apollo supports BOF execution natively via <code>execute_coff</code>. Runs Cobalt Strike-compatible BOFs in-process.</p>
+  <pre><code># Apollo execute_coff syntax (in Mythic web UI command input)
+execute_coff &lt;bof_file&gt; [function_name] [timeout]
+
+# Example — run whoami BOF
+execute_coff whoami.o go 30</code></pre>
+
+  <p><strong>Forge</strong> (released February 2025, by Cody Thomas) standardizes BOF and .NET assembly execution across Mythic agents. Single operator interface that dispatches to agent-specific commands (<code>execute_coff</code> for Apollo, equivalent for Athena). Integrates with Sliver Armory BOF collection. Supports command augmentation — build a BOF command once, auto-inject into all compatible new callbacks.</p>
+
+  <h2>mythic-cli Command Reference</h2>
+  <pre><code># Lifecycle
+sudo ./mythic-cli start                     # Start all containers
+sudo ./mythic-cli stop                      # Stop all containers
+sudo ./mythic-cli restart                   # Restart all containers
+sudo ./mythic-cli status                    # Container health, ports
+
+# Logs
+sudo ./mythic-cli logs &lt;container_name&gt;
+
+# Agent / C2 profile management
+sudo ./mythic-cli install github &lt;url&gt;             # Install from GitHub main branch
+sudo ./mythic-cli install github &lt;url&gt; -b &lt;branch&gt; # Specific branch
+sudo ./mythic-cli install folder /path/to/local     # Local clone
+sudo ./mythic-cli install github &lt;url&gt; -f           # Force overwrite existing
+sudo ./mythic-cli payload list                      # List installed payload types
+sudo ./mythic-cli c2 list                           # List installed C2 profiles
+sudo ./mythic-cli payload start &lt;agent&gt;             # Start specific agent container
+sudo ./mythic-cli c2 stop &lt;profile&gt;                 # Stop specific C2 profile container
+
+# Configuration
+sudo ./mythic-cli config get                        # Show all .env variables
+sudo ./mythic-cli config set &lt;var&gt; &lt;val&gt;            # Set variable
+sudo ./mythic-cli update                            # Check for updates</code></pre>
+
+  <h3>Key .env Variables</h3>
+  <pre><code># Mythic/.env
+MYTHIC_ADMIN_USER=mythic_admin
+MYTHIC_ADMIN_PASSWORD=&lt;auto-generated&gt;
+NGINX_PORT=7443
+ALLOWED_IP_BLOCKS="10.0.0.0/8,192.168.0.0/16"   # Restrict UI access
+RABBITMQ_BIND_LOCALHOST_ONLY="false"              # Required for remote agent containers
+MYTHIC_SERVER_BIND_LOCALHOST_ONLY="false"         # Required for remote deployments</code></pre>
+
+  <h2>OPSEC Considerations</h2>
+  <h3>Redirectors</h3>
+  <p>Mythic's Nginx listens on a single port. Place an Apache/Nginx redirector in front to protect the teamserver from direct exposure. Use <strong>mythic2modrewrite</strong> to generate Apache .htaccess rules from a Mythic HTTP payload config:</p>
+  <pre><code># Export payload config from Mythic UI (Created Payloads → config.json)
+python3 mythic2modrewrite.py -i config.json \
+  -c https://TEAMSERVER:7443 \
+  -r https://DECOY_SITE
+# Routes matching C2 URIs to Mythic backend
+# All other traffic → decoy/legitimate site</code></pre>
+
+  <h3>Callback Timing</h3>
+  <ul>
+    <li>Set <code>callback_interval</code> to 300s+ for long-haul ops</li>
+    <li>Set <code>callback_jitter</code> to 20–30% to avoid timing signatures</li>
+    <li>Apollo has built-in sleep obfuscation — beacon memory is encrypted between callbacks</li>
+    <li>Mythic 3.3 Events system: automate sleep increase at end of business hours</li>
+  </ul>
+
+  <h3>SSL Certificate OPSEC</h3>
+  <ul>
+    <li>Auto-generated self-signed certs are a strong detection signal — use Let's Encrypt or custom CA-signed certs</li>
+    <li>Ensure callback domain is categorized, aged, and has legitimate web content on port 80</li>
+    <li>Domain fronting is increasingly unreliable in 2025–2026 via TLS SNI inspection — prefer Cloudflare Workers or AWS CloudFront as protocol translators</li>
+  </ul>
+
+  <h2>Mythic vs Cobalt Strike vs Sliver</h2>
+  <table>
+    <thead><tr><th>Dimension</th><th>Mythic</th><th>Cobalt Strike</th><th>Sliver</th></tr></thead>
+    <tbody>
+      <tr><td>Cost</td><td>Free / open-source</td><td>~$5k+/yr</td><td>Free / open-source</td></tr>
+      <tr><td>UI</td><td>Rich web UI, multi-user, RBAC</td><td>Java GUI, teamserver</td><td>CLI only</td></tr>
+      <tr><td>Agent diversity</td><td>Multi-language ecosystem (Go, C#, Python, Rust, JXA)</td><td>Single Beacon (C/C++)</td><td>Single implant (Go)</td></tr>
+      <tr><td>C2 channels</td><td>10+ pluggable profiles</td><td>Malleable HTTP/DNS</td><td>mTLS, HTTP(S), DNS, WireGuard</td></tr>
+      <tr><td>BOF support</td><td>Yes (Apollo + Forge)</td><td>Native (original)</td><td>Via COFF loader extension</td></tr>
+      <tr><td>Detection maturity</td><td>Lower — fewer signatures</td><td>Highest</td><td>Growing</td></tr>
+      <tr><td>Learning curve</td><td>High (Docker, CLI)</td><td>Medium</td><td>Low</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Choose Mythic when:</strong> multi-operator team ops with role-based access, agent diversity across platforms, budget-constrained operations (no CS license), custom C2 channel research (GitHub/Discord/MQTT profiles), or training environments.</p>

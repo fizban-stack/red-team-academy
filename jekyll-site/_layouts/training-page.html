@@ -1,0 +1,25 @@
+---
+layout: base
+---
+<div class="training-layout">
+
+  <div class="notes-panel">
+    <div class="notes-header">
+      <span class="notes-title">// my notes</span>
+      <span class="notes-saved" id="notes-saved">saved</span>
+    </div>
+    <textarea id="notes-textarea" placeholder="Take notes here...&#10;&#10;Notes are saved locally in your browser."></textarea>
+  </div>
+
+  <div class="content-panel">
+    <div class="page-meta">
+      <span>{{ page.module }}</span>
+      {% for tag in page.tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+    </div>
+    {{ content }}
+  </div>
+
+</div>
+
+<script src="/js/main.js"></script>
+<script>initNotes('{{ page.page_key }}');</script>

@@ -1,0 +1,213 @@
+---
+layout: training-page
+title: "Executive Report — Red Team Academy"
+module: "Reporting"
+tags:
+  - executive
+  - summary
+  - business-impact
+page_key: "reporting-executive"
+---
+<h1>Executive Report</h1>
+
+  <h2>Who Reads the Executive Summary</h2>
+  <p>The executive summary is written for CISOs, VPs of Engineering, CEOs, and board members — people who make budget decisions and set risk tolerance. They don't read technical findings. They read the first two pages. Your job in the executive summary is to answer three questions clearly: <em>How bad is it? What can attackers do to us? What are we doing about it?</em></p>
+  <p>Assume zero technical knowledge. Never use acronyms without spelling them out. Lead with business impact, not attack technique names.</p>
+
+  <div class="diagram-container">
+    <img src="/images/reporting/exec-report-structure.svg" alt="Executive report structure: audience is CISO/CEO/board with no tech jargon. Five sections: engagement overview, overall risk rating, breach narrative (most important), key findings summary, and strategic recommendations">
+    <div class="diagram-label">// executive report structure — business-first narrative for non-technical leadership</div>
+  </div>
+
+  <h2>Executive Summary Structure</h2>
+  <p>An executive summary runs 1–3 pages and covers five sections in order.</p>
+  <pre><code>># EXECUTIVE SUMMARY STRUCTURE
+
+1. ENGAGEMENT OVERVIEW (1 paragraph)
+   ─────────────────────────────────
+   Who engaged you, when, what was in scope, what type of assessment
+   (black-box, gray-box, assumed breach). Set context for non-technical
+   readers. Include the assessment dates and lead consultant name.
+
+   Example:
+   "From March 15–27, 2026, Acme Corp engaged [Firm] to conduct a
+   full-scope red team assessment simulating an external threat actor
+   with no prior knowledge of the environment. The assessment targeted
+   Acme's corporate network, cloud infrastructure, and active directory
+   environment across two geographic locations."
+
+2. OVERALL SECURITY POSTURE (1–2 paragraphs)
+   ────────────────────────────────────────────
+   Your honest assessment of the organization's security maturity.
+   High-level: strong, moderate, weak. What worked. What didn't.
+   Avoid grades (A/B/C) — they invite argument. Use narrative.
+
+3. KEY FINDINGS SUMMARY (bullet list)
+   ────────────────────────────────────
+   Top 5–8 findings described in plain language.
+   Every bullet = business impact first, attack detail second.
+
+   Bad:  "Identified Kerberoasting vulnerability in AD"
+   Good: "An attacker with a standard employee account could obtain
+         administrator-level access to all domain systems within 30
+         minutes using a freely available tool."
+
+4. ATTACK NARRATIVE (1–2 paragraphs)
+   ────────────────────────────────────
+   Tell the story of the attack path. No technical jargon.
+   Focus on what an attacker could have done — data accessed,
+   systems controlled, business functions disrupted.
+
+5. RECOMMENDATIONS (prioritized list)
+   ────────────────────────────────────
+   3–5 top-priority items. Match technical findings to business
+   priorities. Frame as: "If you do only three things, do these."</code></pre>
+
+  <h2>Business Impact Framing</h2>
+  <p>Every technical finding maps to a business risk. Make that mapping explicit in the executive summary — don't leave it for the reader to infer.</p>
+  <pre><code>># Technical → Business impact translation examples:
+
+Domain Admin compromise →
+  "An attacker would have unrestricted access to all systems, data,
+   and communications across the organization. Recovery from a
+   ransomware attack originating from this position would require
+   a complete rebuild of the Active Directory environment — estimated
+   at 3–6 weeks of downtime for an organization of this size."
+
+SQL injection on customer portal →
+  "Customer account data, including names, email addresses, and
+   hashed passwords for approximately 45,000 accounts, was accessible
+   to an unauthenticated attacker. Depending on jurisdiction, this
+   may trigger breach notification requirements under GDPR or CCPA."
+
+Weak VPN credentials →
+  "An attacker could gain direct access to the internal corporate
+   network from the internet, bypassing the perimeter firewall
+   entirely. This is the same entry point that enabled the 2021
+   Colonial Pipeline ransomware attack."
+
+Unpatched public-facing web server →
+  "The outdated software version used on the company's public website
+   has a known vulnerability that can be exploited by an automated
+   scanner with no human involvement."</code></pre>
+
+  <h2>Risk Rating and Posture Summary</h2>
+  <p>Give the executive a single-sentence or single-number answer to "how bad is it?" Use a clear rating system and define it in the report.</p>
+  <pre><code>># Overall posture ratings (choose one framework and use it consistently):
+
+Option A — Narrative rating:
+  Critical Risk | High Risk | Moderate Risk | Low Risk | Acceptable Risk
+
+Option B — Maturity level:
+  Level 1 (Reactive) | Level 2 (Developing) | Level 3 (Defined) |
+  Level 4 (Managed)  | Level 5 (Optimized)
+
+Option C — Simple stoplight:
+  RED   — Significant vulnerabilities with active exploitation potential
+  AMBER — Vulnerabilities present; exploitation requires additional steps
+  GREEN — Vulnerabilities present but limited practical impact
+
+# Findings summary table for executive section:
+┌─────────────────────────────────────────────────────┐
+│ Severity   │ Count │ Key Finding                    │
+├────────────┼───────┼────────────────────────────────┤
+│ Critical   │   2   │ Unauthenticated RCE on VPN     │
+│ High       │   5   │ Domain Admin via Kerberoasting  │
+│ Medium     │   8   │ Misconfigured cloud storage     │
+│ Low        │  11   │ Default service account names   │
+│ Info       │   4   │ Version disclosure in headers   │
+└────────────┴───────┴────────────────────────────────┘</code></pre>
+
+  <h2>Top-Line Remediation Priorities</h2>
+  <p>Executives need to know what to tell their teams to fix first. Provide a short, prioritized list — no more than five items — with rough effort estimates.</p>
+  <pre><code>># PRIORITIZED REMEDIATION FOR EXECUTIVE SUMMARY
+
+Priority 1 — IMMEDIATE (this week):
+  Apply patch for CVE-2026-XXXX on the VPN concentrator.
+  This closes the external entry point used in our assessment.
+  Estimated effort: 2–4 hours. Requires maintenance window.
+
+Priority 2 — IMMEDIATE (this week):
+  Reset all service account passwords to 25+ character random values.
+  Implement group Managed Service Accounts (gMSA) on a rolling basis.
+  Estimated effort: 4–8 hours per account migration.
+
+Priority 3 — SHORT-TERM (30 days):
+  Enforce multi-factor authentication on all VPN and remote access.
+  Estimated effort: 1–2 weeks depending on MFA vendor selection.
+
+Priority 4 — SHORT-TERM (60 days):
+  Conduct privileged access review — identify all accounts with
+  Domain Admin and remove unnecessary memberships.
+  Estimated effort: 1–2 weeks with Active Directory team.
+
+Priority 5 — MEDIUM-TERM (90 days):
+  Deploy endpoint detection and response (EDR) across all workstations.
+  Current coverage: 40%. Target: 100%.
+  Estimated effort: 6–8 weeks for full deployment.</code></pre>
+
+  <h2>Example Executive Summary — Full Draft</h2>
+  <pre><code>># ─────────────────────────────────────────────────────────────────
+# EXECUTIVE SUMMARY
+# Red Team Assessment — Acme Corporation
+# Assessment Period: March 15–27, 2026
+# ─────────────────────────────────────────────────────────────────
+
+ENGAGEMENT OVERVIEW
+
+From March 15–27, 2026, Acme Corporation engaged [Firm] to conduct
+a full-scope adversarial simulation. Our team operated with no
+prior access or insider knowledge, simulating a sophisticated
+external threat actor. Testing covered Acme's corporate network,
+active directory environment, public-facing web applications, and
+Microsoft 365 cloud services.
+
+OVERALL SECURITY POSTURE: HIGH RISK
+
+Acme's security controls are insufficient to detect or stop a
+motivated attacker. Our team gained domain administrator access —
+the highest possible privilege level on a Windows network — within
+14 hours of starting the assessment. From that position, we had
+unrestricted access to all employee systems, email, file shares,
+and databases. The controls that were in place (perimeter firewall,
+basic antivirus) provided minimal resistance to the techniques
+commonly used by ransomware groups and nation-state actors.
+
+The areas of strongest security posture were patch management for
+externally-facing systems and network segmentation for the payment
+processing environment. The areas requiring urgent attention are
+internal network defenses, service account security, and detection
+capabilities.
+
+KEY FINDINGS
+
+• An attacker with a standard employee account can become a domain
+  administrator in under 15 minutes using freely available tools.
+  No alerts were triggered during the escalation process.
+
+• Credentials found in an IT administrator's email allowed access
+  to the company's backup system and cloud storage, containing
+  copies of the payroll database and HR records.
+
+• Fourteen servers accessible from the internet are running software
+  with known, publicly documented vulnerabilities that can be
+  exploited without authentication.
+
+• Multi-factor authentication is not enforced for remote access,
+  allowing any compromised employee password to provide direct
+  corporate network access.
+
+RECOMMENDATIONS (Top 3)
+
+1. Immediate: Enforce multi-factor authentication on all remote access
+   and privileged accounts. This single control would have stopped
+   or significantly delayed our initial access.
+
+2. Immediate: Rotate all service account passwords and implement
+   automated rotation. These accounts were the primary escalation
+   path to domain administrator.
+
+3. Within 60 days: Deploy endpoint detection and response (EDR)
+   across all endpoints. We operated undetected for the entire
+   assessment — modern EDR would have generated alerts at multiple
+   stages of the attack chain.</code></pre>

@@ -1,49 +1,28 @@
 pipeline {
-    agent { label 'remote-web-server' }
-
-    tools {
-        nodejs 'node22'
-    }
+    agent { label 'remote-web-server' } 
 
     stages {
-        stage('Checkout') {
+        stage('Install Dependencies') {
             steps {
-                checkout scm
+                sh 'cd jekyll-site && bundle install'
             }
         }
-
-        stage('Install') {
+        stage('Build Site') {
             steps {
-                sh 'npm ci'
+                sh 'cd jekyll-site && bundle exec jekyll build'
             }
         }
-
-        stage('Build') {
-            steps {
-                sh 'npm run build'
-            }
-        }
-
         stage('Deploy') {
             steps {
                 sh '''
-                    rsync -avz --delete \
-                        --chmod=D755,F644 \
-                        dist/ \
-                        /var/www/red-team/
-                    sudo systemctl reload apache2
-                '''
+                rsync -av --delete \
+                --no-perms \
+                --no-owner \
+                --no-group \
+                --no-times \
+                ./jekyll-site/_site/ /var/www/red-team/
+            '''
             }
-        }
-
-    } // <-- closes stages block (this was missing)
-
-    post {
-        success {
-            echo 'Astro site deployed successfully.'
-        }
-        failure {
-            echo 'Build or deploy failed.'
         }
     }
 }

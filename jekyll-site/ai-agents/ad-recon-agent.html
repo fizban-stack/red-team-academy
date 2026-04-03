@@ -1,0 +1,686 @@
+---
+layout: training-page
+title: "AD Recon AI Agent — Red Team Academy"
+module: "AI Red Team Agents"
+tags:
+  - ai-agent
+  - active-directory
+  - ollama
+  - rag
+  - react
+  - qwen
+  - ldap
+  - bloodhound
+  - fine-tuning
+page_key: "ai-ad-recon-agent"
+---
+<h1>AD Recon AI Agent</h1>
+
+  <h2>Overview</h2>
+  <p>An autonomous Active Directory reconnaissance agent combines a local LLM with a tool registry and a RAG knowledge base to enumerate, analyze, and prioritize attack paths without cloud API dependencies. The agent runs the standard red team AD recon workflow — LDAP enumeration, ACL analysis, SPN discovery, BloodHound path queries — but drives each step autonomously, interprets the output, and decides what to enumerate next.</p>
+  <p>This page covers the full design: model selection, agent architecture, tool implementation, RAG setup, optional fine-tuning, and deployment packaging. The stack is designed to fit on an 8GB RAM device (RPi 5, Jetson, laptop) and run entirely offline.</p>
+
+  <h2>Train Your Own Model vs Use Ollama</h2>
+  <p>The right answer for a lightweight, deployable agent is almost always <strong>Ollama + a small pre-trained model + RAG</strong>. Here's why:</p>
+
+  <h3>Why Not Train From Scratch</h3>
+  <pre><code># Training a language model from scratch requires:
+# - Hundreds to thousands of GPUs for weeks (GPT-3 scale: ~$4.6M compute cost)
+# - Trillions of tokens of training data
+# - Deep ML infrastructure expertise
+# - Months of work
+#
+# This is what Mistral, Meta, Google, and Qwen teams do.
+# It is not a viable path for a red team tool.
+#
+# Even "small" models like Llama 3.2 (3B params) were trained on:
+# - ~9 trillion tokens
+# - Thousands of A100 GPU-hours
+# - Professionally curated + filtered datasets
+#
+# Starting from scratch produces an incoherent model.
+# The base models available for free are already excellent — build on them.</code></pre>
+
+  <h3>Fine-Tuning — When and How</h3>
+  <p>Fine-tuning adapts an existing pre-trained model on a small, domain-specific dataset. It improves the model's behavior on specific tasks without the compute cost of training from scratch. For an AD recon agent, fine-tuning can improve: LDAP filter generation accuracy, BloodHound Cypher query quality, and interpretation of AD output formats.</p>
+  <pre><code># Fine-tuning options ranked by effort vs reward:
+#
+# 1. QLoRA fine-tune (recommended if you want domain improvement):
+#    - Works on: RTX 3090/4090 (24GB VRAM), or rented A100 (~$2-3/hr)
+#    - Dataset size needed: 500-3000 examples
+#    - Training time: 1-4 hours for 7B model
+#    - Tooling: Unsloth (fastest, memory-efficient), PEFT + Transformers
+#    - Output: LoRA adapter weights → merge → GGUF → load in Ollama
+#
+# 2. RAG (Retrieval-Augmented Generation) — much easier, often better:
+#    - No GPU training required
+#    - Add a knowledge base of AD attack paths, LDAP filters, BloodHound queries
+#    - Model retrieves relevant context at inference time
+#    - Updateable without retraining
+#    - Better for factual lookups (specific attack paths, CVE details)
+#
+# 3. Prompt engineering + few-shot examples:
+#    - Zero effort, zero cost
+#    - Surprisingly effective for structured tasks
+#    - Works well for models like qwen2.5-coder that already know LDAP/PowerShell
+#
+# Recommendation for v1:
+# Start with RAG + prompt engineering.
+# Add QLoRA fine-tune in v2 if the model generates incorrect LDAP/Cypher consistently.
+
+# Fine-tune dataset format (JSONL, Alpaca style):
+# &#123;
+#   "instruction": "Generate an LDAP query to find all users with unconstrained delegation",
+#   "input": "Domain: corp.local",
+#   "output": "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=524288))"
+# &#125;
+# Build 500+ examples covering: LDAP filters, output parsing, attack path reasoning</code></pre>
+
+  <h3>Model Selection by Deployment Target</h3>
+  <pre><code># ── Best overall for tool-calling / code gen (recommended) ──────
+# qwen2.5-coder:7b   — 7B params, ~5GB RAM, best LDAP/PS accuracy
+# ollama pull qwen2.5-coder:7b
+
+# ── Most lightweight (RPi 5, constrained devices) ───────────────
+# llama3.2:3b        — 3B params, ~2.5GB RAM, capable reasoning
+# qwen2.5:3b         — 3B params, ~2.5GB RAM, strong for size
+# phi3.5-mini        — 3.8B params, ~3GB RAM, Microsoft, surprisingly good
+# ollama pull llama3.2:3b
+
+# ── Higher quality (Jetson Orin 16GB, laptop with 16GB RAM) ─────
+# qwen2.5-coder:14b  — 14B params, ~10GB RAM, near GPT-4 for code tasks
+# mistral:7b         — proven, good general reasoning
+# ollama pull qwen2.5-coder:14b
+
+# ── Verify Ollama model tool-calling support ─────────────────────
+# Tool calling (function calling) requires specific model support
+# Models with good tool support: qwen2.5, llama3.1, llama3.2, mistral
+# Check: ollama show qwen2.5-coder:7b | grep -i "tool\|function"
+
+# Test local inference speed (important for agent loop performance):
+ollama run qwen2.5-coder:7b "List 3 LDAP filters for finding kerberoastable accounts"
+# On RPi5 8GB: ~3-6 tokens/sec (slow but acceptable for batch recon)
+# On M2 MacBook: ~40-60 tokens/sec
+# On RTX 4090: ~150+ tokens/sec</code></pre>
+
+  <h2>Agent Architecture</h2>
+  <p>The agent uses the <strong>ReAct (Reasoning + Acting)</strong> pattern: the LLM alternates between reasoning about the current state and selecting a tool to call. Each tool result is fed back as an observation, and the loop continues until the LLM determines the recon objective is met.</p>
+  <pre><code># ReAct agent loop (pseudocode):
+#
+# while not done:
+#   thought = llm.think(system_prompt, history, current_objective)
+#   action  = llm.choose_tool(available_tools, thought)
+#   if action == "finish":
+#       report = llm.generate_report(history)
+#       break
+#   observation = tools[action.name](**action.args)
+#   history.append(thought, action, observation)
+#
+# Key design decisions:
+# - Max iterations: 20-30 (prevent infinite loops)
+# - Context window management: summarize old history when approaching limit
+# - Tool timeout: 30s per tool call (LDAP queries can be slow)
+# - Error handling: tool failure → LLM decides to retry or skip</code></pre>
+
+  <h2>Project Structure</h2>
+  <pre><code>ad-recon-agent/
+├── agent/
+│   ├── __init__.py
+│   ├── agent.py          # ReAct loop, Ollama client, tool dispatch
+│   ├── tools.py          # Tool implementations
+│   ├── prompts.py        # System prompt, tool descriptions, few-shot examples
+│   └── report.py         # Report generation from agent history
+├── rag/
+│   ├── __init__.py
+│   ├── knowledge_base.py # ChromaDB setup + query interface
+│   ├── loader.py         # Load docs into vector DB
+│   └── data/
+│       ├── ldap_filters.md       # LDAP query library
+│       ├── bloodhound_queries.md # Cypher query library
+│       ├── ad_attack_paths.md    # Common attack path descriptions
+│       └── misconfigs.md         # Known misconfig patterns
+├── finetune/             # Optional — QLoRA fine-tuning pipeline
+│   ├── prepare_dataset.py
+│   ├── train.py          # Unsloth training script
+│   └── export_gguf.py    # Export to GGUF for Ollama
+├── deploy/
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── ollama_setup.sh
+├── main.py               # Entry point — CLI
+├── requirements.txt
+└── config.yaml           # Model, Ollama URL, AD connection params</code></pre>
+
+  <h2>Core Agent Implementation</h2>
+  <pre><code># agent/agent.py — ReAct loop with Ollama
+
+import json
+import time
+from typing import Any
+import ollama
+from .tools import ToolRegistry
+from .prompts import SYSTEM_PROMPT, format_tool_descriptions
+from .report import generate_report
+
+class ADReconAgent:
+    def __init__(self, model: str = "qwen2.5-coder:7b", ollama_url: str = "http://localhost:11434"):
+        self.model = model
+        self.client = ollama.Client(host=ollama_url)
+        self.tools = ToolRegistry()
+        self.history: list[dict] = []
+        self.max_iterations = 25
+
+    def run(self, objective: str) -> str:
+        """Run the agent for a given recon objective."""
+        self.history = []
+        system = SYSTEM_PROMPT.format(
+            tool_descriptions=format_tool_descriptions(self.tools.list()),
+            current_time=time.strftime("%Y-%m-%d %H:%M:%S")
+        )
+
+        messages = [
+            &#123;"role": "system", "content": system&#125;,
+            &#123;"role": "user", "content": f"Objective: &#123;objective&#125;"&#125;
+        ]
+
+        for iteration in range(self.max_iterations):
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                format="json",   # Force structured tool-call output
+                options=&#123;"temperature": 0.1&#125;  # Low temp for consistent tool calls
+            )
+
+            content = json.loads(response.message.content)
+
+            # Agent decided it's done — generate report
+            if content.get("action") == "finish":
+                return generate_report(self.history)
+
+            # Execute the chosen tool
+            tool_name = content.get("action")
+            tool_args = content.get("args", &#123;&#125;)
+            thought = content.get("thought", "")
+
+            print(f"[&#123;iteration+1&#125;] Thought: &#123;thought&#125;")
+            print(f"[&#123;iteration+1&#125;] Action: &#123;tool_name&#125;(&#123;tool_args&#125;)")
+
+            observation = self.tools.call(tool_name, tool_args)
+            print(f"[&#123;iteration+1&#125;] Observation: &#123;str(observation)[:200]&#125;...")
+
+            # Add to history and context
+            step = &#123;"thought": thought, "action": tool_name, "args": tool_args, "obs": observation&#125;
+            self.history.append(step)
+            messages.append(&#123;"role": "assistant", "content": json.dumps(content)&#125;)
+            messages.append(&#123;"role": "user", "content": f"Observation: &#123;json.dumps(observation)&#125;"&#125;)
+
+            # Context management: summarize if getting long
+            if len(messages) > 40:
+                messages = self._summarize_history(messages, system)
+
+        return generate_report(self.history)</code></pre>
+
+  <h2>Tool Registry</h2>
+  <pre><code># agent/tools.py — tool implementations
+
+import subprocess
+import json
+from ldap3 import Server, Connection, ALL, NTLM, SUBTREE
+from typing import Any
+
+class ToolRegistry:
+    def __init__(self):
+        self._tools = &#123;
+            "ldap_query":        self.ldap_query,
+            "run_powershell":    self.run_powershell,
+            "run_command":       self.run_command,
+            "bloodhound_query":  self.bloodhound_query,
+            "parse_acls":        self.parse_acls,
+            "check_delegation":  self.check_delegation,
+            "find_spns":         self.find_spns,
+            "enum_trusts":       self.enum_trusts,
+            "rag_lookup":        self.rag_lookup,
+        &#125;
+
+    def list(self) -> dict:
+        """Return tool names and docstrings for the system prompt."""
+        return &#123;name: fn.__doc__ for name, fn in self._tools.items()&#125;
+
+    def call(self, name: str, args: dict) -> Any:
+        if name not in self._tools:
+            return &#123;"error": f"Unknown tool: &#123;name&#125;"&#125;
+        try:
+            return self._tools[name](**args)
+        except Exception as e:
+            return &#123;"error": str(e)&#125;
+
+    def ldap_query(self, server: str, base_dn: str, filter: str,
+                   attributes: list[str], username: str = None,
+                   password: str = None) -> list[dict]:
+        """Execute an LDAP query and return matching objects with specified attributes.
+        Use for: user/group/computer enumeration, finding delegations, locating GPOs, etc."""
+        conn_args = &#123;"auto_bind": True&#125;
+        if username and password:
+            conn_args["user"] = username
+            conn_args["password"] = password
+            conn_args["authentication"] = NTLM
+        s = Server(server, get_info=ALL)
+        c = Connection(s, **conn_args)
+        c.search(base_dn, filter, SUBTREE, attributes=attributes)
+        results = []
+        for entry in c.entries:
+            results.append(&#123;attr: str(entry[attr]) for attr in attributes if attr in entry&#125;)
+        return results
+
+    def run_powershell(self, command: str) -> dict:
+        """Execute a PowerShell command and return stdout/stderr.
+        Use for: AD module queries, Get-ADUser, Get-ACL, Invoke-* tasks on Windows hosts."""
+        result = subprocess.run(
+            ["powershell.exe", "-NonInteractive", "-NoProfile", "-Command", command],
+            capture_output=True, text=True, timeout=30
+        )
+        return &#123;"stdout": result.stdout, "stderr": result.stderr, "rc": result.returncode&#125;
+
+    def run_command(self, command: str, shell: bool = False) -> dict:
+        """Run a system command. Use for: ldapsearch, net, nmap, rpcclient, crackmapexec."""
+        result = subprocess.run(
+            command if shell else command.split(),
+            capture_output=True, text=True, timeout=30, shell=shell
+        )
+        return &#123;"stdout": result.stdout, "stderr": result.stderr, "rc": result.returncode&#125;
+
+    def bloodhound_query(self, cypher: str, neo4j_url: str = "bolt://localhost:7687",
+                         user: str = "neo4j", password: str = "bloodhound") -> list[dict]:
+        """Run a Cypher query against a BloodHound Neo4j database.
+        Use for: finding attack paths, shortest path to DA, owned-to-DA paths, etc."""
+        from neo4j import GraphDatabase
+        driver = GraphDatabase.driver(neo4j_url, auth=(user, password))
+        with driver.session() as session:
+            result = session.run(cypher)
+            return [dict(record) for record in result]
+
+    def find_spns(self, server: str, base_dn: str) -> list[dict]:
+        """Find all accounts with Service Principal Names set (kerberoastable accounts).
+        Returns: sAMAccountName, servicePrincipalName, adminCount, pwdLastSet."""
+        return self.ldap_query(
+            server, base_dn,
+            "(&(objectClass=user)(servicePrincipalName=*)(!(objectClass=computer))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))",
+            ["sAMAccountName", "servicePrincipalName", "adminCount", "pwdLastSet", "memberOf"]
+        )
+
+    def check_delegation(self, server: str, base_dn: str) -> dict:
+        """Find accounts with unconstrained or constrained delegation configured.
+        Critical finding — unconstrained delegation on non-DC = Kerberos ticket capture."""
+        unconstrained = self.ldap_query(
+            server, base_dn,
+            "(userAccountControl:1.2.840.113556.1.4.803:=524288)",
+            ["sAMAccountName", "objectClass", "operatingSystem"]
+        )
+        constrained = self.ldap_query(
+            server, base_dn,
+            "(msDS-AllowedToDelegateTo=*)",
+            ["sAMAccountName", "msDS-AllowedToDelegateTo", "objectClass"]
+        )
+        return &#123;"unconstrained": unconstrained, "constrained": constrained&#125;
+
+    def parse_acls(self, powershell_acl_output: str) -> list[dict]:
+        """Parse ACL output (from Get-ACL or Get-ObjectAcl) into structured findings.
+        Flags: GenericAll, GenericWrite, WriteDACL, WriteOwner, AllExtendedRights."""
+        dangerous_rights = ["GenericAll", "GenericWrite", "WriteDACL",
+                           "WriteOwner", "AllExtendedRights", "ForceChangePassword"]
+        findings = []
+        for line in powershell_acl_output.split("\n"):
+            for right in dangerous_rights:
+                if right in line:
+                    findings.append(&#123;"line": line.strip(), "flagged_right": right&#125;)
+        return findings
+
+    def enum_trusts(self, server: str, base_dn: str) -> list[dict]:
+        """Enumerate domain trusts and their attributes (direction, transitivity, SID filtering)."""
+        return self.ldap_query(
+            server, base_dn,
+            "(objectClass=trustedDomain)",
+            ["name", "trustDirection", "trustType", "trustAttributes", "securityIdentifier"]
+        )
+
+    def rag_lookup(self, query: str) -> str:
+        """Look up relevant attack techniques, LDAP filters, or BloodHound queries from the knowledge base.
+        Use when unsure of the exact syntax for a query or attack technique."""
+        from rag.knowledge_base import KnowledgeBase
+        kb = KnowledgeBase()
+        return kb.query(query, top_k=3)</code></pre>
+
+  <h2>System Prompt Design</h2>
+  <pre><code># agent/prompts.py
+
+SYSTEM_PROMPT = """You are an Active Directory reconnaissance agent running on &#123;current_time&#125;.
+Your goal is to systematically enumerate an AD environment and identify attack paths.
+
+## Available Tools
+&#123;tool_descriptions&#125;
+
+## Response Format
+You MUST respond with valid JSON only. No markdown, no extra text.
+
+For tool calls:
+&#123;
+  "thought": "What I know so far and why I'm taking this action",
+  "action": "tool_name",
+  "args": &#123; "param": "value" &#125;
+&#125;
+
+When recon is complete:
+&#123;
+  "thought": "I have gathered sufficient information for the report",
+  "action": "finish",
+  "args": &#123;&#125;
+&#125;
+
+## Recon Methodology (follow in order unless directed otherwise)
+1. Domain basics: domain name, functional level, DC hostnames, forest root
+2. User enumeration: total users, admins, service accounts, enabled/disabled
+3. Computer enumeration: DCs, servers, workstations, OS versions
+4. Privileged groups: Domain Admins, Enterprise Admins, Schema Admins, Account Operators
+5. Kerberoastable accounts: SPNs on user objects (not computers)
+6. AS-REP roastable: users with pre-auth disabled
+7. Delegation: unconstrained delegation (non-DC), constrained, resource-based
+8. ACL issues: GenericAll/Write/WriteDACL on high-value targets
+9. ADCS: certificate templates, enrollment rights, ESC1-8 patterns
+10. Trusts: cross-domain / cross-forest trusts, direction, SID filtering
+11. GPO: find GPOs with interesting scripts, startup items, or weak permissions
+12. Password policy: minimum length, complexity, lockout threshold
+
+## Priority Findings (always check)
+- Any user with GenericAll on Domain Admins or a DC → CRITICAL
+- Unconstrained delegation on non-DC computers → CRITICAL
+- ADCS web enrollment without EPA → CRITICAL (ESC8)
+- Certificate templates with Client Auth + Supply Subject → CRITICAL (ESC1)
+- Users with SPN + weak/old passwords → HIGH
+- Users without pre-auth (AS-REP roastable) → MEDIUM-HIGH
+"""</code></pre>
+
+  <h2>RAG Knowledge Base</h2>
+  <p>RAG gives the agent accurate, up-to-date knowledge about attack techniques, LDAP syntax, and BloodHound queries without requiring fine-tuning. The model retrieves relevant context before generating tool calls, reducing syntax errors and missed techniques.</p>
+  <pre><code># rag/knowledge_base.py — ChromaDB vector store
+
+import chromadb
+from chromadb.utils import embedding_functions
+
+class KnowledgeBase:
+    def __init__(self, path: str = "./rag/db"):
+        self.client = chromadb.PersistentClient(path=path)
+        # Use local embedding model — no API calls
+        self.ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="all-MiniLM-L6-v2"  # 80MB, runs on CPU, fast
+        )
+        self.collection = self.client.get_or_create_collection(
+            name="ad_knowledge",
+            embedding_function=self.ef
+        )
+
+    def query(self, query: str, top_k: int = 3) -> str:
+        results = self.collection.query(
+            query_texts=[query],
+            n_results=top_k
+        )
+        docs = results["documents"][0]
+        return "\n\n---\n\n".join(docs)
+
+    def load_from_file(self, path: str, doc_id_prefix: str):
+        with open(path) as f:
+            content = f.read()
+        # Split into chunks by heading
+        chunks = [c.strip() for c in content.split("##") if c.strip()]
+        self.collection.add(
+            documents=chunks,
+            ids=[f"&#123;doc_id_prefix&#125;_&#123;i&#125;" for i in range(len(chunks))]
+        )
+
+# rag/loader.py — build the knowledge base
+from knowledge_base import KnowledgeBase
+kb = KnowledgeBase()
+kb.load_from_file("data/ldap_filters.md", "ldap")
+kb.load_from_file("data/bloodhound_queries.md", "bh")
+kb.load_from_file("data/ad_attack_paths.md", "ap")
+kb.load_from_file("data/misconfigs.md", "mc")
+print("Knowledge base loaded")</code></pre>
+
+  <pre><code># rag/data/bloodhound_queries.md — example knowledge base content
+
+## Find all shortest paths to Domain Admins
+MATCH p=shortestPath((n)-[*1..]->(m:Group&#123;name:"DOMAIN ADMINS@CORP.LOCAL"&#125;))
+WHERE NOT n=m RETURN p
+
+## Find computers with unconstrained delegation (non-DC)
+MATCH (c:Computer&#123;unconstraineddelegation:true&#125;) WHERE NOT c.name CONTAINS "DC" RETURN c.name
+
+## Find users with a path to DA via ACL edges
+MATCH p=shortestPath((u:User)-[:GenericAll|GenericWrite|WriteDACL|WriteOwner*1..]->(g:Group&#123;name:"DOMAIN ADMINS@CORP.LOCAL"&#125;))
+RETURN u.name, length(p) ORDER BY length(p)
+
+## Find AS-REP roastable users
+MATCH (u:User&#123;dontreqpreauth:true, enabled:true&#125;) RETURN u.name, u.description
+
+## Find ADCS templates with ESC1 vulnerability
+MATCH (t:GPO) WHERE t.enrollmentflag IS NOT NULL AND t.subjectaltname = "enrollee supplies subject"
+RETURN t.name, t.cas
+
+## Find users that can DCSync (has DS-Replication rights)
+MATCH (u)-[:GetChangesAll]->(d:Domain) RETURN u.name, labels(u)</code></pre>
+
+  <h2>Optional: QLoRA Fine-Tuning</h2>
+  <p>If the base model generates incorrect LDAP filters or malformed Cypher queries, fine-tune on a domain-specific dataset using Unsloth. A 500-example dataset typically improves accuracy significantly for structured output tasks.</p>
+  <pre><code># finetune/train.py — QLoRA with Unsloth (efficient, low VRAM)
+
+# Install: pip install unsloth
+from unsloth import FastLanguageModel
+from datasets import load_dataset
+from trl import SFTTrainer
+from transformers import TrainingArguments
+
+# Load base model with 4-bit quantization (fits in 12GB VRAM):
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="unsloth/Qwen2.5-Coder-7B-Instruct-bnb-4bit",
+    max_seq_length=4096,
+    load_in_4bit=True,
+)
+
+# Add LoRA adapters (only train ~1% of parameters):
+model = FastLanguageModel.get_peft_model(
+    model,
+    r=16,               # LoRA rank
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                    "gate_proj", "up_proj", "down_proj"],
+    lora_alpha=16,
+    lora_dropout=0,
+    bias="none",
+    use_gradient_checkpointing="unsloth",
+)
+
+# Dataset format — JSONL with instruction/output pairs:
+# &#123;"instruction": "Find all users with GenericWrite on any object",
+#  "output": "(&(objectClass=user)(ms-DS-CreatorSID=*))"&#125;
+dataset = load_dataset("json", data_files="finetune/dataset.jsonl")["train"]
+
+trainer = SFTTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    dataset_text_field="text",
+    max_seq_length=4096,
+    args=TrainingArguments(
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=4,
+        num_train_epochs=3,
+        learning_rate=2e-4,
+        output_dir="./finetune/output",
+        fp16=True,
+    ),
+)
+trainer.train()
+
+# Export to GGUF for Ollama:
+model.save_pretrained_gguf("./finetune/ad-recon-7b", tokenizer, quantization_method="q4_k_m")
+
+# Create Ollama Modelfile and register:
+# FROM ./finetune/ad-recon-7b-Q4_K_M.gguf
+# SYSTEM "You are an AD recon agent..."
+# ollama create ad-recon-agent -f Modelfile</code></pre>
+
+  <h2>Deployment</h2>
+  <pre><code># deploy/Dockerfile
+FROM python:3.12-slim
+
+# Install Ollama (pulls model on first run)
+RUN curl -fsSL https://ollama.ai/install.sh | sh
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+
+# Pre-pull the model during image build (optional — makes image ~5GB)
+# RUN ollama serve &amp; sleep 5 &amp;&amp; ollama pull qwen2.5-coder:7b
+
+EXPOSE 8080
+ENTRYPOINT ["python", "main.py"]</code></pre>
+
+  <pre><code># deploy/docker-compose.yml
+services:
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]    # Remove if no GPU
+
+  agent:
+    build: .
+    depends_on: [ollama]
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - MODEL=qwen2.5-coder:7b
+      - AD_SERVER=192.168.1.10
+      - AD_BASE_DN=DC=corp,DC=local
+      - AD_USERNAME=user@corp.local
+      - AD_PASSWORD_FILE=/run/secrets/ad_pass
+    volumes:
+      - ./rag/data:/app/rag/data
+      - ./reports:/app/reports
+
+volumes:
+  ollama_data:</code></pre>
+
+  <pre><code># requirements.txt
+ollama>=0.3.0
+ldap3>=2.9.1
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+neo4j>=5.0.0
+pyyaml>=6.0
+rich>=13.0.0         # CLI output formatting
+click>=8.1.0         # CLI interface
+# Optional fine-tuning:
+# unsloth[colab-new]
+# trl>=0.9.0</code></pre>
+
+  <pre><code># main.py — CLI entry point
+import click
+import yaml
+from agent.agent import ADReconAgent
+
+@click.command()
+@click.option("--objective", "-o", default="full", help="Recon objective or 'full' for complete enumeration")
+@click.option("--server", "-s", required=True, help="DC IP or hostname")
+@click.option("--domain", "-d", required=True, help="Domain (e.g. corp.local)")
+@click.option("--model", "-m", default="qwen2.5-coder:7b")
+@click.option("--ollama-url", default="http://localhost:11434")
+@click.option("--output", "-O", default="report.md")
+def main(objective, server, domain, model, ollama_url, output):
+    """AD Recon Agent — autonomous Active Directory enumeration."""
+    base_dn = "DC=" + ",DC=".join(domain.split("."))
+
+    objectives = &#123;
+        "full":      "Perform complete AD enumeration following the standard methodology",
+        "quick":     "Fast enumeration: users, admins, SPNs, delegation only",
+        "paths":     "Find all paths from owned users to Domain Admins via BloodHound",
+        "adcs":      "Enumerate ADCS certificate templates and find ESC misconfigurations",
+        "trusts":    "Enumerate all domain trusts, their direction and SID filtering status",
+    &#125;
+
+    agent = ADReconAgent(model=model, ollama_url=ollama_url)
+    agent.tools.default_server = server
+    agent.tools.default_base_dn = base_dn
+
+    report = agent.run(objectives.get(objective, objective))
+
+    with open(output, "w") as f:
+        f.write(report)
+    print(f"\nReport saved to: &#123;output&#125;")
+
+if __name__ == "__main__":
+    main()
+
+# Usage examples:
+# python main.py -s 192.168.1.10 -d corp.local                    # Full recon
+# python main.py -s 192.168.1.10 -d corp.local -o quick           # Quick scan
+# python main.py -s 192.168.1.10 -d corp.local -o adcs            # ADCS focus
+# python main.py -s 192.168.1.10 -d corp.local -m llama3.2:3b     # Lightweight model</code></pre>
+
+  <h2>Implementation Phases</h2>
+  <pre><code># Phase 1 — MVP (Week 1):
+# ✓ Ollama running with qwen2.5-coder:7b
+# ✓ Basic ReAct loop with ldap_query + run_command tools
+# ✓ System prompt with AD methodology
+# ✓ JSON structured output parsing
+# ✓ Basic markdown report generation
+# Test: enumerate users, find SPNs, identify delegation on a lab AD
+
+# Phase 2 — Core Tools (Week 2):
+# ✓ Full tool registry (BloodHound, ACL parser, trust enum)
+# ✓ ChromaDB RAG with LDAP filter + BloodHound query knowledge base
+# ✓ Context window management (history summarization)
+# ✓ Error handling + retry logic in tool calls
+# ✓ Docker packaging
+
+# Phase 3 — Reliability (Week 3):
+# ✓ Add unit tests for each tool
+# ✓ Evaluate model accuracy on 20 test scenarios
+# ✓ Tune system prompt based on errors observed
+# ✓ Optimize token usage (shorter observations, compression)
+# ✓ Add progress output (Rich live display)
+
+# Phase 4 — Optional Fine-Tuning (if needed):
+# Collect 500+ examples from real engagements where model got things wrong
+# QLoRA fine-tune on RTX 4090 or rented A100 (2-4 hours)
+# Export GGUF, register in Ollama, compare accuracy vs base model
+# Deploy fine-tuned model if measurably better (especially for LDAP filter quality)
+
+# Performance targets:
+# Full recon in lab: 15-30 minutes (RPi5), 3-8 minutes (GPU)
+# Model accuracy on LDAP filter generation: >90% syntactically correct
+# Report completeness: all 12 methodology checkpoints covered</code></pre>
+
+  <h2>Resource Requirements Summary</h2>
+  <pre><code># Minimum viable deployment (RPi5 8GB):
+# - RAM: 4GB for model + 2GB OS + 1GB agent = 7GB (tight but works)
+# - Storage: 32GB+ NVMe (model ~5GB + OS + data)
+# - Inference speed: ~3-5 tok/s (full recon ~30-60 min)
+# - Model: qwen2.5:3b or llama3.2:3b
+
+# Recommended deployment (laptop / VM 16GB RAM):
+# - RAM: 8GB for model + headroom
+# - Model: qwen2.5-coder:7b
+# - Inference speed: ~10-20 tok/s (full recon ~10-20 min)
+# - All tools including BloodHound Neo4j (another 2GB)
+
+# High performance (Jetson Orin 16GB or desktop GPU):
+# - Model: qwen2.5-coder:14b (GPU inference)
+# - Inference speed: 60-100+ tok/s
+# - Full recon: 3-8 minutes
+# - Best output quality for complex AD environments</code></pre>

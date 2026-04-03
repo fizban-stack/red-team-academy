@@ -1,0 +1,176 @@
+---
+layout: training-page
+title: "Red Team Tools — Red Team Academy"
+module: "Red Team Tools"
+tags:
+  - tools
+  - reference
+  - arsenal
+page_key: "tools-overview"
+---
+<h1>Red Team Tools Reference</h1>
+  <p style="color:var(--text-muted); margin-bottom:28px;">
+    A comprehensive reference covering the modern red team toolkit. Each category covers tool capabilities,
+    common usage patterns, detection signatures, and OPSEC considerations. Tools are curated for
+    relevance in 2025–2026 engagements.
+  </p>
+
+  <h2>// Tool Categories</h2>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; margin:24px 0;">
+
+    <a href="/tools/recon-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">01 // RECON</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Reconnaissance Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">Nmap, Masscan, RustScan, Amass, Subfinder, BBOT, Nuclei, theHarvester, Shodan CLI</div>
+    </a>
+
+    <a href="/tools/ad-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">02 // AD</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Active Directory Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">BloodHound, Impacket, NetExec, Rubeus, Mimikatz, Certipy, PowerView, Kerbrute</div>
+    </a>
+
+    <a href="/tools/exploitation-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">03 // EXPLOIT</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Exploitation Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">Metasploit, msfvenom, Responder, Evil-WinRM, SQLMap, Exploit-DB tooling</div>
+    </a>
+
+    <a href="/tools/post-exploitation-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">04 // POST</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Post-Exploitation Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">SeatBelt, WinPEAS/LinPEAS, LaZagne, SharpUp, PowerSploit, SharpCollection</div>
+    </a>
+
+    <a href="/tools/evasion-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">05 // EVASION</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Evasion &amp; Obfuscation Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">Donut, Garble, ScareCrow, Freeze, ConfuserEx, Shellter, AMSI bypass tooling</div>
+    </a>
+
+    <a href="/tools/network-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">06 // NETWORK</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Network &amp; Pivoting Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">Chisel, Ligolo-ng, Socat, FRP, Proxychains, Ncat, SSHuttle</div>
+    </a>
+
+    <a href="/tools/password-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">07 // CREDS</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Password &amp; Credential Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">Hashcat, John the Ripper, Hydra, Kerbrute, SprayingToolkit, CrackMapExec</div>
+    </a>
+
+    <a href="/tools/web-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">08 // WEB</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Web Hacking Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">Burp Suite, FFUF, Feroxbuster, Nuclei, Katana, Nikto, Caido</div>
+    </a>
+
+    <a href="/tools/wireless-tools" style="display:block; border:1px solid var(--border); padding:20px; text-decoration:none; transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--border-accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--green-dim); letter-spacing:2px; margin-bottom:8px;">09 // WIRELESS</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">Wireless Attack Tools</div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6;">Aircrack-ng, Hcxtools, Hostapd-wpe, Bettercap, Kismet, Flipper Zero tooling</div>
+    </a>
+
+  </div>
+
+  <h2>// Quick Reference — Tool Selection Matrix</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:12px; font-family:var(--font-mono); margin-bottom:24px;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border-accent);">
+        <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:1px;">Phase</th>
+        <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:1px;">Go-To Tool</th>
+        <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:1px;">Alternative</th>
+        <th style="text-align:left; padding:8px 10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:1px;">OPSEC Risk</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">External Recon</td>
+        <td style="padding:7px 10px;">Amass / BBOT</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">Subfinder + theHarvester</td>
+        <td style="padding:7px 10px; color:#4a4;">LOW</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Port Scanning</td>
+        <td style="padding:7px 10px;">Nmap (TCP SYN)</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">Masscan → Nmap version scan</td>
+        <td style="padding:7px 10px; color:#a84;">MEDIUM</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Vuln Scanning</td>
+        <td style="padding:7px 10px;">Nuclei</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">Nmap NSE scripts</td>
+        <td style="padding:7px 10px; color:#a84;">MEDIUM</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">AD Enumeration</td>
+        <td style="padding:7px 10px;">BloodHound + SharpHound</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">PowerView / ADRecon</td>
+        <td style="padding:7px 10px; color:#a44;">HIGH</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Lateral Movement</td>
+        <td style="padding:7px 10px;">NetExec (SMB/WinRM)</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">Impacket (wmiexec, psexec)</td>
+        <td style="padding:7px 10px; color:#a44;">HIGH</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Credential Dump</td>
+        <td style="padding:7px 10px;">Mimikatz / secretsdump</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">NanoDump / HandleKatz</td>
+        <td style="padding:7px 10px; color:#a44;">HIGH</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Kerberos Attacks</td>
+        <td style="padding:7px 10px;">Rubeus</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">Impacket GetTGT/GetST</td>
+        <td style="padding:7px 10px; color:#a44;">HIGH</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">ADCS Attacks</td>
+        <td style="padding:7px 10px;">Certipy</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">Certify (C#)</td>
+        <td style="padding:7px 10px; color:#a44;">HIGH</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Tunneling</td>
+        <td style="padding:7px 10px;">Ligolo-ng</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">Chisel / SSH -D</td>
+        <td style="padding:7px 10px; color:#a84;">MEDIUM</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Payload Evasion</td>
+        <td style="padding:7px 10px;">Donut + Garble</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">ScareCrow / Freeze</td>
+        <td style="padding:7px 10px; color:#a84;">MEDIUM</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Web Fuzzing</td>
+        <td style="padding:7px 10px;">FFUF</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">Feroxbuster / Gobuster</td>
+        <td style="padding:7px 10px; color:#a84;">MEDIUM</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+        <td style="padding:7px 10px; color:var(--cyan-dim);">Password Cracking</td>
+        <td style="padding:7px 10px;">Hashcat (GPU)</td>
+        <td style="padding:7px 10px; color:var(--text-muted);">John (CPU / rules)</td>
+        <td style="padding:7px 10px; color:#4a4;">LOW</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>// Installation Notes</h2>
+  <p style="color:var(--text-muted); font-size:13px; margin-bottom:12px;">Most tools are pre-installed on Kali Linux 2024+. For custom builds:</p>
+  <pre><code># Go-based tools (most modern red team tools)
+go install github.com/&lt;tool&gt;@latest
+
+# Python tools via pipx (isolated envs)
+pipx install impacket
+pipx install certipy-ad
+
+# Kali meta-packages
+sudo apt install kali-tools-post-exploitation
+sudo apt install kali-tools-identify
+sudo apt install kali-tools-passwords</code></pre>

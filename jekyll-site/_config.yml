@@ -1,0 +1,15 @@
+title: Red Team Academy
+description: Personal offensive security training platform
+baseurl: ""
+url: ""
+permalink: pretty
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Exclude from build
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md

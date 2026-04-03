@@ -1,0 +1,222 @@
+---
+layout: training-page
+title: "MITRE ATT&CK Framework — Red Team Academy"
+module: "Fundamentals"
+tags:
+  - mitre
+  - att&ck
+  - threat-intel
+page_key: "fundamentals-mitre-attack"
+---
+<h1>MITRE ATT&amp;CK Framework</h1>
+
+        <h2>What is ATT&amp;CK?</h2>
+        <p>MITRE ATT&amp;CK (Adversarial Tactics, Techniques &amp; Common Knowledge) is a globally accessible, curated knowledge base of real-world adversary behavior. It documents <strong style="color:var(--green-dim)">how attackers operate</strong> — not hypothetically, but based on observed incidents and threat intelligence. Every red team operation should map to ATT&amp;CK so your work is comparable, repeatable, and communicates directly to defenders.</p>
+        <p>ATT&amp;CK v18 (Enterprise) contains <strong style="color:var(--cyan-dim)">216 techniques</strong> and <strong style="color:var(--cyan-dim)">475 sub-techniques</strong> across 14 tactic categories.</p>
+
+        <div class="diagram-container">
+          <img src="/images/fundamentals/mitre-tactics-chain.svg" alt="MITRE ATT&CK 14 enterprise tactics in sequence: Reconnaissance, Resource Development, Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, C2, Exfiltration, Impact">
+          <div class="diagram-label">// mitre att&amp;ck enterprise — all 14 tactics in attack lifecycle order</div>
+        </div>
+
+        <h2>The 14 Enterprise Tactics</h2>
+        <p>Tactics represent the <em>why</em> — the adversary's strategic objective at each stage. Techniques are the <em>how</em>. Read these in order — they describe a complete attack lifecycle.</p>
+
+        <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:20px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border-accent);">
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">ID</th>
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Tactic</th>
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Goal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0043</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Reconnaissance</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Gather info to plan future operations</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0042</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Resource Development</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Establish infrastructure to support operations</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0001</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Initial Access</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Get into the target network</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0002</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Execution</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Run malicious code on target systems</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0003</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Persistence</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Maintain foothold across reboots/credential changes</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0004</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Privilege Escalation</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Gain higher-level permissions (SYSTEM, root, DA)</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0005</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Defense Evasion</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Avoid detection (largest tactic: 42 techniques)</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0006</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Credential Access</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Steal credentials and authentication material</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0007</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Discovery</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Learn the target environment (users, hosts, network)</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0008</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Lateral Movement</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Move through the network to reach objectives</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0009</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Collection</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Gather data of interest to mission objectives</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0011</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Command &amp; Control</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Communicate with and control compromised systems</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0010</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Exfiltration</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Steal data out of the environment</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);">
+              <td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">TA0040</td>
+              <td style="padding:7px 10px; color:var(--text-primary);">Impact</td>
+              <td style="padding:7px 10px; color:var(--text-muted);">Destroy, manipulate, or disrupt systems/data</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Techniques vs Sub-Techniques</h2>
+        <p>ATT&amp;CK uses a hierarchical ID system with three levels:</p>
+        <ul>
+          <li><strong style="color:var(--green-dim)">Tactic (TA####)</strong> — The <em>why</em>. Strategic adversary goal (e.g., TA0001 Initial Access)</li>
+          <li><strong style="color:var(--green-dim)">Technique (T####)</strong> — The <em>how</em>. A specific method to achieve a tactic (e.g., T1566 Phishing)</li>
+          <li><strong style="color:var(--green-dim)">Sub-technique (T####.###)</strong> — A specific variant of a technique (e.g., T1566.001 Spearphishing Attachment)</li>
+        </ul>
+        <p>Example breakdown of <code>T1003 — OS Credential Dumping</code>:</p>
+        <pre><code>T1003       OS Credential Dumping (parent)
+T1003.001   LSASS Memory              ← Mimikatz, procdump lsass
+T1003.002   Security Account Manager  ← reg save HKLM\SAM
+T1003.003   NTDS                      ← ntdsutil, secretsdump
+T1003.004   LSA Secrets               ← reg query HKLM\SECURITY
+T1003.005   Cached Domain Credentials ← NL$KM registry key
+T1003.006   DCSync                    ← Mimikatz lsadump::dcsync
+T1003.007   Proc Filesystem           ← Linux /proc/&lt;pid&gt;/mem
+T1003.008   /etc/passwd and /etc/shadow</code></pre>
+        <p>Always cite sub-techniques when reporting. <code>T1003</code> is too vague — <code>T1003.006 DCSync</code> tells defenders exactly what happened and what to detect.</p>
+
+        <h2>ATT&amp;CK Navigator</h2>
+        <p>The ATT&amp;CK Navigator is a web-based visualization tool for annotating the ATT&amp;CK matrix. Access it at <code>https://mitre-attack.github.io/attack-navigator/</code> or self-host via GitHub.</p>
+        <h3>Red Team Use Cases</h3>
+        <ul>
+          <li><strong style="color:var(--cyan-dim)">Attack Planning:</strong> Build a layer showing every technique your engagement will use before you start. Share it with your team as an operational plan.</li>
+          <li><strong style="color:var(--cyan-dim)">Heatmap Generation:</strong> Color-code techniques by frequency, tool availability, or detection difficulty. Export as SVG for reports.</li>
+          <li><strong style="color:var(--cyan-dim)">Gap Analysis:</strong> Overlay your planned techniques against the blue team's known detection coverage. Uncolored cells = blind spots to exploit.</li>
+          <li><strong style="color:var(--cyan-dim)">Adversary Emulation:</strong> Import a published layer for APT29, FIN7, etc. to emulate specific threat actors against your target.</li>
+          <li><strong style="color:var(--cyan-dim)">Purple Team Reporting:</strong> After an engagement, show which techniques fired alerts (green), which were missed (red), and which weren't tested (grey).</li>
+        </ul>
+        <p>Layers are stored as JSON files — easily scripted, version-controlled, and shared:</p>
+        <pre><code># Download the Navigator and run locally
+git clone https://github.com/mitre-attack/attack-navigator.git
+cd attack-navigator/nav-app
+npm install && npm run start</code></pre>
+
+        <h2>Example Attack Chain — Mapped to ATT&amp;CK</h2>
+        <p>Real attack chains are non-linear. Adversaries loop back, re-enumerate, and adapt. This example maps a realistic nation-state intrusion to ATT&amp;CK IDs:</p>
+        <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:20px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border-accent);">
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Phase</th>
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Technique ID</th>
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Name</th>
+              <th style="text-align:left; padding:8px 10px; color:var(--green-dim); font-family:var(--font-mono);">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 10px; color:var(--text-muted);">Recon</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1592</td><td style="padding:7px 10px; color:var(--text-primary);">Gather Victim Org Info</td><td style="padding:7px 10px; color:var(--text-muted);">LinkedIn, OSINT on employees</td></tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);"><td style="padding:7px 10px; color:var(--text-muted);">Resource Dev</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1583</td><td style="padding:7px 10px; color:var(--text-primary);">Acquire Infrastructure</td><td style="padding:7px 10px; color:var(--text-muted);">Register lookalike domain</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 10px; color:var(--text-muted);">Initial Access</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1566.002</td><td style="padding:7px 10px; color:var(--text-primary);">Spearphishing Link</td><td style="padding:7px 10px; color:var(--text-muted);">Targeted email to executive</td></tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);"><td style="padding:7px 10px; color:var(--text-muted);">Execution</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1204.001</td><td style="padding:7px 10px; color:var(--text-primary);">User Execution: Malicious Link</td><td style="padding:7px 10px; color:var(--text-muted);">Victim clicks, payload drops</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 10px; color:var(--text-muted);">Persistence</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1547.001</td><td style="padding:7px 10px; color:var(--text-primary);">Registry Run Keys</td><td style="padding:7px 10px; color:var(--text-muted);">Backdoor added to HKCU\Run</td></tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);"><td style="padding:7px 10px; color:var(--text-muted);">Cred Access</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1003.001</td><td style="padding:7px 10px; color:var(--text-primary);">LSASS Memory</td><td style="padding:7px 10px; color:var(--text-muted);">Mimikatz sekurlsa::logonpasswords</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 10px; color:var(--text-muted);">Discovery</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1087</td><td style="padding:7px 10px; color:var(--text-primary);">Account Discovery</td><td style="padding:7px 10px; color:var(--text-muted);">Enumerate AD users/groups</td></tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);"><td style="padding:7px 10px; color:var(--text-muted);">Lateral Move</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1021.001</td><td style="padding:7px 10px; color:var(--text-primary);">RDP</td><td style="padding:7px 10px; color:var(--text-muted);">RDP to DC with stolen creds</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 10px; color:var(--text-muted);">C2</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1071.001</td><td style="padding:7px 10px; color:var(--text-primary);">Web Protocols</td><td style="padding:7px 10px; color:var(--text-muted);">HTTPS beacon blends with traffic</td></tr>
+            <tr style="border-bottom:1px solid var(--border); background:rgba(255,255,255,0.01);"><td style="padding:7px 10px; color:var(--text-muted);">Exfiltration</td><td style="padding:7px 10px; font-family:var(--font-mono); color:var(--cyan-dim);">T1041</td><td style="padding:7px 10px; color:var(--text-primary);">Exfil Over C2 Channel</td><td style="padding:7px 10px; color:var(--text-muted);">Data sent through existing HTTPS C2</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Enterprise vs ICS vs Mobile</h2>
+        <ul>
+          <li><strong style="color:var(--green-dim)">Enterprise</strong> — IT networks: Windows, Linux, macOS, cloud (AWS/Azure/GCP). 14 tactics, 216 techniques. <em>This is your primary matrix.</em></li>
+          <li><strong style="color:var(--green-dim)">ICS</strong> — Operational technology: PLCs, SCADA, DCS. 12 tactics, 81 techniques. Unique tactics: <em>Inhibit Response Function</em>, <em>Impair Process Control</em>. Use for critical infrastructure engagements.</li>
+          <li><strong style="color:var(--green-dim)">Mobile</strong> — Android and iOS. 13 tactics, 100 techniques. Focus: credential theft, app exploitation, on-path interception.</li>
+        </ul>
+
+        <h2>Using ATT&amp;CK for Adversary Emulation</h2>
+        <p>MITRE publishes free <strong style="color:var(--cyan-dim)">Adversary Emulation Plans (AEPs)</strong> that translate real APT behavior into executable red team scripts. Available for APT3, APT29, FIN7, and others.</p>
+        <ol>
+          <li>Choose a threat actor relevant to your target's industry</li>
+          <li>Download their AEP from <code>attack.mitre.org/resources/adversary-emulation-plans/</code></li>
+          <li>Build an ATT&amp;CK Navigator layer from their documented techniques</li>
+          <li>Execute techniques in realistic order against the target environment</li>
+          <li>Document which techniques fired blue team alerts vs. went undetected</li>
+          <li>Deliver a layer showing coverage gaps as part of your report</li>
+        </ol>
+
+        <h2>Adversary Emulation Tools</h2>
+        <p>These tools automate ATT&CK-mapped adversary emulation, ranging from guided manual testing to fully autonomous simulation. Use them to systematically validate detection coverage against specific APT profiles.</p>
+        <pre><code># MITRE Caldera — automated adversary emulation via ATT&CK:
+# https://github.com/mitre/caldera
+# Web-based C2 server deploys agents to targets, executes ability chains
+# Groups abilities into Adversary profiles (APT3, APT29 built-in)
+# Autonomous operation mode + manual control
+python3 server.py --insecure  # start Caldera server (default :8888)
+
+# Atomic Red Team — lightweight ATT&CK test library:
+# https://github.com/redcanaryco/atomic-red-team
+# Each technique has atomic tests with prereqs, cleanup, and commands
+Install-Module -Name invoke-atomicredteam -Force
+Import-Module invoke-atomicredteam
+Invoke-AtomicTest T1003.001         # run LSASS dump test
+Invoke-AtomicTest T1003.001 -Cleanup # cleanup
+Invoke-AtomicTest ALL               # run all available tests
+
+# Infection Monkey — breach and attack simulation:
+# https://www.akamai.com/infectionmonkey
+# Self-propagating agent tests lateral movement and network segmentation
+# Generates visual report of attack paths across network
+
+# Stratus Red Team — cloud attack simulation:
+# https://stratus-red-team.cloud/
+# Tests AWS, Azure, GCP attack scenarios mapped to ATT&CK
+stratus list                        # list available attack techniques
+stratus detonate aws.credential-access.ec2-get-password-data
+stratus revert aws.credential-access.ec2-get-password-data</code></pre>
+
+        <h2>Key Resources</h2>
+        <ul>
+          <li><code>https://attack.mitre.org</code> — Main ATT&amp;CK knowledge base</li>
+          <li><code>https://mitre-attack.github.io/attack-navigator/</code> — Navigator (online)</li>
+          <li><code>https://github.com/mitre-attack/attack-navigator</code> — Self-hosted Navigator</li>
+          <li><code>https://attack.mitre.org/resources/adversary-emulation-plans/</code> — AEPs</li>
+          <li><code>https://github.com/center-for-threat-informed-defense</code> — CTID adversary emulation library</li>
+        </ul>

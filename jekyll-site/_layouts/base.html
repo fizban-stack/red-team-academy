@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page.title }}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+
+<header id="navbar">
+  <a href="/" class="brand">
+    <img src="/images/samurai.svg" alt="Red Team Academy" class="brand-icon" />
+    <span class="brand-name">Red Team</span><span class="brand-accent"> Academy</span>
+  </a>
+  <span class="status-dot"></span>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/about/">About</a>
+  </nav>
+</header>
+
+<div id="layout">
+  <aside id="sidebar">
+    <div class="sidebar-header">// modules</div>
+
+    <details>
+      <summary><span class="module-num">01</span> Fundamentals</summary>
+      <ul>
+        <li><a href="/fundamentals/methodology/">Red Team Methodology</a></li>
+        <li><a href="/fundamentals/engagement-planning/">Engagement Planning</a></li>
+        <li><a href="/fundamentals/mitre-attack/">MITRE ATT&amp;CK Framework</a></li>
+        <li><a href="/fundamentals/lab-setup/">Lab Setup &amp; Environment</a></li>
+        <li><a href="/fundamentals/linux-basics/">Linux Fundamentals</a></li>
+        <li><a href="/fundamentals/windows-basics/">Windows Fundamentals</a></li>
+        <li><a href="/fundamentals/opsec/">OPSEC Basics</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">02</span> Reconnaissance</summary>
+      <ul>
+        <li><a href="/recon/passive-recon/">Passive Recon (OSINT)</a></li>
+        <li><a href="/recon/active-recon/">Active Recon (Scanning)</a></li>
+        <li><a href="/recon/network-enum/">Network Enumeration</a></li>
+        <li><a href="/recon/subdomain-enum/">Subdomain Enumeration</a></li>
+        <li><a href="/recon/web-recon/">Web Reconnaissance</a></li>
+        <li><a href="/recon/email-osint/">Email OSINT</a></li>
+        <li><a href="/recon/infrastructure-mapping/">Infrastructure Mapping</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">03</span> Active Directory</summary>
+      <ul>
+        <li><a href="/active-directory/ad-enumeration/">AD Enumeration</a></li>
+        <li><a href="/active-directory/goad/">Game of Active Directory</a></li>
+        <li><a href="/active-directory/kerberoasting/">Kerberoasting &amp; AS-REP</a></li>
+        <li><a href="/active-directory/pass-the-hash/">Pass-the-Hash / PTT</a></li>
+        <li><a href="/active-directory/bloodhound/">BloodHound / SharpHound</a></li>
+        <li><a href="/active-directory/dcsync/">DCSync &amp; Golden Ticket</a></li>
+        <li><a href="/active-directory/acl-abuse/">ACL / ACE Abuse</a></li>
+        <li><a href="/active-directory/ntlm-relay/">NTLM Relay Attacks</a></li>
+        <li><a href="/active-directory/domain-trusts/">Domain Trusts</a></li>
+        <li><a href="/active-directory/asreproasting/">AS-REProasting</a></li>
+        <li><a href="/active-directory/adcs-attacks/">ADCS Attacks</a></li>
+        <li><a href="/active-directory/azure-ad/">Azure AD / Entra ID</a></li>
+        <li><a href="/active-directory/shadow-credentials/">Shadow Credentials</a></li>
+        <li><a href="/active-directory/coercion-attacks/">Coercion Attacks</a></li>
+        <li><a href="/active-directory/ad-lotl/">AD Living Off the Land</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">04</span> Pivoting &amp; Tunneling</summary>
+      <ul>
+        <li><a href="/pivoting/ssh-tunneling/">SSH Tunneling</a></li>
+        <li><a href="/pivoting/chisel-socks/">Chisel &amp; SOCKS5</a></li>
+        <li><a href="/pivoting/metasploit-pivoting/">Metasploit Pivoting</a></li>
+        <li><a href="/pivoting/dns-icmp-tunneling/">DNS &amp; ICMP Tunneling</a></li>
+        <li><a href="/pivoting/sshuttle-rpivot/">sshuttle &amp; rpivot</a></li>
+        <li><a href="/pivoting/windows-pivoting/">Windows Pivoting</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">05</span> Evasion</summary>
+      <ul>
+        <li><a href="/evasion/amsi-bypass/">AMSI Bypass</a></li>
+        <li><a href="/evasion/av-edr-evasion/">AV / EDR Evasion</a></li>
+        <li><a href="/evasion/lolbins/">LOLBins &amp; LOLBAS</a></li>
+        <li><a href="/evasion/fileless-techniques/">Fileless Techniques</a></li>
+        <li><a href="/evasion/windows-defender/">Windows Defender</a></li>
+        <li><a href="/evasion/malware-dev/">Malware Development</a></li>
+        <li><a href="/evasion/kernel-exploitation/">Kernel Exploitation</a></li>
+        <li><a href="/evasion/indirect-syscalls/">Indirect Syscalls</a></li>
+        <li><a href="/evasion/sleep-obfuscation/">Sleep Obfuscation</a></li>
+        <li><a href="/evasion/stack-spoofing/">Stack Spoofing</a></li>
+        <li><a href="/evasion/etw-bypass/">ETW Bypass</a></li>
+        <li><a href="/evasion/dll-unhooking/">DLL Unhooking</a></li>
+        <li><a href="/evasion/process-ghosting/">Process Ghosting</a></li>
+        <li><a href="/evasion/apc-injection/">APC Injection</a></li>
+        <li><a href="/evasion/pe-obfuscation/">PE Obfuscation</a></li>
+        <li><a href="/evasion/lotl-advanced/">Advanced LOTL Techniques</a></li>
+        <li><a href="/evasion/sophos-xdr/">Sophos XDR Evasion</a></li>
+        <li><a href="/evasion/windows-evasion-reference/">Windows Evasion Reference</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">06</span> Exploitation</summary>
+      <ul>
+        <li><a href="/exploitation/metasploitable/">Metasploitable</a></li>
+        <li><a href="/exploitation/web-attacks/">Web Attacks (OWASP)</a></li>
+        <li><a href="/exploitation/service-exploits/">Service Exploitation</a></li>
+        <li><a href="/exploitation/password-attacks/">Password Attacks</a></li>
+        <li><a href="/exploitation/offensive-python/">Offensive Python</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">07</span> Post-Exploitation</summary>
+      <ul>
+        <li><a href="/post-exploitation/privesc-linux/">Privesc — Linux</a></li>
+        <li><a href="/post-exploitation/privesc-windows/">Privesc — Windows</a></li>
+        <li><a href="/post-exploitation/lateral-movement/">Lateral Movement</a></li>
+        <li><a href="/post-exploitation/persistence/">Persistence</a></li>
+        <li><a href="/post-exploitation/data-exfil/">Data Exfiltration</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">08</span> C2 Frameworks</summary>
+      <ul>
+        <li><a href="/c2-frameworks/metasploit/">Metasploit Framework</a></li>
+        <li><a href="/c2-frameworks/cobalt-strike/">Cobalt Strike</a></li>
+        <li><a href="/c2-frameworks/sliver/">Sliver</a></li>
+        <li><a href="/c2-frameworks/havoc/">Havoc C2</a></li>
+        <li><a href="/c2-frameworks/brute-ratel/">Brute Ratel C4</a></li>
+        <li><a href="/c2-frameworks/bof/">Beacon Object Files</a></li>
+        <li><a href="/c2-frameworks/mythic/">Mythic C2</a></li>
+        <li><a href="/c2-frameworks/malleable-c2/">Malleable C2 Profiles</a></li>
+        <li><a href="/c2-frameworks/redirectors/">C2 Redirectors</a></li>
+        <li><a href="/c2-frameworks/c2-opsec/">C2 OPSEC</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">09</span> Web Hacking</summary>
+      <ul>
+        <li><a href="/web/sql-injection/">SQL Injection</a></li>
+        <li><a href="/web/xss/">XSS &amp; CSP Bypass</a></li>
+        <li><a href="/web/ssrf/">SSRF</a></li>
+        <li><a href="/web/jwt-attacks/">JWT Attacks</a></li>
+        <li><a href="/web/graphql/">GraphQL Attacks</a></li>
+        <li><a href="/web/http-smuggling/">HTTP Smuggling</a></li>
+        <li><a href="/web/oauth-attacks/">OAuth / OIDC</a></li>
+        <li><a href="/web/xxe/">XXE Injection</a></li>
+        <li><a href="/web/prototype-pollution/">Prototype Pollution</a></li>
+        <li><a href="/web/api-testing/">API Testing</a></li>
+        <li><a href="/web/file-upload/">File Upload Attacks</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">10</span> Wireless Attacks</summary>
+      <ul>
+        <li><a href="/wireless/wireless-overview/">Overview &amp; Hardware</a></li>
+        <li><a href="/wireless/wifi-attacks/">Wi-Fi Attacks</a></li>
+        <li><a href="/wireless/bluetooth-attacks/">Bluetooth Attacks</a></li>
+        <li><a href="/wireless/nfc-attacks/">NFC Attacks</a></li>
+        <li><a href="/wireless/rfid-attacks/">RFID Attacks</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">11</span> IoT Hacking</summary>
+      <ul>
+        <li><a href="/iot/firmware-extraction/">Firmware Extraction</a></li>
+        <li><a href="/iot/hardware-hacking/">Hardware Hacking</a></li>
+        <li><a href="/iot/mqtt-coap/">MQTT / CoAP Attacks</a></li>
+        <li><a href="/iot/ble-rf/">BLE &amp; RF Attacks</a></li>
+        <li><a href="/iot/default-creds/">Default Credentials</a></li>
+        <li><a href="/iot/ota-attacks/">OTA Firmware Attacks</a></li>
+        <li><a href="/iot/router-exploitation/">Router Exploitation</a></li>
+        <li><a href="/iot/industrial/">Industrial Protocols</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">12</span> AI Red Team Agents</summary>
+      <ul>
+        <li><a href="/ai-agents/edge-llm-setup/">Edge LLM Setup</a></li>
+        <li><a href="/ai-agents/red-team-agents/">AI Red Team Agents</a></li>
+        <li><a href="/ai-agents/ad-recon-agent/">AD Recon AI Agent</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">13</span> Red Team Tools</summary>
+      <ul>
+        <li><a href="/tools/overview/">Tool Overview</a></li>
+        <li><a href="/tools/recon-tools/">Reconnaissance Tools</a></li>
+        <li><a href="/tools/ad-tools/">Active Directory Tools</a></li>
+        <li><a href="/tools/exploitation-tools/">Exploitation Tools</a></li>
+        <li><a href="/tools/post-exploitation-tools/">Post-Exploitation Tools</a></li>
+        <li><a href="/tools/evasion-tools/">Evasion &amp; Obfuscation</a></li>
+        <li><a href="/tools/network-tools/">Network &amp; Pivoting Tools</a></li>
+        <li><a href="/tools/password-tools/">Password &amp; Credential Tools</a></li>
+        <li><a href="/tools/web-tools/">Web Hacking Tools</a></li>
+        <li><a href="/tools/wireless-tools/">Wireless Attack Tools</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">14</span> Tool Development</summary>
+      <ul>
+        <li><a href="/tool-dev/python-network-recon/">Python: Network Recon</a></li>
+        <li><a href="/tool-dev/python-ad-tools/">Python: AD Attack Tools</a></li>
+        <li><a href="/tool-dev/python-c2-shells/">Python: C2 &amp; Reverse Shells</a></li>
+        <li><a href="/tool-dev/python-payload-dev/">Python: Payload Development</a></li>
+        <li><a href="/tool-dev/powershell-network-recon/">PS: Network &amp; Recon</a></li>
+        <li><a href="/tool-dev/powershell-ad-attacks/">PS: AD Attack Tools</a></li>
+        <li><a href="/tool-dev/powershell-post-exploitation/">PS: Post-Exploitation</a></li>
+        <li><a href="/tool-dev/powershell-evasion/">PS: Evasion Techniques</a></li>
+        <li><a href="/tool-dev/go-network-tools/">Go: Network Tools</a></li>
+        <li><a href="/tool-dev/go-c2-implants/">Go: C2 Implant Dev</a></li>
+        <li><a href="/tool-dev/go-windows-api/">Go: Windows API</a></li>
+        <li><a href="/tool-dev/go-evasion/">Go: Evasion &amp; Obfuscation</a></li>
+      </ul>
+    </details>
+
+    <details>
+      <summary><span class="module-num">15</span> Reporting</summary>
+      <ul>
+        <li><a href="/reporting/findings/">Documenting Findings</a></li>
+        <li><a href="/reporting/executive-report/">Executive Report</a></li>
+        <li><a href="/reporting/technical-report/">Technical Report</a></li>
+      </ul>
+    </details>
+  </aside>
+
+  <main id="content">
+    {{ content }}
+  </main>
+</div>
+
+<footer id="footer">
+  <span class="footer-brand">Red Team Academy</span>
+  <span class="footer-sep">|</span>
+  <span>Personal Training Platform</span>
+  <span class="footer-right">
+    <span>&copy; {{ site.time | date: "%Y" }}</span>
+  </span>
+</footer>
+
+<script>
+(function() {
+  var path = window.location.pathname.replace(/\/$/, '') || '/';
+  document.querySelectorAll('#sidebar a').forEach(function(a) {
+    var href = (a.getAttribute('href') || '').replace(/\/$/, '');
+    if (href && (path === href || path.startsWith(href + '/'))) {
+      a.classList.add('active');
+      var details = a.closest('details');
+      if (details) details.open = true;
+    }
+  });
+  document.querySelectorAll('#navbar nav a').forEach(function(a) {
+    var href = (a.getAttribute('href') || '').replace(/\/$/, '') || '/';
+    if (href === '/' ? (path === '' || path === '/') : path.startsWith(href)) {
+      a.classList.add('active');
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

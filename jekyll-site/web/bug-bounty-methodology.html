@@ -369,11 +369,89 @@ sqlmap -u "URL" --tamper=space2comment,randomcase  # WAF bypass
 # bugcrowd.com/blog/advice-for-writing-a-great-vulnerability-report/
 # forum.bugcrowd.com/t/writing-a-bug-report-attack-scenario-and-impact-are-key/640</code></pre>
 
+  <h2>Ars0n Framework — Automated Bug Bounty Recon</h2>
+  <p>The Ars0n Framework (by rs0n) is a modular, web-based bug bounty automation platform. It runs long-duration scans against target domains and manages findings in a MongoDB-backed GUI. Designed for Kali Linux. Two primary modes: <strong>Wildfire</strong> (specific target domains) and <strong>Slowburn</strong> (auto-selects and cycles through all public bug bounty programs).</p>
+
+  <h3>Installation</h3>
+  <pre><code># Requires Kali Linux 2023.4 (clean install recommended):
+wget https://github.com/R-s0n/ars0n-framework/releases/download/v0.0.2-alpha/ars0n-framework-v0.0.2-alpha.tar.gz
+tar -xzvf ars0n-framework-v0.0.2-alpha.tar.gz
+cd ars0n-framework
+./install.sh          # prompts for API keys (optional, can skip)
+
+# ARM processor (e.g., M1 Mac):
+./install.sh --arm
+
+# API keys that improve results (add to ~/.keys/ after install):
+# - Shodan API key
+# - GitHub personal access token (for GitHub dorking)
+# - Chaos API key (ProjectDiscovery)
+
+# Start the web UI + backend:
+./run.sh              # http://localhost:5000
+./run.sh --arm</code></pre>
+
+  <h3>Core Modules</h3>
+  <pre><code># Architecture:
+# - fire-starter.py   → Core recon: subdomain enum, DNS resolution, HTTP probing
+# - fire-scanner.py   → Vulnerability scanning: nuclei, Burp, custom checks
+# - wildfire.py       → Run fire-starter + fire-scanner against a specific domain
+# - slowburn.py       → Auto-select bug bounty targets from public programs
+
+# Wildfire — scan specific target domains (added via GUI):
+cd toolkit/
+python3 wildfire.py --start --cloud --scan
+# --start:  run fire-starter (subdomain enum)
+# --cloud:  enumerate cloud assets (S3, Azure blobs, GCP buckets)
+# --scan:   run fire-scanner (vulnerability scanning)
+
+# Slowburn — auto-select and cycle through all BB programs:
+python3 slowburn.py --initialize   # first run: fetches program list from BB platforms
+python3 slowburn.py --start --cloud --scan  # then begin scanning one at a time
+
+# Expected scan time: 8–48 hours per domain when all sub-modules run</code></pre>
+
+  <h3>Sub-Modules (fire-starter)</h3>
+  <pre><code># Subdomain enumeration (what fire-starter runs internally):
+# - subfinder     — passive subdomain discovery
+# - amass          — OSINT + bruteforce
+# - crt.sh         — certificate transparency
+# - chaos           — ProjectDiscovery's subdomain dataset
+# - GitHub dorking  — search GitHub for target subdomains
+# - Shodan          — find internet-facing assets by org name
+
+# Cloud asset discovery:
+# - s3scanner      — enumerate S3 buckets (public read/write)
+# - Azure blobs    — check common naming patterns
+# - GCP storage    — check gs:// buckets by org naming patterns
+
+# HTTP probing:
+# - httpx           — probe all subdomains for live HTTP/HTTPS
+# - Screenshot all  — save screenshots for manual review in GUI</code></pre>
+
+  <h3>Sub-Modules (fire-scanner)</h3>
+  <pre><code># Automated vulnerability scanning (fire-scanner):
+# - nuclei         — template-based vuln scanning (CVEs, misconfigs, exposures)
+# - corsy           — CORS misconfiguration detection
+# - xsstrike        — XSS detection
+# - smuggler        — HTTP request smuggling detection
+# - sqlmap          — SQLi detection on parameterized URLs
+# - subjack         — subdomain takeover detection
+
+# After Wildfire completes, use the GUI to:
+# - Review all discovered subdomains and filter by interesting tech stacks
+# - View screenshots for manual triage
+# - See nuclei findings organized by severity
+# - Track which subdomains have been manually investigated
+# - Export findings for report writing</code></pre>
+
   <h2>Tools</h2>
   <ul>
     <li>Burp Suite Pro — intercept, scanner, active/passive analysis, PoC generator</li>
+    <li>Ars0n Framework — <code>github.com/R-s0n/ars0n-framework</code> — automated BB recon</li>
     <li>Autorize (Burp plugin) — automated IDOR/access control testing</li>
     <li>AuthMatrix (Burp plugin) — multi-role access control matrix</li>
+    <li>tomnomnom hacks suite — <a href="/recon/hacks-tools/">waybackurls, qsreplace, kxss, etc.</a></li>
     <li>Wappalyzer — tech stack fingerprinting</li>
     <li>JSFinder — extract endpoints from JS files</li>
     <li>SQLMap — automated SQL injection detection/exploitation</li>

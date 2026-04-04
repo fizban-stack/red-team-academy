@@ -810,6 +810,33 @@ python3 -m http.server 8080 --directory /tmp/
 
 # IMPORTANT: Only upload to systems you own or have written authorization to test.</code></pre>
 
+  <h2>ffufai — AI-Powered Fuzzing Assistant</h2>
+  <p>ffufai is a wrapper around ffuf that uses an LLM (Claude or GPT) to automatically suggest relevant file extensions to fuzz based on the target URL and its response headers. Rather than blindly applying a generic wordlist, ffufai analyzes the server stack and injects targeted extensions.</p>
+  <pre><code># Install:
+git clone https://github.com/jthack/ffufai
+cd ffufai
+pip install requests openai anthropic
+chmod +x ffufai.py
+sudo ln -s /full/path/to/ffufai.py /usr/local/bin/ffufai
+
+# Set API key (Claude or OpenAI):
+export ANTHROPIC_API_KEY='sk-ant-...'
+# or: export OPENAI_API_KEY='sk-...'
+
+# Basic usage — same syntax as ffuf, replace 'ffuf' with 'ffufai':
+ffufai -u https://target.com/FUZZ -w /usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt
+
+# ffufai inspects the server headers and URL, then asks the AI:
+# "Given this is a PHP/Apache server, which extensions should I fuzz?"
+# AI responds: php, php3, php4, php5, phtml, inc, bak, swp, ...
+# ffufai appends extension suggestions to each wordlist entry automatically
+
+# All ffuf flags work transparently:
+ffufai -u https://target.com/FUZZ -w wordlist.txt -fc 404 -mc all -t 50
+
+# Manual extension override (skip AI suggestions):
+ffufai -u https://target.com/FUZZ -w wordlist.txt -e .php,.bak,.txt,.html</code></pre>
+
   <h2>Workflow: Choosing the Right Payload List</h2>
   <pre><code># Decision tree for payload selection:
 #

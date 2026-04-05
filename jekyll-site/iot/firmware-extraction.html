@@ -152,12 +152,134 @@ iz | grep password             # find strings
 # - Buffer overflows in string handling (strcpy, sprintf without bounds)
 # - Authentication logic that can be bypassed</code></pre>
 
+  <h2>Flash Memory Types</h2>
+  <pre><code># Understanding flash type determines which tool and method to use:
+
+# NOR Flash (SOIC-8 package, e.g. W25Q64, MX25L6406, EN25Q64):
+# - SPI interface
+# - Fast random access — used for execute-in-place firmware
+# - Common in routers, IoT, network equipment
+# - Dump with: flashrom, Bus Pirate, CH341A programmer
+
+# NAND Flash (TSOP-48 package):
+# - Larger capacity but sequential access only
+# - Used in consumer electronics, Android devices, NAS
+# - Dump requires dedicated NAND programmer
+
+# eMMC Flash (BGA package, soldered directly to PCB):
+# - Used in modern routers, smart TVs, embedded Linux boards
+# - Can be dumped by soldering to test pads (CLK, CMD, DATA0-7, VCC, GND)
+# - Or with eMMC clip adapters without soldering
+
+# Common flash chip identifiers (look for these on the chip):
+# W25Q64FV     — 8MB NOR (Winbond)
+# MX25L6406E   — 8MB NOR (Macronix)
+# GD25Q64      — 8MB NOR (GigaDevice)
+# EN25Q64      — 8MB NOR (EON Silicon)</code></pre>
+
+  <h2>SPI Flash Dump with Flashrom</h2>
+  <pre><code># Install flashrom:
+sudo apt install flashrom
+
+# Dump via Bus Pirate (attach to SPI pins: CLK, MOSI, MISO, CS, GND, VCC):
+flashrom -p buspirate_spi:dev=/dev/ttyUSB0,spispeed=1M -r firmware.bin
+
+# Dump via Raspberry Pi GPIO (SPI0):
+flashrom -p linux_spi:dev=/dev/spidev0.0,spispeed=512 -r firmware.bin
+
+# Dump via CH341A USB programmer (cheap $5 programmer for SOIC-8 chips):
+flashrom -p ch341a_spi -r firmware.bin
+
+# Specify chip if autodetect fails:
+flashrom -p ch341a_spi -c "MX25L6406E/MX25L6408E" -r firmware.bin
+
+# Write modified firmware back:
+flashrom -p ch341a_spi -w modified_firmware.bin
+
+# Verify write:
+flashrom -p ch341a_spi -v firmware.bin</code></pre>
+
+  <h2>Embedded Filesystem Types</h2>
+  <pre><code># After extracting with binwalk, identify the filesystem type:
+# binwalk -Me firmware.bin will attempt to auto-extract known filesystems
+
+# Common filesystems in IoT firmware:
+# SquashFS  — read-only, compressed; most common in OpenWrt/Linux routers
+#             Magic bytes: sqsh, hsqs, qshs, sqsl
+#             Tool: unsquashfs, 7zip
+# JFFS2     — journaled, RW, for NAND flash
+#             Magic: 0x07C0 (v1), 0x72b6 (v2)
+#             Tool: jefferson
+# YAFFS2    — designed for NAND, used in Android
+#             Magic: 0x5941ff53
+#             Tool: unyaffs
+# CramFS    — compressed RO, older routers
+#             Magic: 0x28cd3d45
+#             Tool: uncramfs, 7zip
+# UBIFS     — modern NAND, successor to JFFS2
+#             Magic: 0x06101831
+#             Tool: ubi_reader
+
+# Manual extraction if binwalk misses it:
+# SquashFS:
+unsquashfs -f -d extracted/ firmware.squashfs
+
+# JFFS2:
+pip install jefferson
+jefferson filesystem.img -d outdir
+
+# Extract a specific offset from firmware:
+dd if=firmware.bin of=chunk.bin bs=1 skip=$((0x200)) count=$((0x400-0x200))</code></pre>
+
+  <h2>Entropy &amp; Encryption Check</h2>
+  <pre><code># High entropy = encrypted or compressed (cannot extract)
+# Low entropy = plaintext / uncompressed (can extract directly)
+
+# Check entropy visually with binwalk:
+binwalk -E firmware.bin
+# Plot shows entropy per block — high (>0.9) = encrypted, low (&lt;0.7) = readable
+
+# If firmware is encrypted:
+# 1. Find the decryption key in bootloader (via UART/JTAG during boot)
+# 2. Look for OTA update traffic — may include decrypted version
+# 3. Search vendor SDK / GPL source releases for encryption details
+# 4. Find older unencrypted firmware version from manufacturer archive
+
+# Quick check for encrypted blocks:
+strings -tx firmware.bin | head -30   # low output = likely encrypted
+file firmware.bin                      # reports compression/encryption if detectable</code></pre>
+
+  <h2>Firmware Format Identification</h2>
+  <pre><code># Common firmware file formats:
+# SREC (Motorola S-Record)   — all lines start with capital S
+# Intel HEX                  — all lines start with a colon :
+# TI-TXT (Texas Instruments) — addresses prefixed with @, MSP430 common
+# Raw NAND dump              — no header, must identify manually with strings/binwalk
+
+# Convert Intel HEX to binary:
+avr-objcopy -I ihex -O elf32-avr dump.hex dump.elf
+objcopy -I ihex firmware.hex -O binary firmware.bin
+
+# Quick strings on HEX file (without conversion):
+cat firmware.hex | tr -d ":" | tr -d "\n" | xxd -r -p | strings
+
+# Disassemble AVR firmware:
+avr-objdump -m avr -D firmware.hex
+
+# Emulate AVR in QEMU:
+qemu-system-avr -S -s -nographic \
+  -serial tcp::5678,server=on,wait=off \
+  -machine uno -bios firmware.bin</code></pre>
+
   <h2>Resources</h2>
   <ul>
     <li>Binwalk — <code>github.com/ReFirmLabs/binwalk</code></li>
-    <li>Firmadyne — <code>github.com/firmadyne/firmadyne</code></li>
-    <li>Firmwalker — <code>github.com/craigz28/firmwalker</code></li>
+    <li>unblob — modern firmware extractor (Docker) — <code>github.com/onekey-sec/unblob</code></li>
+    <li>Firmadyne — firmware emulation framework — <code>github.com/firmadyne/firmadyne</code></li>
+    <li>Firmwalker — filesystem credential scanner — <code>github.com/craigz28/firmwalker</code></li>
+    <li>jefferson — JFFS2 extractor — <code>github.com/onekey-sec/jefferson</code></li>
+    <li>HardwareAllTheThings — firmware dumping reference — <code>github.com/swisskyrepo/HardwareAllTheThings</code></li>
     <li>FAT — <code>github.com/attify/firmware-analysis-toolkit</code></li>
-    <li>OWASP IoT Top 10 — <code>owasp.org/www-project-internet-of-things/</code></li>
-    <li>EMBA — <code>github.com/e-m-b-a/emba</code> — automated firmware security scanner</li>
+    <li>EMBA — automated firmware security scanner — <code>github.com/e-m-b-a/emba</code></li>
+    <li>Flashback Team: Extracting Firmware from SPI NOR Flash (YouTube)</li>
   </ul>

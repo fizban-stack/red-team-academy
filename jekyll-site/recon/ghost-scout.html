@@ -1,0 +1,218 @@
+---
+layout: training-page
+title: "Ghost Scout — AI-Assisted OSINT &amp; Phishing Pretext Generation — Red Team Academy"
+module: "Reconnaissance"
+tags:
+  - ghost-scout
+  - osint
+  - ai
+  - phishing
+  - spear-phishing
+  - recon
+  - hunter-io
+  - llm
+page_key: "recon-ghost-scout"
+---
+<h1>Ghost Scout — AI-Assisted OSINT &amp; Phishing Pretext Generation</h1>
+
+  <p>Ghost Scout is a Node.js application that automates the full spear-phishing reconnaissance pipeline: discover target company domains, enumerate employee email addresses via Hunter.io, scrape public sources to build contact profiles, then use Claude (Anthropic API) to generate personalized phishing pretexts tailored to each target's role, recent activity, and professional context. The result is a queue of AI-written, contextually accurate phishing emails ready for review and deployment via GoPhish or SET.</p>
+
+  <h2>Prerequisites</h2>
+  <pre><code># Required API keys:
+# - Hunter.io API key (email enumeration): hunter.io/api-keys
+# - Anthropic API key (profile + pretext generation): console.anthropic.com
+
+# Runtime requirements:
+node --version    # 18+ required
+npm --version
+docker --version  # for Redis job queue
+
+# Install dependencies:
+git clone https://github.com/fkasler/ghost_scout
+cd ghost_scout
+npm install</code></pre>
+
+  <h2>Setup &amp; Launch</h2>
+  <pre><code># 1. Create .env with API credentials:
+cat &lt;&lt;EOF &gt; .env
+HUNTER_API_KEY=your_hunter_io_key
+ANTHROPIC_API_KEY=your_anthropic_key
+EOF
+
+# 2. Start Redis (job queue backend):
+docker run --name redis -p 6379:6379 -d redis
+
+# For Redis with persistent storage:
+docker run --name redis -p 6379:6379 \
+  -v redis-data:/data -d redis redis-server --appendonly yes
+
+# Manage Redis:
+docker stop redis     # pause
+docker start redis    # resume
+docker rm redis       # destroy
+
+# 3. Start MarkItDown-API (converts scraped HTML → Markdown for LLM):
+docker run -d --name markitdown-api -p 8490:8490 \
+  ghcr.io/fkasler/markitdown-api:sha-ee4fcafe2cf2f17fbbff77cc7f1b1c81a7c370d2
+
+# 4. Launch Ghost Scout:
+node index.js
+
+# 5. Access the web UI:
+# http://localhost:3000</code></pre>
+
+  <h2>Workflow</h2>
+
+  <h3>Step 1 — Add Target Domain</h3>
+  <pre><code># In the Ghost Scout UI (http://localhost:3000):
+# → "Domains" tab → Add Domain
+# Enter: targetcorp.com
+
+# Ghost Scout will:
+# - Look up MX, SPF, DMARC DNS records
+# - Run autodiscovery to find related domains:
+#   mail.targetcorp.com, vpn.targetcorp.com,
+#   targetcorp.io, targetcorp-corp.com, etc.
+# - Identify the company's email format from DNS/MX data
+
+# Underlying autodiscovery (lib/autodiscover.js):
+# - Checks common subdomains (mail, smtp, autodiscover, webmail)
+# - Queries MX records to identify hosting providers
+# - Checks if Hunter.io has known email patterns for the domain</code></pre>
+
+  <h3>Step 2 — Discover Employees</h3>
+  <pre><code># → "Domains" tab → click domain → "Start Recon"
+
+# Ghost Scout queries Hunter.io for:
+# - Known email addresses at the domain
+# - Email format pattern: {first}.{last}@corp.com
+# - Employee names, job titles, LinkedIn profiles, sources
+
+# Hunter.io API call (lib/hunterService.js):
+# GET https://api.hunter.io/v2/domain-search?domain=targetcorp.com&amp;api_key=KEY
+# Returns: name, email, position, linkedin_url, phone, twitter, sources
+
+# Each discovered contact is saved to the Target table:
+# name, email, position, linkedin_url, source_urls
+
+# Hunter.io free tier: 25 requests/month
+# Paid plans: 500+ requests/month for larger engagements</code></pre>
+
+  <h3>Step 3 — Source Scraping (Profile Enrichment)</h3>
+  <pre><code># → "Targets" tab → select targets → "Start Scraping"
+
+# For each contact, Ghost Scout:
+# 1. Fetches each source URL found by Hunter.io
+#    (LinkedIn, company page, news articles, GitHub, conference talks)
+# 2. Converts HTML → Markdown via MarkItDown-API
+#    (removes navigation clutter, leaves readable text for LLM)
+# 3. Stores raw source text in SourceData table
+
+# Why Markdown conversion?
+# LLMs process plain text much more efficiently than HTML
+# The MarkItDown API strips headers, scripts, nav — keeps article content
+# Result: richer, more accurate profile generation
+
+# Source types automatically scraped:
+# - Company bio pages
+# - LinkedIn public profiles
+# - Conference speaker bios
+# - GitHub profiles
+# - Tech blog posts / bylines
+# - Press mentions</code></pre>
+
+  <h3>Step 4 — Generate Target Profiles</h3>
+  <pre><code># → "Targets" tab → select targets → "Generate Profiles"
+
+# Ghost Scout sends scraped sources to Claude (Anthropic API) with a
+# profile generation prompt from prompt_library/article_feedback.yaml
+
+# The AI generates a structured profile for each target:
+# - Role and responsibilities
+# - Key projects and interests
+# - Technology stack they work with
+# - Communication style indicators
+# - Recent activities / publications
+# - Organizational relationships
+
+# Example profile output:
+# Name: John Smith
+# Title: Senior DevOps Engineer at TargetCorp
+# Key tech: Kubernetes, Terraform, AWS
+# Recent activity: Spoke at KubeCon 2024 on cluster security hardening
+# Pain points: migration from legacy monolith to microservices
+# Personalization hooks: infrastructure automation, compliance pressure</code></pre>
+
+  <h3>Step 5 — Generate Phishing Pretexts</h3>
+  <pre><code># → "Pretexts" tab → select targets → "Generate Pretexts"
+
+# Ghost Scout sends the target profile + pretext prompt to Claude.
+# Prompt template: prompt_library/persuasive_email.yaml
+
+# The AI generates personalized phishing emails tailored to each target:
+# - Subject line referencing their actual role/project
+# - Body that references real context from scraped sources
+# - Plausible call-to-action (review a doc, verify credentials, etc.)
+# - Appropriate tone for their seniority level
+
+# Example for the DevOps engineer above:
+# Subject: "Urgent: Kubernetes cluster security advisory — action required"
+# Body: "Hi John, following your KubeCon talk on cluster hardening,
+#        our security team has identified a critical CVE affecting the
+#        pattern you described. Please review the advisory at [link]
+#        and confirm your clusters are patched."
+
+# Output: each pretext stored in Pretexts table
+# → Review, approve, and export for use in GoPhish or SET</code></pre>
+
+  <h2>Exporting &amp; Using Pretexts</h2>
+  <pre><code># From the Ghost Scout UI:
+# → "Pretexts" tab → select approved pretexts → Export
+
+# Export formats:
+# - CSV with email, subject, body columns (GoPhish import format)
+# - Raw text files per target
+
+# Import into GoPhish:
+# 1. Create a new email template with the generated subject/body
+# 2. Upload CSV as the target group
+# 3. Link to your credential harvester landing page
+# 4. Launch campaign
+
+# Import into SET:
+# 1. Social-Engineering Attacks → Mass Mailer Attack
+# 2. Use the exported email bodies as custom templates
+# 3. Attach the generated payload if running a hybrid campaign</code></pre>
+
+  <h2>Architecture Overview</h2>
+  <pre><code># Component overview:
+#
+# Web UI (Alpine.js + Socket.io)
+#       ↓
+# Fastify API (index.js)
+#       ↓
+# Bee-Queue + Redis (async job processing)
+#       ↓ ↓ ↓ ↓
+# DNS Queue  Hunter Queue  Source Queue  Profile Queue  Pretext Queue
+# (dns.js)   (hunter.js)   (source.js)   (profile.js)   (pretext.js)
+#       ↓                       ↓              ↓               ↓
+# DNS lookup            MarkItDown-API   Anthropic API   Anthropic API
+#                       (HTML→Markdown)  (Claude)         (Claude)
+#       ↓
+# SQLite Database (domains, targets, sources, pretexts)
+
+# Queue monitoring (check Redis):
+docker exec -it redis redis-cli
+&gt; LLEN bee:queue:dns:waiting
+&gt; LLEN bee:queue:profile:waiting</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Ghost Scout — <code>github.com/fkasler/ghost_scout</code></li>
+    <li>Hunter.io API docs — <code>hunter.io/api-documentation/v2</code></li>
+    <li>Anthropic API — <code>docs.anthropic.com</code></li>
+    <li>MarkItDown-API — <code>github.com/fkasler/markitdown-api</code></li>
+    <li>Related: <a href="/recon/email-osint/">Email OSINT</a></li>
+    <li>Related: <a href="/reporting/phishing-campaign/">Phishing Campaign Methodology</a></li>
+    <li>Related: <a href="/ai-agents/red-team-agents/">AI Red Team Agents</a></li>
+  </ul>

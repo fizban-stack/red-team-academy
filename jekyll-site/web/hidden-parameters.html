@@ -81,13 +81,76 @@ python3 paramspider.py -d example.com --subs</code></pre>
   <li><strong>q</strong>, <strong>search</strong>, <strong>query</strong> — injection surfaces (SQLi, NoSQLi, XSS)</li>
 </ul>
 
-<h2>Param Miner (Burp)</h2>
-<p>The PortSwigger Param Miner extension automatically identifies hidden parameters by analyzing the application's responses. It uses header-based and body-based techniques to detect parameters that influence the response:</p>
-<ul>
-  <li>Right-click any request in Burp and select "Guess params" &gt; "Guess everything"</li>
-  <li>It tests GET params, POST params, JSON keys, and headers</li>
-  <li>Results appear in the Extender output tab</li>
-</ul>
+<h2>Param Miner (Burp) — Configuration Reference</h2>
+  <p>Param Miner is a Burp Suite extension that discovers hidden HTTP parameters by probing the application with a large wordlist and measuring responses for behavioral differences. Right-click any request → Guess params → Guess everything. The following explains the non-obvious configuration options.</p>
+  <pre><code># Install Param Miner:
+# Burp Suite → Extensions → BApp Store → search "Param Miner" → Install
+
+# Basic usage:
+# Right-click any request in Proxy / Repeater → Extensions → Param Miner → Guess everything
+# Results appear in: Extensions → Param Miner → Output tab
+
+# Key configuration options explained:
+
+# Add 'fcbz' cachebuster
+#   Adds fcbz=1 to every request to avoid hitting cached responses.
+#   Enable when testing apps with caching (Varnish, Nginx cache, CDN).
+#   Required for cache poisoning parameter discovery.
+
+# learn observed words
+#   Extracts words from HTTP responses and adds them to the wordlist dynamically.
+#   Useful for discovering app-specific parameter names that aren't in standard wordlists.
+
+# use basic wordlist
+#   Uses Param Miner's built-in headers and params wordlists (~20k entries).
+#   Good starting point for most scans.
+
+# use bonus wordlist
+#   Adds functions and words wordlists on top of basic.
+#   Also includes headers/params if basic wordlist isn't checked.
+
+# fuzz detect
+#   Appends &lt;a`'"${{\` to parameter values.
+#   Detects parameters that reflect input differently when it contains special chars.
+#   Essential for finding hidden XSS, SSTI, or injection points.
+
+# enable auto-mine
+#   Automatically runs Param Miner on every in-scope proxy request.
+#   High traffic volume — only use on targeted hosts, not full browsing sessions.
+
+# try -_ bypass
+#   For every HTTP header with a dash, also tries the underscore version (X-Custom → X_Custom).
+#   Useful because some reverse proxies strip dashes but pass underscores.
+
+# try method flip
+#   Tests non-GET requests as GET (moves POST body params to URL query string).
+#   Finds params that only work when the method is changed.
+
+# skip boring words
+#   Skips known common/safe headers (Content-Type, Accept, etc.).
+#   Reduces noise in results.
+
+# max bucketsize
+#   Maximum number of params tested per request (default 256 for JSON, less for URL).
+#   Increase to speed up scanning; decrease if app rate-limits or breaks.
+
+# max param length
+#   Maximum length for params found in responses (longer ones are truncated).
+#   Also affects size of dummy parameters in calibration requests.
+
+# scan identified params
+#   Runs Burp Scanner on any newly discovered parameters automatically.
+#   Useful for automated vuln discovery on found params (requires Burp Pro).
+
+# skip uncacheable
+#   Skip cookie/header params when the response contains no-cache.
+#   Use when specifically hunting for cache poisoning — avoids uncacheable responses.
+
+# Workflow for cache poisoning parameter discovery:
+# 1. Enable: Add 'fcbz' cachebuster + learn observed words + fuzz detect
+# 2. Right-click target request → Guess headers
+# 3. Look for: headers that change response (X-Forwarded-Host, X-Forwarded-Port, etc.)
+# 4. Test discovered headers manually for cache poisoning behavior</code></pre>
 
 <h2>Resources</h2>
 <ul>

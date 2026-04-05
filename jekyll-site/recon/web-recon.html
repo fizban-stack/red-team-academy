@@ -406,6 +406,80 @@ waybackurls "$(echo $TARGET_URL | sed 's|https\?://||')" > "$OUT/wayback.txt"
 
 echo "[*] Done. Results in $OUT/"</code></pre>
 
+  <h2>LinkFinder — JavaScript Endpoint Discovery</h2>
+  <p>LinkFinder is a Python script that extracts endpoints and parameters from JavaScript files. It uses jsbeautifier to deobfuscate minified JS, then applies a regex to find URLs, API paths, and parameter names hidden inside the code. It can scan a single JS file, crawl a domain recursively, or process Burp Suite proxy output.</p>
+  <pre><code># Install:
+git clone https://github.com/GerbenJavado/LinkFinder
+cd LinkFinder
+pip3 install -r requirements.txt
+
+# Scan a single JavaScript file:
+python linkfinder.py -i https://target.com/static/app.js -o cli
+
+# Scan all JS files linked from a page (crawl mode with -d):
+# -d  crawl the URL and find all linked .js files automatically
+python linkfinder.py -i https://target.com -d -o cli
+
+# Filter results to a specific domain or path pattern:
+# -r  regex filter applied to discovered endpoints
+python linkfinder.py -i https://target.com -d -o cli -r .*/api/.*
+
+# Save to HTML report:
+python linkfinder.py -i https://target.com -d -o results.html
+
+# Process a Burp Suite XML export:
+# -b  read JS files from a Burp proxy XML history file
+python linkfinder.py -i burp_history.xml -b -o cli
+
+# What it finds:
+# - API endpoints: /api/v1/users, /internal/admin
+# - Hardcoded credentials or tokens (accidentally left in JS)
+# - Hidden parameters: ?token=, ?debug=, ?admin=
+# - Environment-specific URLs (staging, internal hostnames)
+# - Third-party API calls revealing integrations
+
+# Pipe into a file and then test each endpoint:
+python linkfinder.py -i https://target.com -d -o cli 2&gt;/dev/null | \
+  sort -u &gt; endpoints.txt
+# Feed to ffuf for further discovery:
+ffuf -u https://target.com/FUZZ -w endpoints.txt</code></pre>
+
+  <h2>endlets — In-Browser Endpoint Discovery Bookmarklet</h2>
+  <p>endlets is a JavaScript bookmarklet that runs endpoint discovery directly in your browser. It fetches the current page, extracts script URLs using a regex, recursively fetches those scripts, and collects all discovered endpoint strings — all client-side with no external tool required. Useful for quick recon when you're already authenticated and don't want to run external scanners.</p>
+  <pre><code># Install:
+# 1. Clone the repo:
+git clone https://github.com/PortSwigger/endlets
+
+# 2. Open endlets.js in a text editor and copy the minified bookmarklet code
+# 3. Create a new browser bookmark → paste the code as the URL
+# 4. Name it "endlets"
+
+# Usage:
+# Navigate to any web application page (while authenticated if needed)
+# Click the "endlets" bookmark in your toolbar
+# A popup appears listing all discovered endpoint strings from loaded scripts
+# Depth: 3 recursive levels (fetches scripts that scripts reference)
+
+# What endlets finds:
+# - Relative and absolute URL strings inside JavaScript source
+# - API paths embedded in frontend code
+# - Feature flags or config object keys that are endpoint names
+# - Endpoints only loaded on authenticated pages (since you're logged in)
+
+# Manual equivalent — run in browser console:
+# Paste this to collect all src= script URLs on the current page:
+Array.from(document.querySelectorAll('script[src]'))
+  .map(s =&gt; s.src)
+  .forEach(u =&gt; console.log(u));
+
+# Then fetch and grep each one for endpoint strings:
+fetch('/static/app.js')
+  .then(r =&gt; r.text())
+  .then(t =&gt; {
+    var matches = t.match(/["'`](\/[a-zA-Z0-9_\-\/\.]+)["'`]/g);
+    console.log([...new Set(matches)].sort().join('\n'));
+  });</code></pre>
+
   <h2>Key Resources</h2>
   <ul>
     <li><code>https://github.com/OJ/gobuster</code> — gobuster (dir/dns/vhost)</li>
@@ -415,5 +489,6 @@ echo "[*] Done. Results in $OUT/"</code></pre>
     <li><code>https://github.com/EnableSecurity/wafw00f</code> — WAF detection</li>
     <li><code>https://github.com/tomnomnom/waybackurls</code> — Wayback URL extractor</li>
     <li><code>https://github.com/GerbenJavado/LinkFinder</code> — JS endpoint extractor</li>
+    <li><code>https://github.com/PortSwigger/endlets</code> — in-browser endpoint discovery bookmarklet</li>
     <li><code>https://github.com/danielmiessler/SecLists</code> — SecLists wordlists</li>
   </ul>

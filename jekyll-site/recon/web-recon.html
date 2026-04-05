@@ -320,6 +320,61 @@ ls /usr/share/seclists/Discovery/Web-Content/
 # Follow-up: raft-medium-words.txt -x php,js,txt,bak
 # Thorough: directory-list-2.3-medium.txt + extensions</code></pre>
 
+  <h2>Web Application Testing Methodology</h2>
+  <p>Before running scanners, build a mental model of the application's structure and attack surface. This framework from the h4cker project describes the systematic approach used by professional pentesters.</p>
+
+  <h3>Phase 1: Map the Application</h3>
+  <pre><code># Explore Visible Content
+# - Browse every page and link manually
+# - Use web crawlers to discover linked resources
+# - Document all URLs, parameters, file types found
+
+# Consult Public Resources
+# - Check developer forums, GitHub repos, documentation
+# - Search for developer comments in public code repositories
+# - Look for configuration snippets in technical forums
+
+# Discover Hidden Content
+# - Forced browsing: gobuster/feroxbuster against directory wordlists
+# - Admin interfaces often at: /admin, /cms, /wp-admin, /manager
+# - Staging environments: dev., staging., test.
+
+# Discover Default Content
+# - Identify default admin panels for detected software versions
+# - Check for default configuration files: /phpinfo.php, /server-status
+# - Default credentials on standard installations
+
+# Enumerate Identifier-Specified Functions
+# - Analyze URL parameter changes: ?action=view vs ?action=edit
+# - Test numeric IDs: ?id=1 → what does ?id=2 return?
+# - Debug parameters: ?debug=true, ?verbose=1, ?test=1</code></pre>
+
+  <h3>Phase 2: Analyze the Application</h3>
+  <pre><code># Identify Functionality
+# - Catalog all operations: data input, processing, output
+# - Map the business logic: authentication, authorization, transactions
+# - Note areas handling sensitive data: payments, PII, file uploads
+
+# Identify Data Entry Points (attack vectors):
+# GET/POST parameters
+# HTTP headers (User-Agent, Referer, X-Forwarded-For, custom headers)
+# JSON/XML request bodies
+# Cookies and session tokens
+# File upload fields
+# WebSocket messages
+
+# Identify Technologies
+# Server: whatweb, wappalyzer, http headers
+# Database hints: error messages, cookie names (PHPSESSID=PHP, JSESSIONID=Java)
+# Framework: URL patterns, response headers, HTML comments
+
+# Map the Attack Surface — combine all findings:
+# List all entry points → prioritize high-impact ones
+# Authentication/auth bypass (login, password reset, 2FA)
+# Privilege escalation (IDOR, role manipulation)
+# Remote code execution (file upload, template injection)
+# Data access (SQLi, path traversal, SSRF)</code></pre>
+
   <h2>Web Recon Workflow</h2>
   <pre><code>>#!/bin/bash
 TARGET_URL="https://targetcompany.com"

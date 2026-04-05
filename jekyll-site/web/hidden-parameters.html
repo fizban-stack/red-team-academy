@@ -1,0 +1,100 @@
+---
+layout: training-page
+title: "Hidden Parameters — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - hidden-parameters
+  - parameter-discovery
+  - fuzzing
+  - recon
+page_key: "web-hidden-parameters"
+---
+<h1>Hidden Parameters</h1>
+<p>Web applications often have hidden, undocumented, or legacy parameters not exposed in the user interface. These parameters may have been used during development, debugging, or older versions of the application, and can still be processed by the backend. Discovering these parameters can reveal unauthorized functionality, debug modes, access control bypasses, or additional injection surfaces.</p>
+
+<h2>Tools</h2>
+<ul>
+  <li><strong>param-miner</strong> — Burp Suite extension to identify hidden, unlinked parameters — <code>github.com/PortSwigger/param-miner</code></li>
+  <li><strong>Arjun</strong> — HTTP parameter discovery suite — <code>github.com/s0md3v/Arjun</code></li>
+  <li><strong>x8</strong> — Hidden parameters discovery suite — <code>github.com/Sh1Yo/x8</code></li>
+  <li><strong>waybackurls</strong> — Fetch all URLs the Wayback Machine knows about for a domain — <code>github.com/tomnomnom/waybackurls</code></li>
+  <li><strong>ParamSpider</strong> — Mine URLs from web archives for bug hunting and fuzzing — <code>github.com/devanshbatham/ParamSpider</code></li>
+</ul>
+
+<h2>Brute Force Parameter Discovery</h2>
+<p>Send large wordlists of common parameter names to an endpoint and observe backend behavior changes. Look for differences in response size, status codes, error messages, or content — any unexpected behavior suggests the parameter is being processed.</p>
+<pre><code># x8 — GET parameter discovery
+x8 -u "https://example.com/" -w /path/to/wordlist.txt
+
+# x8 — POST parameter discovery
+x8 -u "https://example.com/" -X POST -w /path/to/wordlist.txt
+
+# Arjun — GET parameter discovery
+arjun -u https://example.com/endpoint
+
+# Arjun — POST parameter discovery
+arjun -u https://example.com/endpoint -m POST
+
+# ffuf — parameter fuzzing
+ffuf -u "https://example.com/?FUZZ=test" -w /path/to/params.txt -mc 200,302,400</code></pre>
+
+<h3>Recommended Wordlists</h3>
+<ul>
+  <li><code>github.com/s0md3v/Arjun/blob/master/arjun/db/large.txt</code></li>
+  <li><code>github.com/s0md3v/Arjun/blob/master/arjun/db/medium.txt</code></li>
+  <li><code>github.com/s0md3v/Arjun/blob/master/arjun/db/small.txt</code></li>
+  <li><code>github.com/the-xentropy/samlists/blob/main/sam-cc-parameters-lowercase-all.txt</code></li>
+  <li><code>github.com/the-xentropy/samlists/blob/main/sam-cc-parameters-mixedcase-all.txt</code></li>
+</ul>
+
+<h2>Old / Historical Parameters</h2>
+<p>Applications evolve and parameters that were used in older versions may still be processed by the backend even if removed from the frontend. Mine archived URLs to find these:</p>
+
+<h3>Wayback Machine</h3>
+<p>Search for archived versions of the target's pages and extract all parameters:</p>
+<pre><code># Fetch all archived URLs for a domain
+waybackurls example.com | grep "?" | sort -u
+
+# Extract unique parameter names from archived URLs
+waybackurls example.com | grep "?" | sed 's/=.*/=/g' | sort -u
+
+# Pipe directly to ffuf for parameter fuzzing
+waybackurls example.com | grep "?" | sort -u | ffuf -w - -u FUZZ -mc 200,301,302</code></pre>
+
+<h3>JavaScript File Analysis</h3>
+<p>JavaScript files often contain API calls, fetch requests, and form submissions with parameters not visible in the HTML. Extract parameters from JS files:</p>
+<pre><code># Download all JS files and grep for parameters
+cat js_urls.txt | xargs -I{} curl -s {} | grep -oP '(?&lt;=[?&amp;])[a-zA-Z_][a-zA-Z0-9_]*(?==)' | sort -u
+
+# Use ParamSpider to extract from archives
+python3 paramspider.py -d example.com --subs</code></pre>
+
+<h2>What to Look For</h2>
+<p>When a parameter is discovered and processed by the server, test it for all relevant vulnerabilities:</p>
+<ul>
+  <li><strong>debug</strong>, <strong>test</strong>, <strong>dev</strong> — may enable debug modes or verbose error output</li>
+  <li><strong>admin</strong>, <strong>role</strong>, <strong>isAdmin</strong> — potential access control bypass</li>
+  <li><strong>callback</strong>, <strong>redirect</strong>, <strong>return_url</strong> — open redirect or SSRF</li>
+  <li><strong>format</strong>, <strong>output</strong>, <strong>type</strong> — content type manipulation</li>
+  <li><strong>id</strong>, <strong>user_id</strong>, <strong>account</strong> — IDOR (Insecure Direct Object Reference)</li>
+  <li><strong>file</strong>, <strong>path</strong>, <strong>filename</strong> — path traversal or LFI</li>
+  <li><strong>q</strong>, <strong>search</strong>, <strong>query</strong> — injection surfaces (SQLi, NoSQLi, XSS)</li>
+</ul>
+
+<h2>Param Miner (Burp)</h2>
+<p>The PortSwigger Param Miner extension automatically identifies hidden parameters by analyzing the application's responses. It uses header-based and body-based techniques to detect parameters that influence the response:</p>
+<ul>
+  <li>Right-click any request in Burp and select "Guess params" &gt; "Guess everything"</li>
+  <li>It tests GET params, POST params, JSON keys, and headers</li>
+  <li>Results appear in the Extender output tab</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>param-miner — <code>github.com/PortSwigger/param-miner</code></li>
+  <li>Arjun — <code>github.com/s0md3v/Arjun</code></li>
+  <li>x8 — <code>github.com/Sh1Yo/x8</code></li>
+  <li>ParamSpider — <code>github.com/devanshbatham/ParamSpider</code></li>
+  <li>Hacker tools: Arjun — The parameter discovery tool — Intigriti Blog</li>
+  <li>Parameter Discovery: A quick guide to start — YesWeHack Blog</li>
+</ul>

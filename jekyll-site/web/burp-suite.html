@@ -1,0 +1,307 @@
+---
+layout: training-page
+title: "Burp Suite Guide — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - burp
+  - web-hacking
+  - proxy
+  - intruder
+  - scanner
+  - bug-bounty
+page_key: "web-burp-suite"
+---
+<h1>Burp Suite Guide</h1>
+
+  <p>Burp Suite is the de facto standard web security testing platform. Every web engagement involves Burp — it sits as an intercepting proxy between your browser and the target, capturing every request and response so you can manipulate, replay, and fuzz them. This guide covers Burp from initial setup through advanced bug-hunting workflows, based on the HackerOne Hacker101 training series.</p>
+
+  <h2>Setup: Proxying Your Browser</h2>
+  <pre><code># Burp listens on 127.0.0.1:8080 by default
+
+# Firefox proxy configuration:
+# Settings → General → Network Settings → Manual proxy:
+# HTTP Proxy: 127.0.0.1  Port: 8080
+# Check "Also use this proxy for HTTPS"
+
+# Install Burp's CA certificate (required for HTTPS interception):
+# 1. Browse to http://burp in Firefox (with proxy enabled)
+# 2. Download the CA certificate
+# 3. Firefox: Settings → Search "certificates" → View Certificates → Import
+# 4. Trust for "identifying websites" and "identifying email users"
+
+# Using FoxyProxy (recommended):
+# Install FoxyProxy extension
+# Add proxy: 127.0.0.1:8080
+# Toggle with one click — no need to change system settings
+
+# Command-line tools through Burp:
+curl --proxy http://127.0.0.1:8080 --cacert burp_ca.pem https://target.com/api/
+
+# For tools that don't support proxy:
+# Use proxychains: proxychains4 tool_name args</code></pre>
+
+  <h2>Core UI Tabs</h2>
+
+  <h3>Target — Site Map &amp; Scope</h3>
+  <pre><code># Site Map: builds a tree of all discovered URLs as you browse
+# Right-click → Add to Scope to scope a domain
+
+# Set up scope FIRST before browsing:
+# Target → Scope → Add target URL
+# Example: https://target.com and subdomains
+
+# Filter proxy history to in-scope only:
+# Proxy → HTTP history → Filter → Show only in-scope items
+
+# Right-click any item → "Send to..." to forward to other Burp tools
+
+# Export site map:
+# Target → Site Map → right-click root → Save selected items</code></pre>
+
+  <h3>Proxy — Intercept &amp; History</h3>
+  <pre><code># Intercept mode: catch requests before they're sent, modify them
+
+# Key Proxy options:
+# - HTTP history: complete log of all proxied traffic
+# - WebSockets history: WebSocket messages
+# - Match and replace: auto-modify requests/responses
+
+# Useful match-and-replace rules:
+# 1. Add custom header to every request:
+#    Match: (empty), Replace: X-Custom-Header: value
+# 2. Remove CSP headers (for testing XSS):
+#    Match type: Response header, Match: Content-Security-Policy.*
+#    Replace: (empty)
+# 3. Change User-Agent globally
+
+# Unhide hidden form fields (useful for finding admin/debug params):
+# Proxy → Options → Response Modification → Unhide hidden form fields
+
+# Filter history for interesting requests:
+# Click "Filter" bar → filter by extension, MIME type, status code</code></pre>
+
+  <h3>Repeater — Manual Request Manipulation</h3>
+  <pre><code># Repeater: send a single request, modify it, resend, compare responses
+# Use for: testing SQL injection, XSS payloads, IDOR, auth bypass
+
+# Send to Repeater:
+# Right-click any request in Proxy history → Send to Repeater
+# Or Ctrl+R
+
+# Workflow:
+# 1. Capture login request in Proxy
+# 2. Send to Repeater (Ctrl+R)
+# 3. In Repeater, modify parameter values
+# 4. Press Send
+# 5. Compare responses (use Response → Render for visual diff)
+
+# Tips:
+# Ctrl+Space: autocompletion for headers
+# Right-click → Change request method (GET ↔ POST)
+# Group tabs to compare related requests side by side
+
+# Identifying XSS in Repeater:
+# Inject: &lt;script&gt;alert(1)&lt;/script&gt; in each parameter
+# If reflected unencoded → XSS
+# Use DOM Invader (Burp browser) for DOM XSS</code></pre>
+
+  <h3>Intruder — Automated Attack Payloads</h3>
+  <pre><code># Intruder: automate fuzzing a single request with payload lists
+
+# Attack types:
+# Sniper:     One payload position, iterate through wordlist
+#             Use for: password brute force, parameter fuzzing
+# Battering ram: Same payload inserted at ALL positions simultaneously
+#             Use for: finding username=X&amp;password=X patterns
+# Pitchfork:  Multiple lists, one payload per position in lockstep
+#             Use for: credential stuffing (username list + password list)
+# Cluster bomb: All combinations of payloads across all positions
+#             Use for: testing all parameter combinations (can be huge)
+
+# Set up Intruder:
+# 1. Send request to Intruder (Ctrl+I)
+# 2. Positions tab: highlight parameter to fuzz → Add §
+# 3. Payloads tab: load wordlist
+# 4. Options: set thread count, grep for success/failure markers
+
+# Common use case — IDOR discovery:
+# Request: GET /api/user?id=§100§
+# Attack type: Sniper
+# Payload: Numbers 1-1000
+# Grep for: 200 responses with different content length
+
+# Finding valid usernames (username enumeration):
+# POST /login with username=§test§&amp;password=wrongpass
+# Sniper attack with username wordlist
+# Different response length/time = valid username
+
+# Useful payload lists (load from SecLists):
+# /usr/share/seclists/Fuzzing/      — generic fuzzing
+# /usr/share/seclists/Passwords/    — password lists
+# /usr/share/seclists/Usernames/    — username lists
+# Built-in: Intruder → Payloads → Payload sets → select type
+
+# NOTE: Intruder is rate-limited in Community edition (1 thread, slow)
+# Use ffuf or Turbo Intruder extension for unrestricted speed</code></pre>
+
+  <h3>Scanner (Burp Pro)</h3>
+  <pre><code># Burp Scanner actively tests for vulnerabilities:
+
+# Passive scanning (always on):
+# Analyzes traffic passing through proxy
+# Flags issues without sending extra requests
+# Check Dashboard → Issue Activity
+
+# Active scanning:
+# Right-click request → "Scan" or "Active scan"
+# Scanner sends targeted attack payloads to test for SQLi, XSS, etc.
+
+# Efficient scanning workflow for bug bounties:
+# 1. Browse app manually — let passive scanner flag low-hanging fruit
+# 2. Identify high-value endpoints (login, search, upload, API calls)
+# 3. Right-click those specific endpoints → Active scan
+# 4. Avoid scanning entire site (noisy, slow, triggers WAF)
+
+# Interpreting findings:
+# High confidence + High severity = investigate immediately
+# Tentative findings = manually verify before reporting
+# Information items = useful recon, not necessarily vulnerabilities
+
+# Customize scan checks:
+# Burp → Settings → Scanner → Active scanning → Configure</code></pre>
+
+  <h2>Decoder — Encoding &amp; Hashing</h2>
+  <pre><code># Decoder handles all encoding transformations:
+# URL encode/decode, Base64, HTML entities, Hex, Gzip
+
+# Decode a JWT token:
+# Paste the token → Decode as Base64 (each section separated by .)
+
+# Decode a URL-encoded payload:
+# Input: %3Cscript%3Ealert(1)%3C%2Fscript%3E
+# Decode as URL → &lt;script&gt;alert(1)&lt;/script&gt;
+
+# Smart decode (auto-detect encoding):
+# Paste any encoded string → "Smart decode" button
+# Strips multiple encoding layers automatically
+
+# Hash data (for CSRF token generation analysis):
+# Paste a value → Hash as MD5/SHA1/SHA256
+# Compare against token values to find predictable tokens</code></pre>
+
+  <h2>Advanced Techniques</h2>
+
+  <h3>CSRF PoC Generation</h3>
+  <pre><code># Burp generates CSRF PoC HTML automatically:
+# Right-click any POST request → Engagement tools → Generate CSRF PoC
+# Opens an HTML form that replays the request when submitted
+# Useful for: demonstrating CSRF in bug bounty reports</code></pre>
+
+  <h3>Invisible Proxying</h3>
+  <pre><code># For thick clients or apps that don't respect proxy settings:
+# Proxy → Options → Proxy Listeners → Edit
+# Enable: "Support invisible proxying"
+# Route traffic via DNS/hosts file spoofing
+
+# Combined with hosts file:
+# 127.0.0.1 api.target.com
+# Then: iptables redirect or use Burp's transparent proxy</code></pre>
+
+  <h3>Turbo Intruder</h3>
+  <pre><code># Turbo Intruder: BApp extension for high-speed attacks
+# Bypasses Community edition throttling
+# Use for: race condition testing, large wordlists
+
+# Install: Extender → BApp Store → Turbo Intruder
+
+# Example script for race conditions (concurrent requests):
+# Right-click request → Extensions → Turbo Intruder
+# Use the race-single-packet-attack.py template for race conditions</code></pre>
+
+  <h3>Burp Macros (Session Handling)</h3>
+  <pre><code># Macros handle CSRF tokens and session renewal automatically:
+# Project Options → Sessions → Session Handling Rules → Add
+# Add a macro that logs in and extracts CSRF token
+# Apply macro to Intruder/Scanner automatically
+
+# Use case: testing authenticated endpoints with Intruder
+# Without macros: session expires, false negatives
+# With macros: Burp re-authenticates automatically per request</code></pre>
+
+  <h2>Bug Bounty Workflow</h2>
+  <pre><code># Efficient Burp workflow for bug hunting:
+
+# 1. Scope setup
+#    Target → Scope → add target URLs
+#    Enable: "Use advanced scope control"
+#    Exclude static assets: *.jpg, *.png, *.css, *.js (reduce noise)
+
+# 2. Passive browse
+#    Browse every page of the application
+#    Log in, explore all features, use all functionality
+#    Let passive scanner and proxy build site map
+
+# 3. Manual review of interesting requests
+#    Filter history: show only 200/302 responses
+#    Look for: POST requests, API calls, file uploads, auth endpoints
+
+# 4. Test high-value endpoints
+#    Parameter tampering in Repeater
+#    IDOR: substitute your user ID with another
+#    Auth bypass: remove auth headers/cookies, see what's accessible
+#    SQLi: add ' to parameters, observe error messages
+
+# 5. Active scan targeted endpoints
+#    Only scan endpoints you've manually reviewed
+#    Avoid scanning /login (lockout risk), logout, admin actions
+
+# 6. Manage project files
+#    Project → Save project (reduces RAM)
+#    Disable: Project Options → Connections → Platform authentication
+#    Reduce scope of logging to avoid huge project files</code></pre>
+
+  <h2>Performance Optimization</h2>
+  <pre><code># Reduce RAM usage (critical for large apps):
+# Proxy → Options → Misc → Set response size limit: 1MB
+# Uncheck: "Automatically update Content-Length"
+# Disable: Extender plugins you're not using
+
+# Shrink project files:
+# Dashboard → right-click project → "Export scan issues to file"
+# Clear out completed scans from Dashboard
+# Burp → Disk-backed project → compress periodically
+
+# Tune thread counts:
+# Intruder: 10-20 threads for web apps (avoid triggering rate limiting)
+# Scanner: 10 threads active scans
+# Crawl: 10 concurrent browser tabs</code></pre>
+
+  <h2>Essential Extensions (BApp Store)</h2>
+  <pre><code># Extender → BApp Store → install:
+
+# Active Testing:
+# Turbo Intruder     — fast Intruder alternative
+# Param Miner        — discover hidden parameters
+# JWT Editor         — JWT manipulation and attacks
+# Autorize           — automated auth bypass testing
+# ActiveScan++       — additional scan checks
+
+# Passive/Analysis:
+# Retire.js          — find vulnerable JS libraries
+# Software Vulnerability Scanner — CVE-based scanning
+# Reflected Parameters — find reflected parameters
+
+# Productivity:
+# Logger++           — advanced request logging
+# Burp Bounty        — custom issue profiles
+# Copy As Python-Requests — export requests as Python code</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Hacker101 Burp 101 — Burp Suite basics and setup</li>
+    <li>Hacker101 Burp 201 — Advanced Intruder and Scanner usage</li>
+    <li>Hacker101 Burp 301 — Bug bounty-focused techniques</li>
+    <li>PortSwigger Web Security Academy — <code>portswigger.net/web-security</code></li>
+    <li>Burp BApp Store — <code>portswigger.net/bappstore</code></li>
+    <li>hacker101.com — free web security training</li>
+  </ul>

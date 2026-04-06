@@ -147,6 +147,8 @@ UnhookFunction("NtOpenProcess");
 
 ## Detecting Hooks Before Unhooking
 
+### Quick Scan (First-Byte Check)
+
 ```
 // Scan ntdll exports for hooks (JMP byte 0xE9 or INT3 0xCC at start):
 HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
@@ -168,6 +170,112 @@ for (DWORD i = 0; i < exp->NumberOfNames; i++) {
     }
 }
 ```
+
+### Full Prologue Inspection — Identify Hook Target DLL
+
+A clean `Nt*` stub always starts with `4C 8B D1 B8` (`mov r10,rcx` / `mov eax,<SSN>`). This full scanner detects JMP hooks, resolves the target address to a DLL name, and reports all hooked functions — useful for auditing the EDR's reach before choosing a bypass strategy.
+
+```cpp
+// detect_hooked_syscalls.cpp
+// Walks all ntdll Nt*/Zw* exports, checks prologue bytes, resolves JMP target DLL.
+#include <Windows.h>
+#include <Psapi.h>
+#include <iostream>
+#include <string>
+#pragma comment(lib, "Psapi.lib")
+
+// Normal syscall stub starts with: mov r10,rcx (4C 8B D1) + mov eax,<SSN> (B8)
+static const BYTE CLEAN_PROLOGUE[] = { 0x4C, 0x8B, 0xD1, 0xB8 };
+
+// Resolve a JMP target address to the containing DLL name
+std::string ResolveModuleForAddress(PVOID addr) {
+    HMODULE mods[1024];
+    DWORD   needed = 0;
+    if (!EnumProcessModules(GetCurrentProcess(), mods, sizeof(mods), &needed))
+        return "unknown";
+
+    for (DWORD i = 0; i < needed / sizeof(HMODULE); i++) {
+        MODULEINFO info = {};
+        GetModuleInformation(GetCurrentProcess(), mods[i], &info, sizeof(info));
+        auto base = (ULONG_PTR)info.lpBaseOfDll;
+        auto size = (ULONG_PTR)info.SizeOfImage;
+        if ((ULONG_PTR)addr >= base && (ULONG_PTR)addr < base + size) {
+            char name[MAX_PATH] = {};
+            GetModuleBaseNameA(GetCurrentProcess(), mods[i], name, sizeof(name));
+            return name;
+        }
+    }
+    return "unknown";
+}
+
+void ScanNtdllHooks() {
+    HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
+    auto* dos = (IMAGE_DOS_HEADER*)hNtdll;
+    auto* nt  = (IMAGE_NT_HEADERS*)((BYTE*)hNtdll + dos->e_lfanew);
+    auto* exp = (IMAGE_EXPORT_DIRECTORY*)(
+        (BYTE*)hNtdll +
+        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+
+    auto* names = (DWORD*)((BYTE*)hNtdll + exp->AddressOfNames);
+    auto* funcs = (DWORD*)((BYTE*)hNtdll + exp->AddressOfFunctions);
+    auto* ords  = (WORD*) ((BYTE*)hNtdll + exp->AddressOfNameOrdinals);
+
+    int hookedCount = 0;
+
+    for (DWORD i = 0; i < exp->NumberOfNames; i++) {
+        const char* name = (const char*)((BYTE*)hNtdll + names[i]);
+
+        // Only inspect Nt* and Zw* syscall stubs
+        if (strncmp(name, "Nt", 2) != 0 && strncmp(name, "Zw", 2) != 0)
+            continue;
+
+        BYTE* func = (BYTE*)hNtdll + funcs[ords[i]];
+
+        // Check if prologue matches expected clean bytes
+        bool clean = (memcmp(func, CLEAN_PROLOGUE, sizeof(CLEAN_PROLOGUE)) == 0);
+        if (clean) continue;
+
+        hookedCount++;
+        printf("[HOOKED] %-40s @ %p  bytes: %02X %02X %02X %02X %02X\n",
+               name, func, func[0], func[1], func[2], func[3], func[4]);
+
+        // Resolve JMP target (E9 = relative JMP, FF 25 = indirect JMP)
+        if (func[0] == 0xE9) {
+            // Relative JMP: target = (func + 5) + 4-byte signed offset
+            int32_t offset = *(int32_t*)(func + 1);
+            PVOID target = func + 5 + offset;
+            std::string modName = ResolveModuleForAddress(target);
+            printf("         └─ JMP → %p (%s)\n", target, modName.c_str());
+        } else if (func[0] == 0xFF && func[1] == 0x25) {
+            // Indirect JMP through pointer
+            PVOID* pTarget = (PVOID*)(func + 6 + *(int32_t*)(func + 2));
+            std::string modName = ResolveModuleForAddress(*pTarget);
+            printf("         └─ JMP [ptr] → %p (%s)\n", *pTarget, modName.c_str());
+        } else if (func[0] == 0xCC) {
+            printf("         └─ INT3 breakpoint (debugger/analysis tool hook)\n");
+        }
+    }
+
+    printf("\n[*] Scan complete. Hooked functions: %d\n", hookedCount);
+}
+
+int main() {
+    ScanNtdllHooks();
+    return 0;
+}
+// Build: cl.exe detect_hooked_syscalls.cpp /link Psapi.lib
+// Output example:
+// [HOOKED] NtOpenProcess                           @ 00007FFC... bytes: E9 XX XX XX XX
+//          └─ JMP → 00007FFB... (CrowdStrikeHook.dll)
+// [HOOKED] NtCreateThreadEx                        @ 00007FFC... bytes: E9 XX XX XX XX
+//          └─ JMP → 00007FFB... (CrowdStrikeHook.dll)
+```
+
+**Interpreting the output:**
+- `E9` (relative JMP) → classic inline hook; note the destination DLL name to identify the EDR
+- `4C 8B D1 B8` → unhooked, clean stub — safe to call without bypass
+- `CC` (INT3) → analysis tool or debugger hook
+- High hook count on `NtCreateThread*`, `NtOpenProcess`, `NtAllocateVirtualMemory` → aggressive EDR; use indirect syscalls
 
 ## Alternative: Load Ntdll Twice
 

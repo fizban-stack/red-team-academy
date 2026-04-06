@@ -330,8 +330,36 @@ crackmapexec mssql 192.168.56.23 -u sa -p password --local-auth</code></pre>
     </tbody>
   </table>
 
+  <h2>Nmap Results Dashboard (Grafana)</h2>
+  <p><code>nmap-did-what</code> parses Nmap XML output into an SQLite database and visualizes it in a pre-configured Grafana dashboard. Useful for managing large scan datasets across multiple subnets and tracking scan history over time.</p>
+  <pre><code># Step 1: Run Nmap and save XML output
+nmap -sV -sC -oX scan.xml 10.10.10.0/24
+
+# Step 2: Clone and set up nmap-did-what
+git clone https://github.com/hackertarget/nmap-did-what
+cd nmap-did-what/data/
+
+# Step 3: Parse XML into SQLite DB
+python nmap-to-sqlite.py ../scan.xml
+# Creates: nmap-did-what/data/nmap_results.db
+
+# Step 4: Start Grafana container
+cd ..
+docker-compose up -d
+
+# Step 5: Access dashboard
+# URL: http://localhost:3000
+# Default credentials: admin / admin
+
+# Run multiple scans and import all — each gets a timestamp
+# Use Grafana time filters to compare scans across dates
+python nmap-to-sqlite.py scan1.xml
+python nmap-to-sqlite.py scan2.xml
+# Both scans visible in dashboard, filterable by time</code></pre>
+
   <h2>Key Resources</h2>
   <ul>
+    <li><code>https://github.com/hackertarget/nmap-did-what</code> — nmap-did-what Grafana dashboard</li>
     <li><code>https://github.com/Pennyw0rth/NetExec</code> — NetExec (CrackMapExec successor)</li>
     <li><code>https://github.com/cddmp/enum4linux-ng</code> — enum4linux-ng</li>
     <li><code>https://github.com/dirkjanm/ldapdomaindump</code> — ldapdomaindump</li>

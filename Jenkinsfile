@@ -4,7 +4,7 @@ pipeline {
     stages {
         stage('Install Dependencies') {
             steps {
-                sh 'cd jekyll-site && bundle install'
+                sh 'cd jekyll-site && bundle config set --local path vendor/bundle && bundle install'
             }
         }
         stage('Build Site') {

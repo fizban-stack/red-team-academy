@@ -9,12 +9,22 @@
 </head>
 <body>
 
+<script>
+// Apply panel states before first paint to avoid layout flash
+(function(){
+  if(localStorage.getItem('sidebar-hidden')==='true') document.body.classList.add('sidebar-hidden');
+  if(localStorage.getItem('notes-hidden')!=='false') document.body.classList.add('notes-hidden');
+})();
+</script>
+
 <header id="navbar">
   <a href="/" class="brand">
     <img src="/images/samurai.svg" alt="Red Team Academy" class="brand-icon" />
     <span class="brand-name">Red Team</span><span class="brand-accent"> Academy</span>
   </a>
   <span class="status-dot"></span>
+  <button id="toggle-sidebar" class="nav-toggle" title="Toggle navigation panel">[nav]</button>
+  <button id="toggle-notes" class="nav-toggle" title="Toggle notes panel">[notes]</button>
   <nav>
     <a href="/">Home</a>
     <a href="/about/">About</a>
@@ -441,6 +451,34 @@
       a.classList.add('active');
     }
   });
+})();
+
+(function() {
+  var sidebarBtn = document.getElementById('toggle-sidebar');
+  var notesBtn = document.getElementById('toggle-notes');
+
+  function syncButtons() {
+    if (sidebarBtn) sidebarBtn.classList.toggle('panel-off', document.body.classList.contains('sidebar-hidden'));
+    if (notesBtn) notesBtn.classList.toggle('panel-off', document.body.classList.contains('notes-hidden'));
+  }
+
+  syncButtons();
+
+  if (sidebarBtn) {
+    sidebarBtn.addEventListener('click', function() {
+      document.body.classList.toggle('sidebar-hidden');
+      localStorage.setItem('sidebar-hidden', document.body.classList.contains('sidebar-hidden'));
+      syncButtons();
+    });
+  }
+
+  if (notesBtn) {
+    notesBtn.addEventListener('click', function() {
+      document.body.classList.toggle('notes-hidden');
+      localStorage.setItem('notes-hidden', document.body.classList.contains('notes-hidden'));
+      syncButtons();
+    });
+  }
 })();
 </script>
 

@@ -607,6 +607,48 @@ a:hover {
   gap: 16px;
 }
 
+/* ── Panel Toggle Buttons ── */
+.nav-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 4px 8px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.nav-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--green-dim);
+  border-color: var(--green-dark);
+}
+
+.nav-toggle.panel-off {
+  color: var(--green-dim);
+  border-color: var(--green-dark);
+  background: var(--green-dark);
+}
+
+/* Sidebar hidden state */
+body.sidebar-hidden #sidebar {
+  display: none;
+}
+
+/* Notes hidden state */
+body.notes-hidden .notes-panel {
+  display: none;
+}
+
 /* ── Utility ── */
 .tag-module {
   display: inline-block;

@@ -20,7 +20,7 @@ pipeline {
                 --no-owner \
                 --no-group \
                 --no-times \
-                ./jekyll-site/_site/ /var/www/red-team/
+                ./jekyll-site/_site/ /var/www/red-team-academy/
             '''
             }
         }

@@ -125,7 +125,7 @@ HTML smuggling
 # - Credentials submitted (form capture)
 
 # Custom tracking pixel
-&lt;img src="https://track.attacker.com/open/{{.RId}}" width="1" height="1" /&gt;
+&lt;img src="https://track.attacker.com/open/{% raw %}{{.RId}}{% endraw %}" width="1" height="1" /&gt;
 
 # Per-target unique links
 https://attacker.com/verify?token=&lt;unique-per-target-token&gt;

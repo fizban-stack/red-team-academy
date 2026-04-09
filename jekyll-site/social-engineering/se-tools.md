@@ -22,7 +22,7 @@ page_key: "se-tools"
 # Admin UI: https://localhost:3333 (default admin / gophish)
 
 # Key features:
-# - Email templates with variable substitution {{.FirstName}}, {{.Email}}
+# - Email templates with variable substitution {% raw %}{{.FirstName}}, {{.Email}}{% endraw %}
 # - Landing page cloning
 # - Per-target tracking links
 # - Campaign results dashboard (sent, opened, clicked, submitted)

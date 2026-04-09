@@ -1,0 +1,725 @@
+- num: "01"
+  title: Fundamentals
+  pages:
+    - url: /fundamentals/methodology/
+      title: Red Team Methodology
+    - url: /fundamentals/engagement-planning/
+      title: Engagement Planning
+    - url: /fundamentals/mitre-attack/
+      title: MITRE ATT&CK Framework
+    - url: /fundamentals/lab-setup/
+      title: Lab Setup & Environment
+    - url: /fundamentals/linux-basics/
+      title: Linux Fundamentals
+    - url: /fundamentals/windows-basics/
+      title: Windows Fundamentals
+    - url: /fundamentals/opsec/
+      title: OPSEC Basics
+    - url: /fundamentals/ceh-practical/
+      title: CEH Practical Exam Guide
+    - url: /fundamentals/oscp-prep/
+      title: OSCP Preparation Guide
+
+- num: "02"
+  title: Reconnaissance
+  pages:
+    - url: /recon/passive-recon/
+      title: Passive Recon (OSINT)
+    - url: /recon/active-recon/
+      title: Active Recon (Scanning)
+    - url: /recon/network-enum/
+      title: Network Enumeration
+    - url: /recon/subdomain-enum/
+      title: Subdomain Enumeration
+    - url: /recon/web-recon/
+      title: Web Reconnaissance
+    - url: /recon/email-osint/
+      title: Email OSINT
+    - url: /recon/infrastructure-mapping/
+      title: Infrastructure Mapping
+    - url: /recon/wordlist-guide/
+      title: SecLists Wordlist Guide
+    - url: /recon/olfa-guide/
+      title: OneListForAll Guide
+    - url: /recon/hacks-tools/
+      title: tomnomnom Hacks Suite
+    - url: /recon/csp-recon/
+      title: CSP Reconnaissance
+    - url: /recon/dark-web-osint/
+      title: Dark Web OSINT
+    - url: /recon/dark-web-cti/
+      title: Dark Web CTI Sources
+    - url: /recon/subdomain-takeover/
+      title: Subdomain Takeover
+    - url: /recon/maltego-osint/
+      title: Maltego OSINT
+    - url: /recon/ghost-scout/
+      title: Ghost Scout (AI OSINT)
+    - url: /recon/trevorspray/
+      title: TREVORspray — Password Spraying
+    - url: /recon/dnschef/
+      title: DNSChef — DNS Proxy
+    - url: /recon/nettacker/
+      title: OWASP Nettacker
+
+- num: "03"
+  title: Active Directory
+  pages:
+    - url: /active-directory/ad-enumeration/
+      title: AD Enumeration
+    - url: /active-directory/goad/
+      title: Game of Active Directory
+    - url: /active-directory/kerberoasting/
+      title: Kerberoasting & AS-REP
+    - url: /active-directory/pass-the-hash/
+      title: Pass-the-Hash / PTT
+    - url: /active-directory/bloodhound/
+      title: BloodHound / SharpHound
+    - url: /active-directory/dcsync/
+      title: DCSync & Golden Ticket
+    - url: /active-directory/acl-abuse/
+      title: ACL / ACE Abuse
+    - url: /active-directory/ntlm-relay/
+      title: NTLM Relay Attacks
+    - url: /active-directory/domain-trusts/
+      title: Domain Trusts
+    - url: /active-directory/asreproasting/
+      title: AS-REProasting
+    - url: /active-directory/adcs-attacks/
+      title: ADCS Attacks
+    - url: /active-directory/kerberos-delegation/
+      title: Kerberos Delegation Attacks
+    - url: /active-directory/ntds-dumping/
+      title: NTDS Dumping
+    - url: /active-directory/sccm-attacks/
+      title: SCCM / MECM Attacks
+    - url: /active-directory/ad-persistence/
+      title: AD Persistence
+    - url: /active-directory/azure-ad/
+      title: Azure AD / Entra ID
+    - url: /active-directory/azure-recon/
+      title: Azure AD Reconnaissance
+    - url: /active-directory/azure-credential-access/
+      title: Azure Credential Access
+    - url: /active-directory/azure-privilege-escalation/
+      title: Azure Privilege Escalation
+    - url: /active-directory/azure-lateral-movement/
+      title: Azure Lateral Movement
+    - url: /active-directory/azure-persistence/
+      title: Azure Persistence
+    - url: /active-directory/azure-services-abuse/
+      title: Abusing Azure Services
+    - url: /active-directory/azure-defense-evasion/
+      title: Azure Defense Evasion
+    - url: /cloud/aws-attacks/
+      title: AWS Penetration Testing
+    - url: /cloud/gcp-attacks/
+      title: GCP Penetration Testing
+    - url: /active-directory/shadow-credentials/
+      title: Shadow Credentials
+    - url: /active-directory/coercion-attacks/
+      title: Coercion Attacks
+    - url: /active-directory/ad-lotl/
+      title: AD Living Off the Land
+    - url: /active-directory/titanis/
+      title: Titanis Protocol Toolkit
+    - url: /active-directory/winproto/
+      title: winproto — KDC & NMF MITM
+    - url: /active-directory/ad-tools-reference/
+      title: AD Tools Reference
+
+- num: "04"
+  title: Pivoting & Tunneling
+  pages:
+    - url: /pivoting/ssh-tunneling/
+      title: SSH Tunneling
+    - url: /pivoting/chisel-socks/
+      title: Chisel & SOCKS5
+    - url: /pivoting/metasploit-pivoting/
+      title: Metasploit Pivoting
+    - url: /pivoting/dns-icmp-tunneling/
+      title: DNS & ICMP Tunneling
+    - url: /pivoting/sshuttle-rpivot/
+      title: sshuttle & rpivot
+    - url: /pivoting/windows-pivoting/
+      title: Windows Pivoting
+
+- num: "05"
+  title: Evasion
+  pages:
+    - url: /evasion/amsi-bypass/
+      title: AMSI Bypass
+    - url: /evasion/av-edr-evasion/
+      title: AV / EDR Evasion
+    - url: /evasion/lolbins/
+      title: LOLBins & LOLBAS
+    - url: /evasion/lolbas-reference/
+      title: LOLBAS Full Reference
+    - url: /evasion/fileless-techniques/
+      title: Fileless Techniques
+    - url: /evasion/windows-defender/
+      title: Windows Defender
+    - url: /evasion/malware-dev/
+      title: Malware Development
+    - url: /evasion/kernel-exploitation/
+      title: Kernel Exploitation
+    - url: /evasion/indirect-syscalls/
+      title: Indirect Syscalls
+    - url: /evasion/sleep-obfuscation/
+      title: Sleep Obfuscation
+    - url: /evasion/stack-spoofing/
+      title: Stack Spoofing
+    - url: /evasion/etw-bypass/
+      title: ETW Bypass
+    - url: /evasion/dll-unhooking/
+      title: DLL Unhooking
+    - url: /evasion/process-ghosting/
+      title: Process Ghosting
+    - url: /evasion/apc-injection/
+      title: APC Injection
+    - url: /evasion/pe-obfuscation/
+      title: PE Obfuscation
+    - url: /evasion/lotl-advanced/
+      title: Advanced LOTL Techniques
+    - url: /evasion/sophos-xdr/
+      title: Sophos XDR Evasion
+    - url: /evasion/windows-evasion-reference/
+      title: Windows Evasion Reference
+    - url: /evasion/shellcode-loaders/
+      title: Shellcode Loaders
+    - url: /evasion/avet/
+      title: AVET — AV Evasion Tool
+    - url: /evasion/windows-api-evasion/
+      title: Windows API Evasion
+    - url: /evasion/veil/
+      title: Veil & Magic Unicorn
+    - url: /evasion/codecepticon/
+      title: Codecepticon — Source Obfuscation
+    - url: /evasion/anti-analysis/
+      title: Anti-Analysis Techniques
+    - url: /evasion/payload-encryption/
+      title: Payload Encryption & Obfuscation
+    - url: /evasion/binary-padding/
+      title: Binary Padding & Oversized Files
+    - url: /evasion/dll-hijacking/
+      title: DLL Hijacking
+    - url: /evasion/thread-hijacking/
+      title: Remote Thread Hijacking
+    - url: /evasion/hookchain/
+      title: HookChain & Halo's Gate
+    - url: /evasion/smartscreen-motw/
+      title: SmartScreen & MOTW Bypass
+    - url: /evasion/powershell-without-ps/
+      title: PowerShell Without powershell.exe
+    - url: /evasion/html-smuggling/
+      title: HTML Smuggling
+    - url: /evasion/outflank-ost/
+      title: Outflank OST
+    - url: /evasion/windbg-reference/
+      title: WinDbg Reference
+    - url: /evasion/kernel-mitigations/
+      title: Kernel Mitigations
+
+- num: "06"
+  title: Exploitation
+  pages:
+    - url: /exploitation/metasploitable/
+      title: Metasploitable
+    - url: /exploitation/web-attacks/
+      title: Web Attacks (OWASP)
+    - url: /exploitation/service-exploits/
+      title: Service Exploitation
+    - url: /exploitation/password-attacks/
+      title: Password Attacks
+    - url: /exploitation/credential-attacks/
+      title: Credential Attacks (SecLists)
+    - url: /exploitation/offensive-python/
+      title: Offensive Python
+    - url: /exploitation/initial-access/
+      title: Initial Access Techniques
+    - url: /exploitation/reverse-shells/
+      title: Reverse Shell Cheat Sheet
+    - url: /exploitation/malware-dev-intro/
+      title: Malware Dev Fundamentals
+    - url: /exploitation/process-injection/
+      title: Process Injection & DLL Hijacking
+    - url: /exploitation/shellcoding/
+      title: Shellcoding
+    - url: /exploitation/nishang/
+      title: Nishang PowerShell Framework
+    - url: /exploitation/pwntools/
+      title: pwntools & CTF Exploits
+    - url: /exploitation/cve-poc-research/
+      title: CVE PoC Research
+    - url: /exploitation/password-cracking-guide/
+      title: Password Cracking Guide
+    - url: /exploitation/hash-collisions/
+      title: Hash Collisions & File Format Exploits
+    - url: /exploitation/malware-analysis/
+      title: Malware Analysis
+    - url: /exploitation/vba-macro-shellcode/
+      title: VBA Macro Shellcode Loaders
+    - url: /exploitation/lnk-weaponization/
+      title: Weaponized LNK Files
+    - url: /exploitation/userland-exploitation/
+      title: Userland Exploitation & ROP
+    - url: /exploitation/kernel-fuzzing/
+      title: Kernel Driver Fuzzing
+    - url: /exploitation/windows-process-internals/
+      title: Windows Process Internals
+
+- num: "07"
+  title: Post-Exploitation
+  pages:
+    - url: /post-exploitation/privesc-linux/
+      title: Privesc — Linux
+    - url: /post-exploitation/privesc-windows/
+      title: Privesc — Windows
+    - url: /post-exploitation/lateral-movement/
+      title: Lateral Movement
+    - url: /post-exploitation/persistence/
+      title: Persistence
+    - url: /post-exploitation/data-exfil/
+      title: Data Exfiltration
+    - url: /post-exploitation/browser-credentials/
+      title: Browser Credential Extraction
+    - url: /post-exploitation/lsass-dumping/
+      title: LSASS Dumping
+
+- num: "08"
+  title: C2 Frameworks
+  pages:
+    - url: /c2-frameworks/metasploit/
+      title: Metasploit Framework
+    - url: /c2-frameworks/cobalt-strike/
+      title: Cobalt Strike
+    - url: /c2-frameworks/sliver/
+      title: Sliver
+    - url: /c2-frameworks/havoc/
+      title: Havoc C2
+    - url: /c2-frameworks/brute-ratel/
+      title: Brute Ratel C4
+    - url: /c2-frameworks/bof/
+      title: Beacon Object Files
+    - url: /c2-frameworks/mythic/
+      title: Mythic C2
+    - url: /c2-frameworks/malleable-c2/
+      title: Malleable C2 Profiles
+    - url: /c2-frameworks/redirectors/
+      title: C2 Redirectors
+    - url: /c2-frameworks/c2-opsec/
+      title: C2 OPSEC
+    - url: /c2-frameworks/c2-tiered-architecture/
+      title: C2 Tiered Architecture
+    - url: /c2-frameworks/baiao-c2/
+      title: BaiaoC2
+    - url: /c2-frameworks/specula/
+      title: Specula (Outlook C2)
+    - url: /c2-frameworks/gophish/
+      title: GoPhish Phishing Framework
+    - url: /c2-frameworks/evilginx/
+      title: Evilginx AiTM Framework
+
+- num: "09"
+  title: Web Hacking
+  pages:
+    - url: /web/sql-injection/
+      title: SQL Injection
+    - url: /web/xss/
+      title: XSS & CSP Bypass
+    - url: /web/http-headers-security/
+      title: HTTP Security Headers
+    - url: /web/authentication-attacks/
+      title: Authentication Attacks
+    - url: /web/session-attacks/
+      title: Session Management Attacks
+    - url: /web/rest-api-testing/
+      title: REST API Testing
+    - url: /web/ssrf/
+      title: SSRF
+    - url: /web/ssti/
+      title: SSTI — Template Injection
+    - url: /web/idor/
+      title: IDOR
+    - url: /web/race-conditions/
+      title: Race Conditions
+    - url: /web/web-cache-poisoning/
+      title: Web Cache Poisoning
+    - url: /web/crlf-injection/
+      title: CRLF Injection
+    - url: /web/open-redirect/
+      title: Open Redirect
+    - url: /web/dns-rebinding/
+      title: DNS Rebinding
+    - url: /web/jwt-attacks/
+      title: JWT Attacks
+    - url: /web/graphql/
+      title: GraphQL Attacks
+    - url: /web/http-smuggling/
+      title: HTTP Smuggling
+    - url: /web/oauth-attacks/
+      title: OAuth / OIDC
+    - url: /web/xxe/
+      title: XXE Injection
+    - url: /web/prototype-pollution/
+      title: Prototype Pollution
+    - url: /web/api-testing/
+      title: API Testing
+    - url: /web/file-upload/
+      title: File Upload Attacks
+    - url: /web/fuzzing-payloads/
+      title: Fuzzing Payloads (SecLists)
+    - url: /web/burp-bambdas/
+      title: Burp Suite Bambdas
+    - url: /web/bug-bounty-methodology/
+      title: Bug Bounty Methodology
+    - url: /web/bug-bounty-tools/
+      title: Bug Bounty Tools
+    - url: /web/bug-bounty-resources/
+      title: Bug Bounty Resources
+    - url: /web/403-bypass/
+      title: 403 / 401 Bypass
+    - url: /web/web-pentest-checklist/
+      title: Web Pentest Checklist
+    - url: /web/wstg-testing-guide/
+      title: OWASP WSTG Testing Guide
+    - url: /web/top-25-parameters/
+      title: OWASP Top 25 Parameters
+    - url: /web/burp-suite/
+      title: Burp Suite Guide
+    - url: /web/file-inclusion/
+      title: File Inclusion (LFI / RFI)
+    - url: /web/command-injection/
+      title: Command Injection
+    - url: /web/csrf/
+      title: CSRF
+    - url: /web/nosql-injection/
+      title: NoSQL Injection
+    - url: /web/cors-misconfiguration/
+      title: CORS Misconfiguration
+    - url: /web/ldap-injection/
+      title: LDAP Injection
+    - url: /web/mass-assignment/
+      title: Mass Assignment
+    - url: /web/insecure-deserialization/
+      title: Insecure Deserialization
+    - url: /web/clickjacking/
+      title: Clickjacking
+    - url: /web/dom-clobbering/
+      title: DOM Clobbering
+    - url: /web/type-juggling/
+      title: Type Juggling
+    - url: /web/xs-leak/
+      title: XS-Leak (Side-Channel)
+    - url: /web/web-cache-deception/
+      title: Web Cache Deception
+    - url: /web/business-logic/
+      title: Business Logic Errors
+    - url: /web/account-takeover/
+      title: Account Takeover
+    - url: /web/saml-injection/
+      title: SAML Injection
+    - url: /web/xpath-injection/
+      title: XPath Injection
+    - url: /web/websockets/
+      title: WebSocket Security
+    - url: /web/css-injection/
+      title: CSS Injection
+    - url: /web/reverse-proxy-misconfig/
+      title: Reverse Proxy Misconfigurations
+    - url: /web/brute-force/
+      title: Brute Force & Rate Limit Bypass
+    - url: /web/api-key-leaks/
+      title: API Key Leaks
+    - url: /web/dependency-confusion/
+      title: Dependency Confusion
+    - url: /web/latex-injection/
+      title: LaTeX Injection
+    - url: /web/zip-slip/
+      title: Zip Slip
+    - url: /web/xslt-injection/
+      title: XSLT Injection
+    - url: /web/orm-leak/
+      title: ORM Leak
+    - url: /web/hidden-parameters/
+      title: Hidden Parameters
+    - url: /web/source-code-disclosure/
+      title: Insecure Source Code Management
+    - url: /web/regex-bypass/
+      title: ReDoS & Regex Bypass
+    - url: /web/tabnabbing/
+      title: Tabnabbing
+    - url: /web/virtual-host-attacks/
+      title: Virtual Host Attacks
+    - url: /web/encoding-transformations/
+      title: Encoding Transformations
+    - url: /web/http-parameter-pollution/
+      title: HTTP Parameter Pollution
+    - url: /web/csv-injection/
+      title: CSV Injection
+    - url: /web/ssi-injection/
+      title: SSI & ESI Injection
+    - url: /web/java-rmi/
+      title: Java RMI Attacks
+    - url: /web/insecure-randomness/
+      title: Insecure Randomness
+    - url: /web/insecure-management-interface/
+      title: Insecure Management Interface
+    - url: /web/client-side-path-traversal/
+      title: Client Side Path Traversal
+    - url: /web/external-variable-modification/
+      title: External Variable Modification
+    - url: /web/gwt-injection/
+      title: GWT Injection
+    - url: /web/application-dos/
+      title: Application-Layer DoS
+    - url: /web/web-hacking-methodology/
+      title: Web Hacking Methodology
+    - url: /web/recollapse/
+      title: REcollapse — Regex Fuzzing
+    - url: /web/iis-shortscan/
+      title: IIS Short Filename Enumeration
+    - url: /web/social-engineer-toolkit/
+      title: Social-Engineer Toolkit (SET)
+    - url: /web/reset-tolkien/
+      title: Reset Tolkien (Time-Based Tokens)
+    - url: /web/shadowphish/
+      title: ShadowPhish APT Toolkit
+    - url: /web/postmessage-attacks/
+      title: postMessage Attacks
+
+- num: "10"
+  title: Wireless Attacks
+  pages:
+    - url: /wireless/wireless-overview/
+      title: Overview & Hardware
+    - url: /wireless/wifi-attacks/
+      title: Wi-Fi Attacks
+    - url: /wireless/bluetooth-attacks/
+      title: Bluetooth Attacks
+    - url: /wireless/nfc-attacks/
+      title: NFC Attacks
+    - url: /wireless/rfid-attacks/
+      title: RFID Attacks
+    - url: /wireless/omg-cable/
+      title: O.MG Cable & HID Payloads
+    - url: /wireless/sdr-attacks/
+      title: SDR Attacks
+    - url: /wireless/zigbee-zwave/
+      title: Zigbee & Z-Wave Attacks
+    - url: /wireless/captive-portal-bypass/
+      title: Captive Portal Bypass
+    - url: /wireless/flipper-zero/
+      title: Flipper Zero & Wi-Fi Dev Board
+    - url: /wireless/esp32-rpi-implants/
+      title: ESP32 & Raspberry Pi Implants
+
+- num: "11"
+  title: IoT Hacking
+  pages:
+    - url: /iot/firmware-extraction/
+      title: Firmware Extraction
+    - url: /iot/hardware-hacking/
+      title: Hardware Hacking
+    - url: /iot/mqtt-coap/
+      title: MQTT / CoAP Attacks
+    - url: /iot/ble-rf/
+      title: BLE & RF Attacks
+    - url: /iot/default-creds/
+      title: Default Credentials
+    - url: /iot/ota-attacks/
+      title: OTA Firmware Attacks
+    - url: /iot/router-exploitation/
+      title: Router Exploitation
+    - url: /iot/industrial/
+      title: Industrial Protocols
+
+- num: "12"
+  title: AI Red Team Agents
+  pages:
+    - url: /ai-agents/edge-llm-setup/
+      title: Edge LLM Setup
+    - url: /ai-agents/red-team-agents/
+      title: AI Red Team Agents
+    - url: /ai-agents/ad-recon-agent/
+      title: AD Recon AI Agent
+    - url: /ai-agents/prompt-injection/
+      title: Prompt Injection Taxonomy
+    - url: /ai-agents/ai-code-security/
+      title: AI-Generated Code Security
+    - url: /ai-agents/mcp-security/
+      title: MCP Security Attacks
+    - url: /ai-agents/ai-agent-attacks/
+      title: AI Agent Attacks
+    - url: /ai-agents/ai-security-bots/
+      title: AI Security Bots (Prompt Library)
+    - url: /ai-agents/offensive-ai-foundations/
+      title: Offensive AI Foundations
+    - url: /ai-agents/ai-kill-chain/
+      title: AI in the Cyber Kill Chain
+    - url: /ai-agents/ai-osint-recon/
+      title: AI-Powered OSINT & Recon
+    - url: /ai-agents/fine-tuning-offsec/
+      title: Fine-Tuning vs Prompt Engineering
+    - url: /ai-agents/ai-red-team-eval/
+      title: AI Red Team Evaluation
+
+- num: "13"
+  title: Red Team Tools
+  pages:
+    - url: /tools/overview/
+      title: Tool Overview
+    - url: /tools/recon-tools/
+      title: Reconnaissance Tools
+    - url: /tools/ad-tools/
+      title: Active Directory Tools
+    - url: /tools/exploitation-tools/
+      title: Exploitation Tools
+    - url: /tools/post-exploitation-tools/
+      title: Post-Exploitation Tools
+    - url: /tools/evasion-tools/
+      title: Evasion & Obfuscation
+    - url: /tools/network-tools/
+      title: Network & Pivoting Tools
+    - url: /tools/password-tools/
+      title: Password & Credential Tools
+    - url: /tools/web-tools/
+      title: Web Hacking Tools
+    - url: /tools/wireless-tools/
+      title: Wireless Attack Tools
+    - url: /tools/docker-security/
+      title: Docker Security & Escape
+    - url: /tools/kubernetes-security/
+      title: Kubernetes Security Attacks
+    - url: /tools/pentest-resources/
+      title: Pentesting Resources Bible
+    - url: /tools/red-teaming-toolkit/
+      title: Red Teaming Toolkit (OST Catalog)
+    - url: /tools/hacking-resources/
+      title: Hacking Learning Resources
+    - url: /tools/default-credentials/
+      title: Default Credentials Reference
+
+- num: "14"
+  title: Tool Development
+  pages:
+    - url: /tool-dev/python-network-recon/
+      title: "Python: Network Recon"
+    - url: /tool-dev/python-osint-automation/
+      title: "Python: OSINT Automation"
+    - url: /tool-dev/python-port-scanner/
+      title: "Python: Port Scanner & Service Enum"
+    - url: /tool-dev/python-ad-tools/
+      title: "Python: AD Attack Tools"
+    - url: /tool-dev/python-exploitation-scripts/
+      title: "Python: Exploitation Scripts"
+    - url: /tool-dev/python-web-exploitation/
+      title: "Python: Web Exploitation"
+    - url: /tool-dev/python-c2-shells/
+      title: "Python: C2 & Reverse Shells"
+    - url: /tool-dev/python-payload-dev/
+      title: "Python: Payload Development"
+    - url: /tool-dev/powershell-network-recon/
+      title: "PS: Network & Recon"
+    - url: /tool-dev/powershell-ad-attacks/
+      title: "PS: AD Attack Tools"
+    - url: /tool-dev/powershell-post-exploitation/
+      title: "PS: Post-Exploitation"
+    - url: /tool-dev/powershell-evasion/
+      title: "PS: Evasion Techniques"
+    - url: /tool-dev/go-network-tools/
+      title: "Go: Network Tools"
+    - url: /tool-dev/go-c2-implants/
+      title: "Go: C2 Implant Dev"
+    - url: /tool-dev/go-windows-api/
+      title: "Go: Windows API"
+    - url: /tool-dev/go-evasion/
+      title: "Go: Evasion & Obfuscation"
+    - url: /tool-dev/cpp-offensive/
+      title: "C++: Offensive Techniques"
+    - url: /tool-dev/windows-api-reference/
+      title: "C++: Windows API Reference"
+    - url: /tool-dev/windows-api-concepts/
+      title: "C++: Windows API Concepts"
+    - url: /tool-dev/emojichef/
+      title: "EmojiChef: Emoji Encoding"
+
+- num: "15"
+  title: Reporting
+  pages:
+    - url: /reporting/findings/
+      title: Documenting Findings
+    - url: /reporting/executive-report/
+      title: Executive Report
+    - url: /reporting/technical-report/
+      title: Technical Report
+    - url: /reporting/red-team-operations-framework/
+      title: Operations Framework
+    - url: /reporting/phishing-campaign/
+      title: Phishing Campaign Methodology
+    - url: /reporting/physical-pentest/
+      title: Physical Penetration Testing
+
+- num: "16"
+  title: Social Engineering
+  pages:
+    - url: /social-engineering/overview/
+      title: SE Overview & Methodology
+    - url: /social-engineering/pretexting/
+      title: Pretexting Scenarios
+    - url: /social-engineering/phishing-tradecraft/
+      title: Phishing Tradecraft
+    - url: /social-engineering/spear-phishing/
+      title: Spear Phishing
+    - url: /social-engineering/vishing/
+      title: Vishing
+    - url: /social-engineering/smishing/
+      title: Smishing
+    - url: /social-engineering/se-osint/
+      title: OSINT for Social Engineering
+    - url: /social-engineering/se-tools/
+      title: SE Tools Reference
+
+- num: "18"
+  title: Network Attacks
+  pages:
+    - url: /network-attacks/overview/
+      title: Network Attack Overview
+    - url: /network-attacks/responder/
+      title: Responder & LLMNR Poisoning
+    - url: /network-attacks/mitm6/
+      title: mitm6 — IPv6 MITM
+    - url: /network-attacks/arp-mitm/
+      title: ARP Spoofing & Bettercap
+    - url: /network-attacks/vlan-hopping/
+      title: VLAN Hopping
+    - url: /network-attacks/nac-bypass/
+      title: NAC / 802.1X Bypass
+    - url: /network-attacks/dhcp-attacks/
+      title: DHCP Attacks
+    - url: /network-attacks/credential-hunting/
+      title: Network Credential Hunting
+    - url: /network-attacks/network-scanning/
+      title: Network Scanning & Mapping
+
+- num: "17"
+  title: Mobile Security
+  pages:
+    - url: /mobile/overview/
+      title: Mobile Security Overview
+    - url: /mobile/android-setup/
+      title: Android Pentest Setup
+    - url: /mobile/ios-setup/
+      title: iOS Pentest Setup
+    - url: /mobile/apk-analysis/
+      title: APK Static Analysis
+    - url: /mobile/frida/
+      title: Frida Dynamic Instrumentation
+    - url: /mobile/objection/
+      title: Objection Framework
+    - url: /mobile/ssl-pinning-bypass/
+      title: SSL Pinning Bypass
+    - url: /mobile/android-exploitation/
+      title: Android Exploitation
+    - url: /mobile/ios-analysis/
+      title: iOS App Analysis

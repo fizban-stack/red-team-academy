@@ -117,6 +117,8 @@
       title: AWS Penetration Testing
     - url: /cloud/gcp-attacks/
       title: GCP Penetration Testing
+    - url: /cloud/iac-misconfig/
+      title: IaC & Terraform Attacks
     - url: /active-directory/shadow-credentials/
       title: Shadow Credentials
     - url: /active-directory/coercion-attacks/
@@ -279,6 +281,10 @@
       title: CI/CD Pipeline Attacks
     - url: /exploitation/device-code-phishing/
       title: Device Code Phishing & OAuth Attacks
+    - url: /exploitation/database-attacks/
+      title: Database Exploitation
+    - url: /exploitation/edge-device-exploitation/
+      title: VPN & Edge Device Exploitation
 
 - num: "07"
   title: Post-Exploitation
@@ -309,6 +315,8 @@
       title: Metasploit Framework
     - url: /c2-frameworks/cobalt-strike/
       title: Cobalt Strike
+    - url: /c2-frameworks/cobalt-strike-kits/
+      title: CS Kit Customization
     - url: /c2-frameworks/sliver/
       title: Sliver
     - url: /c2-frameworks/havoc/
@@ -503,6 +511,8 @@
       title: ShadowPhish APT Toolkit
     - url: /web/postmessage-attacks/
       title: postMessage Attacks
+    - url: /web/grpc-attacks/
+      title: gRPC & Protobuf Attacks
 
 - num: "10"
   title: Wireless Attacks
@@ -661,6 +671,10 @@
       title: "C++: Windows API Concepts"
     - url: /tool-dev/rust-offensive/
       title: "Rust: Offensive Tool Development"
+    - url: /tool-dev/csharp-offensive/
+      title: "C#: Offensive .NET Development"
+    - url: /tool-dev/quick-projects/
+      title: "Quick Coding Projects"
     - url: /tool-dev/emojichef/
       title: "EmojiChef: Emoji Encoding"
 

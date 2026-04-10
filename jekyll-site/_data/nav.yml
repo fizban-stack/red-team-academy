@@ -19,6 +19,8 @@
       title: CEH Practical Exam Guide
     - url: /fundamentals/oscp-prep/
       title: OSCP Preparation Guide
+    - url: /fundamentals/purple-teaming/
+      title: Purple Teaming & Detection Engineering
 
 - num: "02"
   title: Reconnaissance
@@ -125,6 +127,8 @@
       title: Titanis Protocol Toolkit
     - url: /active-directory/winproto/
       title: winproto — KDC & NMF MITM
+    - url: /active-directory/dpapi-abuse/
+      title: DPAPI Abuse & Credential Extraction
     - url: /active-directory/ad-tools-reference/
       title: AD Tools Reference
 
@@ -219,6 +223,10 @@
       title: WinDbg Reference
     - url: /evasion/kernel-mitigations/
       title: Kernel Mitigations
+    - url: /evasion/byovd/
+      title: BYOVD (Vulnerable Driver Abuse)
+    - url: /evasion/edr-internals/
+      title: EDR Internals & Architecture
 
 - num: "06"
   title: Exploitation
@@ -267,6 +275,10 @@
       title: Kernel Driver Fuzzing
     - url: /exploitation/windows-process-internals/
       title: Windows Process Internals
+    - url: /exploitation/cicd-attacks/
+      title: CI/CD Pipeline Attacks
+    - url: /exploitation/device-code-phishing/
+      title: Device Code Phishing & OAuth Attacks
 
 - num: "07"
   title: Post-Exploitation
@@ -285,6 +297,10 @@
       title: Browser Credential Extraction
     - url: /post-exploitation/lsass-dumping/
       title: LSASS Dumping
+    - url: /post-exploitation/linux-persistence/
+      title: Linux Persistence Techniques
+    - url: /post-exploitation/macos-red-team/
+      title: macOS Red Teaming
 
 - num: "08"
   title: C2 Frameworks
@@ -599,6 +615,8 @@
       title: Hacking Learning Resources
     - url: /tools/default-credentials/
       title: Default Credentials Reference
+    - url: /tools/container-escape/
+      title: Container Escape Techniques
 
 - num: "14"
   title: Tool Development
@@ -641,6 +659,8 @@
       title: "C++: Windows API Reference"
     - url: /tool-dev/windows-api-concepts/
       title: "C++: Windows API Concepts"
+    - url: /tool-dev/rust-offensive/
+      title: "Rust: Offensive Tool Development"
     - url: /tool-dev/emojichef/
       title: "EmojiChef: Emoji Encoding"
 

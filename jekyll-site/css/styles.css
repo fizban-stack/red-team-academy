@@ -169,9 +169,11 @@ strong, b {
 }
 
 #navbar .brand .brand-icon {
-  width: 26px;
-  height: 26px;
+  width: 22px;   /* narrow: the samurai SVG is portrait 200x215 */
+  height: 36px;  /* taller to show the full figure */
   flex-shrink: 0;
+  /* slight drop shadow to lift the figure off the dark navbar */
+  filter: drop-shadow(0 1px 4px rgba(204, 34, 0, 0.4));
 }
 
 #navbar .brand .brand-name  { color: var(--text-0); }

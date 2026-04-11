@@ -1,18 +1,45 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <!-- Red Team Academy favicon — Samurai Kabuto -->
+  <!--
+    Red Team Academy — Favicon
+    Simplified kabuto (helmet) optimised for 16–64px display.
+    Crimson red armour, glowing red eyes behind the visor slit.
+  -->
 
-  <!-- Maedate (crest) -->
-  <path d="M58,24 L64,2 L70,24 Z" fill="#1a1a1a"/>
+  <!-- Maedate (front crest spike) -->
+  <polygon points="58,26 64,4  70,26" fill="#cc2200"/>
+  <polygon points="59,26 64,6  64,26" fill="#991000"/>
+
+  <!-- Kuwagata left horn -->
+  <path d="M24,54 Q10,38 20,20 Q27,8 34,30 L32,54 Z" fill="#aa1500"/>
+  <path d="M24,54 Q12,40 20,22 Q26,12 33,31 Z"       fill="#881000"/>
+
+  <!-- Kuwagata right horn -->
+  <path d="M104,54 Q118,38 108,20 Q101,8 94,30 L96,54 Z" fill="#aa1500"/>
+  <path d="M104,54 Q116,40 108,22 Q102,12 95,31 Z"       fill="#881000"/>
 
   <!-- Helmet dome -->
-  <path d="M20,72 Q20,28 64,24 Q108,28 108,72 Z" fill="#cc2200"/>
+  <path d="M22,78 Q20,30 64,22 Q108,30 106,78 Z" fill="#cc2200"/>
+  <!-- Dome left-side shadow -->
+  <path d="M22,78 Q18,46 28,32 Q38,20 64,22 Q44,26 40,48 Z" fill="#8a0000"/>
+  <!-- Dome right catch-light -->
+  <path d="M88,28 Q104,42 106,72 L100,74 Q100,46 86,32 Z" fill="#e03300" opacity="0.3"/>
+  <!-- Centre ridge -->
+  <line x1="64" y1="22" x2="64" y2="76" stroke="#991000" stroke-width="2"/>
 
-  <!-- Dome depth band -->
-  <path d="M24,55 Q64,50 104,55 L108,72 Q64,68 20,72 Z" fill="#991a00"/>
+  <!-- Shikoro top plate (neck guard upper) -->
+  <polygon points="18,76 10,92 118,92 110,76" fill="#991000"/>
+  <!-- Shikoro bottom plate -->
+  <polygon points="14,90 6,108 122,108 114,90" fill="#881000"/>
+  <!-- Lacing line between plates -->
+  <line x1="7" y1="100" x2="121" y2="100" stroke="#5a0800" stroke-width="1.5"/>
 
   <!-- Visor slit -->
-  <rect x="28" y="62" width="72" height="10" rx="2" fill="#1a1a1a"/>
+  <rect x="22" y="60" width="84" height="16" rx="3" fill="#0a0500"/>
+  <!-- Glowing eyes -->
+  <rect x="26" y="62" width="30" height="12" rx="2" fill="#cc0000"/>
+  <rect x="70" y="62" width="26" height="12" rx="2" fill="#cc0000"/>
+  <!-- Eye hot-core -->
+  <rect x="30" y="64" width="22" height="7" rx="1" fill="#ff4400" opacity="0.55"/>
+  <rect x="74" y="64" width="18" height="7" rx="1" fill="#ff4400" opacity="0.55"/>
 
-  <!-- Shikoro (neck guard) -->
-  <path d="M20,72 L8,100 L120,100 L108,72 Z" fill="#991a00"/>
 </svg>

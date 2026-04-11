@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ page.title }}</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" />
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body>
@@ -19,15 +22,19 @@
 
 <header id="navbar">
   <a href="/" class="brand">
-    <img src="/images/samurai.svg" alt="Red Team Academy" class="brand-icon" />
-    <span class="brand-name">Red Team</span><span class="brand-accent"> Academy</span>
+    <img src="/images/samurai.svg" alt="" class="brand-icon" aria-hidden="true" />
+    <span class="brand-name">Red Team</span><span class="brand-accent">&nbsp;Academy</span>
   </a>
-  <span class="status-dot"></span>
+  <span class="nav-sep">/</span>
+  <div class="status-indicator">
+    <span class="status-dot"></span>
+    <span>live</span>
+  </div>
   <button id="toggle-sidebar" class="nav-toggle" title="Toggle navigation panel">[nav]</button>
   <button id="toggle-notes" class="nav-toggle" title="Toggle notes panel">[notes]</button>
   <nav>
-    <a href="/">Home</a>
-    <a href="/about/">About</a>
+    <a href="/">home</a>
+    <a href="/about/">about</a>
   </nav>
 </header>
 
@@ -61,8 +68,10 @@
   </span>
 </footer>
 
+<script src="/js/main.js"></script>
 <script>
 (function() {
+  // Active link highlighting
   var path = window.location.pathname.replace(/\/$/, '') || '/';
   document.querySelectorAll('#sidebar a').forEach(function(a) {
     var href = (a.getAttribute('href') || '').replace(/\/$/, '');
@@ -81,12 +90,13 @@
 })();
 
 (function() {
+  // Panel toggle persistence
   var sidebarBtn = document.getElementById('toggle-sidebar');
-  var notesBtn = document.getElementById('toggle-notes');
+  var notesBtn   = document.getElementById('toggle-notes');
 
   function syncButtons() {
     if (sidebarBtn) sidebarBtn.classList.toggle('panel-off', document.body.classList.contains('sidebar-hidden'));
-    if (notesBtn) notesBtn.classList.toggle('panel-off', document.body.classList.contains('notes-hidden'));
+    if (notesBtn)   notesBtn.classList.toggle('panel-off',   document.body.classList.contains('notes-hidden'));
   }
 
   syncButtons();

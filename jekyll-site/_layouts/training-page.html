@@ -21,5 +21,9 @@ layout: base
 
 </div>
 
-<script src="/js/main.js"></script>
-<script>initNotes('{{ page.page_key }}');</script>
+<script>
+// initNotes is defined in main.js, loaded by base.html
+document.addEventListener('DOMContentLoaded', function() {
+  initNotes('{{ page.page_key }}');
+});
+</script>

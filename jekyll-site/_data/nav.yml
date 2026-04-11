@@ -9,6 +9,8 @@
       title: MITRE ATT&CK Framework
     - url: /fundamentals/lab-setup/
       title: Lab Setup & Environment
+    - url: /fundamentals/attacker-setup/
+      title: Attacker Machine Setup
     - url: /fundamentals/linux-basics/
       title: Linux Fundamentals
     - url: /fundamentals/windows-basics/
@@ -677,6 +679,8 @@
       title: "Quick Coding Projects"
     - url: /tool-dev/emojichef/
       title: "EmojiChef: Emoji Encoding"
+    - url: /tool-dev/evasive-implant/
+      title: "Evasive Reverse Shell Implant"
 
 - num: "15"
   title: Reporting

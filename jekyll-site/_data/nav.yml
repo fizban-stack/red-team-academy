@@ -681,6 +681,10 @@
       title: "EmojiChef: Emoji Encoding"
     - url: /tool-dev/evasive-implant/
       title: "Evasive Reverse Shell Implant"
+    - url: /tool-dev/ad-engagement-tools/
+      title: "AD Engagement Tools"
+    - url: /tool-dev/android-red-team-tools/
+      title: "Android Red Team Tools"
 
 - num: "15"
   title: Reporting
@@ -759,5 +763,13 @@
       title: SSL Pinning Bypass
     - url: /mobile/android-exploitation/
       title: Android Exploitation
+    - url: /mobile/android-privesc/
+      title: Android Privilege Escalation
+    - url: /mobile/android-post-exploitation/
+      title: Android Post-Exploitation
+    - url: /mobile/android-payload-dev/
+      title: Android Payload Development
+    - url: /mobile/android-network-attacks/
+      title: Android Network Attacks
     - url: /mobile/ios-analysis/
       title: iOS App Analysis

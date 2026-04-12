@@ -1965,9 +1965,31 @@ CREDSNIFF
         ln -sf "${CUSTOM_TOOLS_DIR}/cred-sniff.sh" /usr/local/bin/rta-credsniff
     fi
 
+    # ── AD engagement tools (from scripts/rta-ad-tools/) ──
+    local AD_TOOLS_SRC
+    AD_TOOLS_SRC="$(dirname "$(readlink -f "$0")")/rta-ad-tools"
+    if [ -d "${AD_TOOLS_SRC}" ]; then
+        log TASK "Installing AD engagement tools..."
+        cp "${AD_TOOLS_SRC}/rta-credstore.py" "${CUSTOM_TOOLS_DIR}/"
+        cp "${AD_TOOLS_SRC}/rta-sharespider.py" "${CUSTOM_TOOLS_DIR}/"
+        cp "${AD_TOOLS_SRC}/rta-adpersist.py" "${CUSTOM_TOOLS_DIR}/"
+        cp "${AD_TOOLS_SRC}/rta-sprayguard.py" "${CUSTOM_TOOLS_DIR}/"
+        cp "${AD_TOOLS_SRC}/rta-bloodhound-ingest.sh" "${CUSTOM_TOOLS_DIR}/"
+        cp "${AD_TOOLS_SRC}/rta-lateralmap.py" "${CUSTOM_TOOLS_DIR}/"
+        chmod +x "${CUSTOM_TOOLS_DIR}"/rta-{credstore,sharespider,adpersist,sprayguard,lateralmap}.py
+        chmod +x "${CUSTOM_TOOLS_DIR}/rta-bloodhound-ingest.sh"
+        ln -sf "${CUSTOM_TOOLS_DIR}/rta-credstore.py" /usr/local/bin/rta-credstore
+        ln -sf "${CUSTOM_TOOLS_DIR}/rta-sharespider.py" /usr/local/bin/rta-sharespider
+        ln -sf "${CUSTOM_TOOLS_DIR}/rta-adpersist.py" /usr/local/bin/rta-adpersist
+        ln -sf "${CUSTOM_TOOLS_DIR}/rta-sprayguard.py" /usr/local/bin/rta-sprayguard
+        ln -sf "${CUSTOM_TOOLS_DIR}/rta-bloodhound-ingest.sh" /usr/local/bin/rta-bhingest
+        ln -sf "${CUSTOM_TOOLS_DIR}/rta-lateralmap.py" /usr/local/bin/rta-lateralmap
+    fi
+
     log INFO "Custom tools installed to ${CUSTOM_TOOLS_DIR}"
     log INFO "Available as: rta-scan, rta-subenum, rta-revshell, rta-serve,"
     log INFO "  rta-adenum, rta-webrecon, rta-listener, rta-hashid, rta-encode, rta-credsniff"
+    log INFO "  rta-credstore, rta-sharespider, rta-adpersist, rta-sprayguard, rta-bhingest, rta-lateralmap"
 }
 
 # ── Shell Configuration ──────────────────────────────────────────────────
@@ -2109,6 +2131,12 @@ print_summary() {
     echo "    rta-hashid     — Hash type identifier"
     echo "    rta-encode     — Payload encoder (XOR/B64/AES)"
     echo "    rta-credsniff  — Credential sniffing wrapper"
+    echo "    rta-credstore  — AD credential manager (track, test, spray)"
+    echo "    rta-sharespider— SMB share spider (find creds in shares)"
+    echo "    rta-adpersist  — AD persistence installer/auditor"
+    echo "    rta-sprayguard — Policy-aware password sprayer"
+    echo "    rta-bhingest   — BloodHound collection + attack path queries"
+    echo "    rta-lateralmap — Engagement state tracker + lateral planner"
     echo ""
     echo -e "  ${BOLD}Next Steps:${NC}"
     echo "    1. Source your profile:  source ~/.rta-profile"

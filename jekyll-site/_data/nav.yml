@@ -769,6 +769,8 @@
       title: Android Post-Exploitation
     - url: /mobile/android-payload-dev/
       title: Android Payload Development
+    - url: /mobile/android-link-click-demo/
+      title: "Link-Click Demo: Android Reverse Shell"
     - url: /mobile/android-network-attacks/
       title: Android Network Attacks
     - url: /mobile/ios-analysis/

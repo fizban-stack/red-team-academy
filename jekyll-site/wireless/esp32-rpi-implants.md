@@ -843,7 +843,7 @@ nmcli connection add type gsm con-name "LTE" ifname "*" apn "internet"
 nmcli connection up "LTE"
 
 # Or manual (if NM unavailable)
-usb_modeswitch -v 12d1 -p 14fe -M '55534243...'
+usb_modeswitch -v 12d1 -p 14fe -M '55534243123456780000000000000011062000000100000000000000000000'
 ip link set wwan0 up
 udhcpc -i wwan0
 

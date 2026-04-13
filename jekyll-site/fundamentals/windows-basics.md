@@ -25,7 +25,7 @@ render_with_liquid: false
 | C:\Users\<user>\AppData | App data (hidden) | Browser password DBs, putty sessions, MobaXterm creds |
 | C:\ProgramData | All-user app data | AV configs, app credentials, writable for persistence |
 | HKLM\SAM | Local account hashes (registry) | Dump for PTH — requires SYSTEM |
-| HKCU\...\Run | Autostart on user logon | Classic persistence location (T1547.001) |
+| HKCU\Software\Microsoft\Windows\CurrentVersion\Run | Autostart on user logon | Classic persistence location (T1547.001) |
 
 ## PowerShell Essentials for Red Teamers
 

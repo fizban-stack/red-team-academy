@@ -230,8 +230,8 @@ unset HISTFILE  # Prevent logging for current session
 echo "" > /var/log/auth.log
 echo "" > /var/log/syslog
 
-# Remove SSH authorized_keys entries you added
-sed -i '/ssh-rsa AAAA...your_key/d' ~/.ssh/authorized_keys
+# Remove SSH authorized_keys entries you added (match on the comment field you used)
+sed -i '/attacker@kali/d' ~/.ssh/authorized_keys
 ```
 
 ## OPSEC Pre-Operation Checklist

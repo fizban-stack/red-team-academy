@@ -207,15 +207,15 @@ docker-compose up
 # Start the API server:
 nettacker --start-api --api-port 5000 --api-host 127.0.0.1
 
-# Authenticate (get token):
-curl -X POST http://127.0.0.1:5000/api/v1/auth \
+# Authenticate and capture the JWT into a shell variable:
+TOKEN=$(curl -s -X POST http://127.0.0.1:5000/api/v1/auth \
   -H "Content-Type: application/json" \
-  -d '{"username":"nettacker","password":"nettacker"}'
-# Returns: {"token": "eyJ..."}
+  -d '{"username":"nettacker","password":"nettacker"}' | jq -r .token)
+echo "$TOKEN"
 
 # Submit a scan via API:
 curl -X POST http://127.0.0.1:5000/api/v1/scan \
-  -H "Authorization: Bearer eyJ..." \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "targets": "corp.com",
@@ -224,7 +224,7 @@ curl -X POST http://127.0.0.1:5000/api/v1/scan \
   }'
 
 # Check scan status:
-curl http://127.0.0.1:5000/api/v1/logs?token=eyJ...
+curl "http://127.0.0.1:5000/api/v1/logs?token=$TOKEN"
 
 # Useful for integrating Nettacker into CI/CD pipelines or custom scripts
 ```

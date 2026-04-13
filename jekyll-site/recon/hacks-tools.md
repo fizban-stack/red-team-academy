@@ -166,8 +166,10 @@ cat all-urls.txt | inscope
 # Filter subdomains:
 assetfinder example.com | inscope
 
-# Use in recon pipeline:
-waybackurls example.com | inscope | qsreplace 'FUZZ' | ffuf ...
+# Use in recon pipeline — feed FUZZ-marked URLs straight into ffuf:
+waybackurls example.com | inscope | qsreplace 'FUZZ' | \
+  ffuf -w /opt/wordlists/SecLists/Fuzzing/XSS/XSS-Jhaddix.txt \
+       -u FUZZ -mc 200 -fs 0 -t 50 -o ffuf-results.json
 ```
 
 ## fff — Fetch URLs Fast

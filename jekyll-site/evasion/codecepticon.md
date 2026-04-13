@@ -35,7 +35,7 @@ cd Codecepticon
 
 # Two input methods:
 # 1. Command line flags (generated via CommandLineGenerator.html in the repo)
-Codecepticon.exe --action obfuscate --module csharp --verbose ...
+Codecepticon.exe --action obfuscate --module csharp --path C:\src\Rubeus --mapping-file rubeus-mapping.html --verbose
 # 2. XML config file
 Codecepticon.exe --config C:\Tools\my_obfuscation.xml
 ```

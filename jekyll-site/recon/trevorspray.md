@@ -213,12 +213,24 @@ curl -v imaps://outlook.office365.com \
 
 # EWS (Exchange Web Services) — no MFA enforcement in many tenants:
 curl -s -u john.smith@corp.com:Welcome123! \
+  -H "Content-Type: text/xml; charset=utf-8" \
+  -H "SOAPAction: \"http://schemas.microsoft.com/exchange/services/2006/messages/GetFolder\"" \
   https://outlook.office365.com/EWS/Exchange.asmx \
-  -d '<?xml version="1.0"?><Envelope>...</Envelope>'
+  -d '<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">
+  <soap:Body>
+    <m:GetFolder>
+      <m:FolderShape><t:BaseShape>Default</t:BaseShape></m:FolderShape>
+      <m:FolderIds><t:DistinguishedFolderId Id="inbox"/></m:FolderIds>
+    </m:GetFolder>
+  </soap:Body>
+</soap:Envelope>'
 
-# Check if tenant allows legacy auth:
-# Install Azure AD module and check security defaults:
-# Get-MsolOrganization | Select DefaultMfaStrongAuthenticationEnforce...
+# Check if tenant allows legacy auth (requires Azure AD / MSOnline PowerShell module):
+# Install-Module MSOnline -Force; Connect-MsolService
+# Get-MsolCompanyInformation | Select-Object DefaultUsageLocation, UsersPermissionToCreateGroupsEnabled
 ```
 
 ## Operational Notes

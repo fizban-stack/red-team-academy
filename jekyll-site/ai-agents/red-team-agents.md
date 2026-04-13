@@ -601,7 +601,7 @@ sudo journalctl -u ollama --since "1 min ago"
 # Should show no new entries during inference
 
 # llama.cpp server logging suppression:
-./llama-server ... --log-disable  # suppress all console output
+./llama-server -m /models/llama-3-8b-instruct.Q4_K_M.gguf --port 8080 --log-disable  # suppress all console output
 ```
 
 ### Prompt Injection Mitigation

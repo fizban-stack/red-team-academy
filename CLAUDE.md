@@ -36,7 +36,7 @@ jekyll-site/
   index.html            # homepage with module grid
   about.html
   <module>/             # one directory per module
-    <page>.html         # one .html file per lesson/topic
+    <page>.md|.html      # lessons can be Markdown or HTML
 ```
 
 ### Modules and Their Directories
@@ -58,12 +58,16 @@ jekyll-site/
 | 13 | Red Team Tools | `tools/` |
 | 14 | Tool Development | `tool-dev/` |
 | 15 | Reporting | `reporting/` |
+| 16 | Social Engineering | `social-engineering/` |
+| 17 | Mobile Security | `mobile/` |
+| 18 | Network Attacks | `network-attacks/` |
+| 19 | Ops Cheatsheets | `cheatsheets/` |
 
 ---
 
 ## Page Format
 
-Every training page is a `.html` file with Jekyll front matter:
+Every training page is a `.md` (recommended) or `.html` file with Jekyll front matter:
 
 ```html
 ---
@@ -99,8 +103,9 @@ example command</code></pre>
 - `page_key`: `"module-topic"` pattern, alphanumeric + hyphens only, max 128 chars
 
 **Content rules:**
-- All content is plain HTML — no Markdown inside the body
-- Code blocks: `<pre><code>...</code></pre>` — no class attributes needed
+- Markdown pages are supported (and common in this repo). Use headings (`#`, `##`, `###`) and fenced code blocks.
+- HTML pages are also supported. If writing raw HTML, keep it clean and avoid inline styles.
+- Code blocks should render as `<pre><code>...</code></pre>` (Jekyll/Markdown does this automatically), which the site enhances with copy buttons.
 - HTML entities must be escaped: `&amp;`, `&lt;`, `&gt;`, `&quot;`
 - Indentation: 2-space indent inside content, code blocks not indented
 - `<h1>` — page title (one per page)
@@ -113,12 +118,11 @@ example command</code></pre>
 
 ## Adding a New Page
 
-1. **Create the file** at `jekyll-site/<module>/<page-name>.html` using the page format above.
+1. **Create the file** at `jekyll-site/<module>/<page-name>.md` (or `.html`) using the page format above.
 
-2. **Add the nav link** in `jekyll-site/_layouts/base.html`:
-   - Find the correct `<details>` block for the module
-   - Add `<li><a href="/<module>/<page-name>/">Link Text</a></li>`
-   - Use `&amp;` for `&` in link text
+2. **Add the nav link** in `jekyll-site/_data/nav.yml`:
+   - Find the correct module block
+   - Add a new page entry with `url` and `title`
 
 3. **No other registration needed** — Jekyll discovers pages automatically.
 
@@ -141,7 +145,7 @@ example command</code></pre>
 
 ## Sidebar Navigation (`_layouts/base.html`)
 
-The sidebar is hardcoded HTML in `base.html`. Structure:
+The sidebar is generated from `jekyll-site/_data/nav.yml` in `base.html`. Structure:
 
 ```html
 <details>

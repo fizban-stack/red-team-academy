@@ -1,0 +1,31 @@
+---
+layout: base
+title: "Search — Red Team Academy"
+---
+<div class="home-content search-page">
+  <div class="hero">
+    <div class="pre-title">// quick lookup</div>
+    <h1>Search <span>the playbook</span></h1>
+    <p>
+      Find techniques fast across modules. Tip: press <code>Ctrl</code> + <code>K</code> from anywhere.
+    </p>
+  </div>
+
+  <div class="search-panel">
+    <label class="search-label" for="search-input">// query</label>
+    <input id="search-input" class="search-input" type="text" autocomplete="off" spellcheck="false" placeholder="ssrf, kerberoast, chisel, lsass, ..." />
+    <div class="search-filters" aria-label="Search filters">
+      <div class="filter-group">
+        <div class="filter-title">// module</div>
+        <div class="filter-chips" id="filter-modules"></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-title">// tags</div>
+        <div class="filter-chips" id="filter-tags"></div>
+      </div>
+    </div>
+    <div class="search-meta" id="search-meta">loading index…</div>
+  </div>
+
+  <div class="search-results" id="search-results" aria-live="polite"></div>
+</div>

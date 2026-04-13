@@ -15,6 +15,7 @@
 <script>
 // Apply panel states before first paint to avoid layout flash
 (function(){
+  if(localStorage.getItem('ops-mode')==='true') document.body.classList.add('ops-mode');
   if(localStorage.getItem('sidebar-hidden')==='true') document.body.classList.add('sidebar-hidden');
   if(localStorage.getItem('notes-hidden')!=='false') document.body.classList.add('notes-hidden');
 })();
@@ -32,9 +33,11 @@
   </div>
   <button id="toggle-sidebar" class="nav-toggle" title="Toggle navigation panel">[nav]</button>
   <button id="toggle-notes" class="nav-toggle" title="Toggle notes panel">[notes]</button>
+  <button id="toggle-ops" class="nav-toggle" title="Toggle ops mode">[ops]</button>
   <nav>
     <a href="/">home</a>
     <a href="/about/">about</a>
+    <a href="/search/">search</a>
   </nav>
 </header>
 
@@ -93,10 +96,12 @@
   // Panel toggle persistence
   var sidebarBtn = document.getElementById('toggle-sidebar');
   var notesBtn   = document.getElementById('toggle-notes');
+  var opsBtn     = document.getElementById('toggle-ops');
 
   function syncButtons() {
     if (sidebarBtn) sidebarBtn.classList.toggle('panel-off', document.body.classList.contains('sidebar-hidden'));
     if (notesBtn)   notesBtn.classList.toggle('panel-off',   document.body.classList.contains('notes-hidden'));
+    if (opsBtn)     opsBtn.classList.toggle('panel-off',     document.body.classList.contains('ops-mode'));
   }
 
   syncButtons();
@@ -113,6 +118,21 @@
     notesBtn.addEventListener('click', function() {
       document.body.classList.toggle('notes-hidden');
       localStorage.setItem('notes-hidden', document.body.classList.contains('notes-hidden'));
+      syncButtons();
+    });
+  }
+
+  if (opsBtn) {
+    opsBtn.addEventListener('click', function() {
+      document.body.classList.toggle('ops-mode');
+      localStorage.setItem('ops-mode', document.body.classList.contains('ops-mode'));
+
+      // In ops-mode, default to hiding notes unless user explicitly shows them.
+      if (document.body.classList.contains('ops-mode')) {
+        document.body.classList.add('notes-hidden');
+        localStorage.setItem('notes-hidden', 'true');
+      }
+
       syncButtons();
     });
   }

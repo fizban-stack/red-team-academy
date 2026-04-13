@@ -3,6 +3,8 @@
   pages:
     - url: /fundamentals/methodology/
       title: Red Team Methodology
+    - url: /fundamentals/authoring-guide/
+      title: Authoring Guide & QA Checklist
     - url: /fundamentals/engagement-planning/
       title: Engagement Planning
     - url: /fundamentals/mitre-attack/
@@ -740,30 +742,6 @@
     - url: /social-engineering/se-toolkit/
       title: Social Engineering Toolkit (SET)
 
-- num: "18"
-  title: Network Attacks
-  pages:
-    - url: /network-attacks/overview/
-      title: Network Attack Overview
-    - url: /network-attacks/responder/
-      title: Responder & LLMNR Poisoning
-    - url: /network-attacks/mitm6/
-      title: mitm6 — IPv6 MITM
-    - url: /network-attacks/arp-mitm/
-      title: ARP Spoofing & Bettercap
-    - url: /network-attacks/vlan-hopping/
-      title: VLAN Hopping
-    - url: /network-attacks/nac-bypass/
-      title: NAC / 802.1X Bypass
-    - url: /network-attacks/dhcp-attacks/
-      title: DHCP Attacks
-    - url: /network-attacks/credential-hunting/
-      title: Network Credential Hunting
-    - url: /network-attacks/network-scanning/
-      title: Network Scanning & Mapping
-    - url: /network-attacks/packet-crafting/
-      title: Packet Crafting with Scapy
-
 - num: "17"
   title: Mobile Security
   pages:
@@ -795,3 +773,43 @@
       title: Android Network Attacks
     - url: /mobile/ios-analysis/
       title: iOS App Analysis
+
+- num: "18"
+  title: Network Attacks
+  pages:
+    - url: /network-attacks/overview/
+      title: Network Attack Overview
+    - url: /network-attacks/responder/
+      title: Responder & LLMNR Poisoning
+    - url: /network-attacks/mitm6/
+      title: mitm6 — IPv6 MITM
+    - url: /network-attacks/arp-mitm/
+      title: ARP Spoofing & Bettercap
+    - url: /network-attacks/vlan-hopping/
+      title: VLAN Hopping
+    - url: /network-attacks/nac-bypass/
+      title: NAC / 802.1X Bypass
+    - url: /network-attacks/dhcp-attacks/
+      title: DHCP Attacks
+    - url: /network-attacks/credential-hunting/
+      title: Network Credential Hunting
+    - url: /network-attacks/network-scanning/
+      title: Network Scanning & Mapping
+    - url: /network-attacks/packet-crafting/
+      title: Packet Crafting with Scapy
+
+- num: "19"
+  title: Ops Cheatsheets
+  pages:
+    - url: /cheatsheets/overview/
+      title: Ops Cheatsheets Overview
+    - url: /cheatsheets/quick-payloads/
+      title: Quick Payloads
+    - url: /cheatsheets/ad-triage/
+      title: AD Triage Cheatsheet
+    - url: /cheatsheets/web-triage/
+      title: Web Triage Cheatsheet
+    - url: /cheatsheets/pivoting-patterns/
+      title: Pivoting Patterns Cheatsheet
+    - url: /cheatsheets/exfil-evidence/
+      title: Exfil & Evidence Cheatsheet

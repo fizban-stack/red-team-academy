@@ -15,8 +15,49 @@ layout: base
     <div class="page-meta">
       <span>{{ page.module }}</span>
       {% for tag in page.tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+      {% if page.updated %}<span class="updated">updated {{ page.updated | escape }}</span>{% endif %}
     </div>
     {{ content }}
+
+    {%- comment -%} Prev/Next links based on nav.yml order {%- endcomment -%}
+    {% assign prev_page = nil %}
+    {% assign next_page = nil %}
+    {% assign found_current = false %}
+    {% for m in site.data.nav %}
+      {% for nav_page in m.pages %}
+        {% if found_current and next_page == nil %}
+          {% assign next_page = nav_page %}
+        {% endif %}
+
+        {% if nav_page.url == page.url %}
+          {% assign found_current = true %}
+        {% endif %}
+
+        {% unless found_current %}
+          {% assign prev_page = nav_page %}
+        {% endunless %}
+      {% endfor %}
+    {% endfor %}
+
+    {% if prev_page or next_page %}
+      <div class="lesson-nav" aria-label="Lesson navigation">
+        {% if prev_page %}
+          <a class="prev" href="{{ prev_page.url }}">
+            <span class="label">prev</span>
+            <span class="title">{{ prev_page.title | escape }}</span>
+          </a>
+        {% else %}
+          <span></span>
+        {% endif %}
+
+        {% if next_page %}
+          <a class="next" href="{{ next_page.url }}">
+            <span class="label">next</span>
+            <span class="title">{{ next_page.title | escape }}</span>
+          </a>
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
 
 </div>

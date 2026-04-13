@@ -186,4 +186,361 @@ function initTableOfContents() {
 document.addEventListener('DOMContentLoaded', function() {
   initCodeBlocks();
   initTableOfContents();
+  initHeadingTools();
+  initSearch();
 });
+
+/* ─────────────────────────────────────────────────────
+   HEADING TOOLS — permalinks + copy section
+   ───────────────────────────────────────────────────── */
+
+function initHeadingTools() {
+  var contentPanel = document.querySelector('.content-panel');
+  if (!contentPanel) return;
+
+  var headings = contentPanel.querySelectorAll('h2, h3');
+  if (!headings.length) return;
+
+  headings.forEach(function(h, idx) {
+    var text = (h.textContent || '').trim();
+    if (!text) return;
+
+    // Ensure stable-ish id
+    if (!h.id) {
+      h.id = 'sec-' + text.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .substring(0, 50) + '-' + idx;
+    }
+
+    // Avoid double-wrapping if rerun
+    if (h.querySelector('.heading-row')) return;
+
+    var row = document.createElement('span');
+    row.className = 'heading-row';
+
+    var title = document.createElement('span');
+    title.className = 'heading-text';
+    title.textContent = text;
+
+    // Clear existing nodes and rebuild
+    while (h.firstChild) h.removeChild(h.firstChild);
+
+    var tools = document.createElement('span');
+    tools.className = 'heading-tools';
+
+    var linkBtn = document.createElement('button');
+    linkBtn.className = 'heading-btn';
+    linkBtn.type = 'button';
+    linkBtn.textContent = 'link';
+    linkBtn.setAttribute('aria-label', 'Copy section link');
+
+    linkBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var url = window.location.origin + window.location.pathname + '#' + h.id;
+      copyText(url, linkBtn);
+    });
+
+    var secBtn = document.createElement('button');
+    secBtn.className = 'heading-btn';
+    secBtn.type = 'button';
+    secBtn.textContent = 'copy';
+    secBtn.setAttribute('aria-label', 'Copy section content');
+
+    secBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var sectionText = extractSectionText(h);
+      if (sectionText) copyText(sectionText, secBtn);
+    });
+
+    tools.appendChild(linkBtn);
+    tools.appendChild(secBtn);
+
+    row.appendChild(title);
+    row.appendChild(tools);
+    h.appendChild(row);
+  });
+}
+
+function extractSectionText(headingEl) {
+  if (!headingEl || !headingEl.parentNode) return '';
+
+  var tag = (headingEl.tagName || '').toLowerCase();
+  var stopTag = tag; // stop at same heading level
+
+  var parts = [];
+  parts.push((headingEl.textContent || '').replace(/\s+/g, ' ').trim());
+
+  var n = headingEl.nextElementSibling;
+  while (n) {
+    var t = (n.tagName || '').toLowerCase();
+    if (t === stopTag) break;
+    if (stopTag === 'h2' && t === 'h2') break;
+    if (stopTag === 'h3' && (t === 'h2' || t === 'h3')) break;
+
+    // Prefer code blocks verbatim
+    if (t === 'pre') {
+      var code = n.querySelector('code');
+      var codeText = (code ? (code.innerText || code.textContent) : (n.innerText || n.textContent)) || '';
+      parts.push(codeText.trimEnd());
+    } else {
+      var txt = (n.innerText || n.textContent || '').trim();
+      if (txt) parts.push(txt);
+    }
+    n = n.nextElementSibling;
+  }
+
+  return parts.join('\n\n').trim();
+}
+
+function copyText(text, btnEl) {
+  if (!text) return;
+
+  function onCopied() {
+    if (!btnEl) return;
+    btnEl.classList.add('copied');
+    var old = btnEl.textContent;
+    btnEl.textContent = 'copied!';
+    setTimeout(function() {
+      btnEl.textContent = old;
+      btnEl.classList.remove('copied');
+    }, 1200);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onCopied).catch(function() {
+      fallbackCopy(text, onCopied);
+    });
+  } else {
+    fallbackCopy(text, onCopied);
+  }
+}
+
+/* ─────────────────────────────────────────────────────
+   SEARCH — client-side index + Ctrl+K shortcut
+   ───────────────────────────────────────────────────── */
+
+function initSearch() {
+  // Global shortcut
+  document.addEventListener('keydown', function(e) {
+    // Ctrl+K / Cmd+K
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      if (window.location.pathname.replace(/\/$/, '') !== '/search') {
+        window.location.href = '/search/';
+        return;
+      }
+      var input = document.getElementById('search-input');
+      if (input) input.focus();
+    }
+  });
+
+  // Only render search UI on /search/
+  var input = document.getElementById('search-input');
+  var resultsEl = document.getElementById('search-results');
+  var metaEl = document.getElementById('search-meta');
+  var modulesEl = document.getElementById('filter-modules');
+  var tagsEl = document.getElementById('filter-tags');
+  if (!input || !resultsEl) return;
+
+  var index = [];
+  var loaded = false;
+  var activeModule = '';
+  var activeTags = [];
+
+  function setMeta(msg) {
+    if (metaEl) metaEl.textContent = msg;
+  }
+
+  function normalize(s) {
+    return (s || '')
+      .toString()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function renderEmpty() {
+    resultsEl.innerHTML = '';
+    setMeta('type to search…');
+  }
+
+  function uniqueSorted(arr) {
+    var m = {};
+    (arr || []).forEach(function(x) {
+      var k = (x || '').toString().trim();
+      if (!k) return;
+      m[k] = true;
+    });
+    return Object.keys(m).sort(function(a, b) { return a.localeCompare(b); });
+  }
+
+  function renderChips() {
+    if (!modulesEl && !tagsEl) return;
+
+    var mods = uniqueSorted(index.map(function(p) { return p.module || ''; }).filter(Boolean));
+    var tags = uniqueSorted([].concat.apply([], index.map(function(p) { return Array.isArray(p.tags) ? p.tags : []; })));
+
+    function chip(label, isActive, onClick) {
+      return (
+        '<button type="button" class="chip' + (isActive ? ' active' : '') + '" data-val="' + escapeAttr(label) + '">' +
+          escapeHtml(label) +
+        '</button>'
+      );
+    }
+
+    if (modulesEl) {
+      var htmlM = chip('all', !activeModule, null) + mods.map(function(m) {
+        return chip(m, activeModule === m, null);
+      }).join('');
+      modulesEl.innerHTML = htmlM;
+      modulesEl.querySelectorAll('button.chip').forEach(function(b) {
+        b.addEventListener('click', function() {
+          var v = b.getAttribute('data-val') || '';
+          activeModule = (v === 'all') ? '' : v;
+          renderChips();
+          runSearch();
+        });
+      });
+    }
+
+    if (tagsEl) {
+      // keep tags reasonably small in UI
+      var top = tags.slice(0, 60);
+      tagsEl.innerHTML = top.map(function(t) {
+        var on = activeTags.indexOf(t) >= 0;
+        return chip(t, on, null);
+      }).join('');
+      tagsEl.querySelectorAll('button.chip').forEach(function(b) {
+        b.addEventListener('click', function() {
+          var v = b.getAttribute('data-val') || '';
+          if (!v) return;
+          var i = activeTags.indexOf(v);
+          if (i >= 0) activeTags.splice(i, 1);
+          else activeTags.push(v);
+          renderChips();
+          runSearch();
+        });
+      });
+    }
+  }
+
+  function renderResults(q, items) {
+    if (!q) {
+      renderEmpty();
+      return;
+    }
+
+    if (!items.length) {
+      resultsEl.innerHTML =
+        '<div class="search-empty">no matches</div>';
+      setMeta('0 results');
+      return;
+    }
+
+    setMeta(items.length + (items.length === 1 ? ' result' : ' results'));
+
+    var html = items.map(function(p) {
+      var tags = Array.isArray(p.tags) ? p.tags : [];
+      var tagHtml = tags.slice(0, 6).map(function(t) {
+        return '<span class="tag">' + escapeHtml(t) + '</span>';
+      }).join('');
+
+      var module = p.module ? '<span class="search-module">' + escapeHtml(p.module) + '</span>' : '';
+
+      return (
+        '<a class="search-hit" href="' + escapeAttr(p.url) + '">' +
+          '<div class="search-hit-title">' + escapeHtml(p.title || p.url) + '</div>' +
+          '<div class="search-hit-meta">' + module + tagHtml + '</div>' +
+        '</a>'
+      );
+    }).join('');
+
+    resultsEl.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    return (str || '').toString()
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function escapeAttr(str) {
+    return escapeHtml(str).replace(/"/g, '&quot;');
+  }
+
+  function scorePage(q, p) {
+    var title = normalize(p.title);
+    var module = normalize(p.module);
+    var tags = Array.isArray(p.tags) ? normalize(p.tags.join(' ')) : '';
+    var body = normalize(p.content);
+
+    var s = 0;
+    if (title === q) s += 100;
+    if (title.indexOf(q) === 0) s += 60;
+    if (title.indexOf(q) >= 0) s += 40;
+    if (tags.indexOf(q) >= 0) s += 25;
+    if (module.indexOf(q) >= 0) s += 15;
+    if (body.indexOf(q) >= 0) s += 10;
+    return s;
+  }
+
+  function runSearch() {
+    var q = normalize(input.value);
+    if (!loaded) {
+      setMeta('loading index…');
+      return;
+    }
+
+    if (!q || q.length < 2) {
+      renderEmpty();
+      return;
+    }
+
+    var scoped = index.filter(function(p) {
+      if (activeModule && p.module !== activeModule) return false;
+      if (activeTags.length) {
+        var pt = Array.isArray(p.tags) ? p.tags : [];
+        for (var i = 0; i < activeTags.length; i++) {
+          if (pt.indexOf(activeTags[i]) < 0) return false;
+        }
+      }
+      return true;
+    });
+
+    var scored = scoped
+      .map(function(p) { return { p: p, s: scorePage(q, p) }; })
+      .filter(function(x) { return x.s > 0; })
+      .sort(function(a, b) { return b.s - a.s; })
+      .slice(0, 60)
+      .map(function(x) { return x.p; });
+
+    renderResults(q, scored);
+  }
+
+  // Load index
+  fetch('/search.json', { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      index = Array.isArray(data) ? data : [];
+      loaded = true;
+      setMeta(index.length + ' pages indexed');
+      renderChips();
+      input.focus();
+      renderEmpty();
+    })
+    .catch(function() {
+      loaded = true;
+      setMeta('failed to load search index');
+    });
+
+  input.addEventListener('input', function() {
+    runSearch();
+  });
+}

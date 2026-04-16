@@ -66,7 +66,8 @@ function initCodeBlocks() {
       // Label
       var label = document.createElement('span');
       label.className = 'code-block-label';
-      label.textContent = 'shell';
+      var langMatch = (code.className || '').match(/\blanguage-(\S+)/);
+      label.textContent = langMatch ? langMatch[1] : 'shell';
       header.appendChild(label);
 
       // Copy button
@@ -269,10 +270,14 @@ function extractSectionText(headingEl) {
   if (!headingEl || !headingEl.parentNode) return '';
 
   var tag = (headingEl.tagName || '').toLowerCase();
-  var stopTag = tag; // stop at same heading level
+  var stopTag = tag;
 
   var parts = [];
-  parts.push((headingEl.textContent || '').replace(/\s+/g, ' ').trim());
+  var headingTextEl = headingEl.querySelector('.heading-text');
+  var headingTitle = headingTextEl
+    ? (headingTextEl.textContent || '').trim()
+    : (headingEl.textContent || '').replace(/\s+/g, ' ').trim();
+  parts.push(headingTitle);
 
   var n = headingEl.nextElementSibling;
   while (n) {
@@ -526,7 +531,10 @@ function initSearch() {
 
   // Load index
   fetch('/search.json', { cache: 'no-store' })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (!r.ok) throw new Error('network');
+      return r.json();
+    })
     .then(function(data) {
       index = Array.isArray(data) ? data : [];
       loaded = true;
@@ -535,9 +543,9 @@ function initSearch() {
       input.focus();
       renderEmpty();
     })
-    .catch(function() {
+    .catch(function(err) {
       loaded = true;
-      setMeta('failed to load search index');
+      setMeta(err && err.message === 'network' ? 'search index unavailable' : 'search index could not be parsed');
     });
 
   input.addEventListener('input', function() {

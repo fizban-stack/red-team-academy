@@ -80,7 +80,7 @@
 
   /* ── Layout ── */
   --navbar-height: 52px;
-  --sidebar-width: 272px;
+  --sidebar-width: 248px;
   --footer-height: 44px;
 
   /* ── Misc ── */
@@ -563,14 +563,14 @@ strong, b {
   min-width: 0;
   order: 1;
   overflow-y: auto;
-  padding: 32px 44px 56px;
+  padding: 18px 26px 34px;
 }
 
 /* Notes panel (right) */
 .notes-panel {
   flex: 1;
   min-width: 220px;
-  max-width: 340px;
+  max-width: 300px;
   order: 2;
   border-left: 1px solid var(--border-1);
   display: flex;
@@ -847,7 +847,7 @@ strong, b {
    ══════════════════════════════════════════════════════ */
 
 .content-panel h1 {
-  font-size: 22px;
+  font-size: 20px;
   color: var(--text-0);
   margin-bottom: 6px;
   font-weight: 700;
@@ -899,7 +899,7 @@ strong, b {
   font-size: 15px;
   font-weight: 600;
   color: var(--accent);
-  margin: 28px 0 10px;
+  margin: 22px 0 10px;
   padding-bottom: 7px;
   border-bottom: 1px solid var(--border-0);
   letter-spacing: 0.1px;
@@ -909,6 +909,11 @@ strong, b {
   display: flex;
   align-items: baseline;
   gap: 10px;
+}
+
+.heading-row .heading-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .heading-row .heading-tools {
@@ -972,8 +977,8 @@ strong, b {
 .content-panel p {
   color: var(--text-1);
   margin-bottom: 12px;
-  line-height: 1.75;
-  font-size: 13.5px;
+  line-height: 1.65;
+  font-size: 13px;
 }
 
 .content-panel ul,
@@ -986,7 +991,7 @@ strong, b {
 .content-panel li {
   margin-bottom: 5px;
   line-height: 1.65;
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .content-panel li::marker {
@@ -1024,7 +1029,7 @@ strong, b {
   background: none;
   border: none;
   padding: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-code);
   white-space: pre;
   line-height: 1.7;
@@ -1260,40 +1265,6 @@ strong, b {
 body.sidebar-hidden #sidebar   { display: none; }
 body.notes-hidden .notes-panel { display: none; }
 
-/* ══════════════════════════════════════════════════════
-   OPS MODE — dense layout for live ops
-   ══════════════════════════════════════════════════════ */
-
-body.ops-mode .content-panel {
-  padding: 18px 26px 34px;
-}
-
-body.ops-mode .content-panel p,
-body.ops-mode .content-panel li {
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-body.ops-mode .content-panel pre code {
-  font-size: 13px;
-}
-
-body.ops-mode .content-panel h1 {
-  font-size: 20px;
-}
-
-body.ops-mode .content-panel h2 {
-  margin-top: 22px;
-}
-
-body.ops-mode #sidebar {
-  width: 248px;
-  min-width: 248px;
-}
-
-body.ops-mode .notes-panel {
-  max-width: 300px;
-}
 
 /* ══════════════════════════════════════════════════════
    UTILITY CLASSES

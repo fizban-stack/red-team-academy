@@ -67,7 +67,10 @@ sudo ./rta-setup.sh --list</code></pre>
   ├── Responder/                 # Cloned tool repos
   ├── SharpCollection/
   ├── PayloadsAllTheThings/
-  ├── ...
+  ├── impacket/
+  ├── BloodHound.py/
+  ├── kerbrute/
+  ├── ffuf/
 /opt/wordlists/                  # All wordlists
   ├── SecLists/
   ├── OneListForAll/
@@ -173,7 +176,7 @@ rta-listener 4444 --type pwncat</code></pre>
   <p>Identifies hash types and provides the correct Hashcat mode and John format.</p>
 
   <pre><code># Identify a hash
-rta-hashid '$krb5tgs$23$*user$realm$...'
+rta-hashid '$krb5tgs$23$*svc_sql$CORP.LOCAL$MSSQLSvc/sql01.corp.local:1433*$7e9c3f2a5b1d8e4c6a0f9b2d4e5c7a8b$1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b'
 rta-hashid '5f4dcc3b5aa765d61d8327deb882cf99'
 
 # Pipe from file

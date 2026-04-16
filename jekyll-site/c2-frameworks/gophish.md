@@ -237,7 +237,7 @@ curl -k -H "Authorization: Bearer <api_key>" https://localhost:3333/api/campaign
 # Create a campaign (JSON body)
 curl -k -X POST -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Q1 Phishing Test","template":{"name":"Password Reset"},...}' \
+  -d '{"name":"Q1 Phishing Test","template":{"name":"Password Reset"},"page":{"name":"Login Portal"},"smtp":{"name":"Corp Relay"},"url":"https://phish.example.com","launch_date":"2026-04-20T09:00:00Z","groups":[{"name":"Targets"}]}' \
   https://localhost:3333/api/campaigns/
 
 # Get campaign results

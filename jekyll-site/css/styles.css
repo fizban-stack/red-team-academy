@@ -40,6 +40,13 @@
   --red:      #f87171;
   --red-dark: rgba(248, 113, 113, 0.07);
 
+  /* ── Gradients & Glass ── */
+  --gradient-neon: linear-gradient(135deg, var(--accent), var(--blue));
+  --gradient-hero: linear-gradient(to right, #4ade80, #38bdf8, #818cf8);
+  --glass-bg: rgba(11, 16, 23, 0.65);
+  --glass-bg-sidebar: rgba(11, 16, 23, 0.4);
+  --glass-border: rgba(30, 45, 66, 0.6);
+
   /* ── Text — calibrated for WCAG AA on dark bg ── */
   --text-0: #f0f6fc;          /* headings, critical labels */
   --text-1: #c9d1d9;          /* primary body text */
@@ -144,14 +151,17 @@ strong, b {
   left: 0;
   right: 0;
   height: var(--navbar-height);
-  background: var(--bg-1);
-  border-bottom: 1px solid var(--border-1);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
   border-top: 2px solid var(--accent-dim);
   display: flex;
   align-items: center;
   padding: 0 18px;
   z-index: 1000;
   gap: 12px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
 }
 
 #navbar .brand {
@@ -263,8 +273,10 @@ strong, b {
 #sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  background: var(--bg-1);
-  border-right: 1px solid var(--border-1);
+  background: var(--glass-bg-sidebar);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid var(--glass-border);
   overflow-y: auto;
   position: sticky;
   top: var(--navbar-height);
@@ -444,7 +456,11 @@ strong, b {
 }
 
 .home-content .hero h1 span {
-  color: var(--accent);
+  background: var(--gradient-hero);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 30px rgba(74, 222, 128, 0.4);
 }
 
 .home-content .hero p {
@@ -468,15 +484,31 @@ strong, b {
   padding: 20px;
   text-decoration: none;
   display: block;
-  transition: border-color var(--transition), background var(--transition), transform var(--transition);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   color: inherit;
+  position: relative;
+  overflow: hidden;
+}
+
+.module-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: var(--gradient-neon);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .module-card:hover {
-  border-color: var(--accent-dim);
-  background: var(--bg-3);
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(18, 28, 39, 0.8);
   color: inherit;
-  transform: translateY(-1px);
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 15px var(--accent-dark);
+}
+
+.module-card:hover::before {
+  opacity: 1;
 }
 
 .module-card .card-icon {

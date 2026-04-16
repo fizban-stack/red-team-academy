@@ -117,12 +117,7 @@
       title: Abusing Azure Services
     - url: /active-directory/azure-defense-evasion/
       title: Azure Defense Evasion
-    - url: /cloud/aws-attacks/
-      title: AWS Penetration Testing
-    - url: /cloud/gcp-attacks/
-      title: GCP Penetration Testing
-    - url: /cloud/iac-misconfig/
-      title: IaC & Terraform Attacks
+
     - url: /active-directory/shadow-credentials/
       title: Shadow Credentials
     - url: /active-directory/coercion-attacks/
@@ -159,6 +154,8 @@
       title: ProxyChains &amp; SOCKS Routing
     - url: /pivoting/ngrok-tunneling/
       title: Ngrok &amp; Tunneling Services
+    - url: /pivoting/ztna-bypass/
+      title: ZTNA & Edge Bypasses
 
 - num: "05"
   title: Evasion
@@ -241,6 +238,8 @@
       title: BYOVD (Vulnerable Driver Abuse)
     - url: /evasion/edr-internals/
       title: EDR Internals & Architecture
+    - url: /evasion/linux-ebpf-evasion/
+      title: Linux eBPF Evasion
 
 - num: "06"
   title: Exploitation
@@ -297,6 +296,10 @@
       title: Database Exploitation
     - url: /exploitation/edge-device-exploitation/
       title: VPN & Edge Device Exploitation
+    - url: /exploitation/supply-chain-attacks/
+      title: Supply Chain & CI/CD Attacks
+    - url: /exploitation/macos-initial-access/
+      title: macOS Initial Access
 
 - num: "07"
   title: Post-Exploitation
@@ -319,6 +322,8 @@
       title: Linux Persistence Techniques
     - url: /post-exploitation/macos-red-team/
       title: macOS Red Teaming
+    - url: /post-exploitation/saas-workspace/
+      title: SaaS & Workspace Hijacking
 
 - num: "08"
   title: C2 Frameworks
@@ -631,10 +636,7 @@
       title: Web Hacking Tools
     - url: /tools/wireless-tools/
       title: Wireless Attack Tools
-    - url: /tools/docker-security/
-      title: Docker Security & Escape
-    - url: /tools/kubernetes-security/
-      title: Kubernetes Security Attacks
+
     - url: /tools/pentest-resources/
       title: Pentesting Resources Bible
     - url: /tools/red-teaming-toolkit/
@@ -643,8 +645,7 @@
       title: Hacking Learning Resources
     - url: /tools/default-credentials/
       title: Default Credentials Reference
-    - url: /tools/container-escape/
-      title: Container Escape Techniques
+
 
 - num: "14"
   title: Tool Development
@@ -813,3 +814,19 @@
       title: Pivoting Patterns Cheatsheet
     - url: /cheatsheets/exfil-evidence/
       title: Exfil & Evidence Cheatsheet
+
+- num: "20"
+  title: Cloud & Container Security
+  pages:
+    - url: /cloud/aws-attacks/
+      title: AWS Penetration Testing
+    - url: /cloud/gcp-attacks/
+      title: GCP Penetration Testing
+    - url: /cloud/iac-misconfig/
+      title: IaC & Terraform Attacks
+    - url: /cloud/docker-security/
+      title: Docker Security
+    - url: /cloud/kubernetes-security/
+      title: Kubernetes Security Attacks
+    - url: /cloud/container-escape/
+      title: Container Escape Techniques

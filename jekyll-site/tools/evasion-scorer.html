@@ -1,0 +1,570 @@
+---
+layout: base
+title: "Evasion Readiness Scorer — Red Team Academy"
+---
+
+<style>
+.scorer-page { padding: 24px; max-width: 860px; }
+
+.scorer-header { margin-bottom: 28px; }
+.scorer-header h1 {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.scorer-header .subtitle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.selector-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+.selector-row label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.tech-select {
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  min-width: 280px;
+  transition: border-color var(--transition);
+}
+.tech-select:focus { border-color: var(--accent); }
+
+.reset-btn {
+  background: transparent;
+  border: 1px solid var(--border-1);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.reset-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* Verdict */
+.verdict-card {
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  margin-bottom: 24px;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: all 0.2s;
+}
+.verdict-card.red    { background: var(--red-dark);   border-color: rgba(248,113,113,0.35); }
+.verdict-card.yellow { background: var(--amber-dark);  border-color: rgba(251,191,36,0.35); }
+.verdict-card.green  { background: var(--accent-dark); border-color: var(--accent-muted); }
+
+.score-circle {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 2px solid;
+}
+.score-circle.red    { color: var(--red);   border-color: var(--red);   background: rgba(248,113,113,0.12); }
+.score-circle.yellow { color: var(--amber); border-color: var(--amber); background: rgba(251,191,36,0.12); }
+.score-circle.green  { color: var(--accent);border-color: var(--accent);background: rgba(74,222,128,0.12); }
+
+.verdict-text {}
+.verdict-level {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.verdict-level.red    { color: var(--red); }
+.verdict-level.yellow { color: var(--amber); }
+.verdict-level.green  { color: var(--accent); }
+
+.verdict-desc {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.score-bar-wrap {
+  margin-bottom: 24px;
+}
+.score-bar-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.score-bar-track {
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+.score-bar-fill.red    { background: var(--red); }
+.score-bar-fill.yellow { background: var(--amber); }
+.score-bar-fill.green  { background: var(--accent); }
+
+/* Checklist */
+.checklist-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-0);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-0);
+}
+
+.check-item {
+  background: var(--bg-2);
+  border: 1px solid var(--border-0);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  transition: border-color var(--transition);
+}
+.check-item:hover { border-color: var(--border-2); }
+.check-item.checked { border-color: rgba(74,222,128,0.25); background: rgba(74,222,128,0.04); }
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.check-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  cursor: pointer;
+}
+.check-content { flex: 1; }
+.check-question {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-1);
+  line-height: 1.5;
+  cursor: pointer;
+  display: block;
+}
+.check-item.checked .check-question { color: var(--accent); }
+
+.check-fix {
+  display: inline-block;
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--blue);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.check-fix:hover { color: var(--blue-dim); text-decoration: underline; }
+.check-fix-hidden { display: none; }
+
+.no-technique {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-3);
+  padding: 40px 0;
+  text-align: center;
+}
+</style>
+
+<div class="scorer-page">
+  <div class="scorer-header">
+    <h1>// Evasion Readiness Scorer</h1>
+    <div class="subtitle">&gt; Select a technique to generate a pre-execution evasion checklist</div>
+  </div>
+
+  <div class="selector-row">
+    <label>Technique</label>
+    <select class="tech-select" id="tech-select">
+      <option value="">— Select a technique —</option>
+      <option value="lsass">LSASS Memory Dump</option>
+      <option value="kerberoast">Kerberoasting</option>
+      <option value="ps-cradle">PowerShell Download Cradle</option>
+      <option value="vba">VBA Macro Execution</option>
+      <option value="process-inject">Process Injection (Remote Thread)</option>
+      <option value="pth">Pass-the-Hash</option>
+      <option value="bloodhound">BloodHound / SharpHound</option>
+      <option value="mimikatz">Mimikatz (Direct Execution)</option>
+      <option value="dcsync">DCSync</option>
+      <option value="sched-task">Scheduled Task Creation</option>
+      <option value="regrun">Registry Run Key</option>
+      <option value="remote-service">Remote Service Creation</option>
+      <option value="wmi">WMI Lateral Movement</option>
+      <option value="dcom">DCOM Lateral Movement</option>
+      <option value="portscan">Network Port Scan</option>
+    </select>
+    <button class="reset-btn" id="reset-btn">[ Reset ]</button>
+  </div>
+
+  <div id="scorer-output" style="display:none;">
+    <div class="verdict-card" id="verdict-card">
+      <div class="score-circle" id="score-circle">0</div>
+      <div class="verdict-text">
+        <div class="verdict-level" id="verdict-level">NO DATA</div>
+        <div class="verdict-desc" id="verdict-desc">Select a technique to begin assessment.</div>
+      </div>
+    </div>
+    <div class="score-bar-wrap">
+      <div class="score-bar-label" id="bar-label">Score: 0 / 10</div>
+      <div class="score-bar-track">
+        <div class="score-bar-fill" id="score-bar" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="checklist-title" id="checklist-title">Evasion Checklist</div>
+    <div id="checklist-items"></div>
+  </div>
+
+  <div class="no-technique" id="no-technique">&gt; Select a technique above to begin evasion assessment</div>
+</div>
+
+<script>
+const TECHNIQUES = {
+  lsass: {
+    name: 'LSASS Memory Dump',
+    checks: [
+      { q: 'Are you avoiding direct PROCESS_VM_READ access to LSASS (e.g., using a snapshot or fork instead)?', fix: '/post-exploitation/lsass-dumping/', fixLabel: 'LSASS Dumping Techniques' },
+      { q: 'Have you disabled or bypassed Windows Defender / AV before attempting the dump?', fix: '/evasion/av-edr-evasion/', fixLabel: 'AV/EDR Evasion' },
+      { q: 'Are you using a handle obtained via NtOpenProcess rather than OpenProcess to reduce syscall visibility?', fix: '/post-exploitation/lsass-dumping/', fixLabel: 'LSASS Dumping Techniques' },
+      { q: 'Is your dumping tool obfuscated or compiled with a custom linker to avoid static signature matches?', fix: '/evasion/amsi-bypass/', fixLabel: 'AMSI Bypass' },
+      { q: 'Are you performing the dump remotely (from another machine) rather than locally on the target?', fix: '/post-exploitation/lsass-dumping/', fixLabel: 'Remote LSASS Dump' },
+      { q: 'Are you aware of and avoiding the PPL (Protected Process Light) protection on LSASS?', fix: '/post-exploitation/lsass-dumping/', fixLabel: 'Bypassing PPL' },
+      { q: 'Have you checked whether ETW (Event Tracing for Windows) is logging LSASS access events?', fix: '/evasion/av-edr-evasion/', fixLabel: 'ETW Patching' },
+      { q: 'Is the dump file being written to a non-default location or encrypted immediately to avoid EDR file-write detection?', fix: '/post-exploitation/lsass-dumping/', fixLabel: 'LSASS Dump Tradecraft' },
+      { q: 'Are you deleting the dump file immediately after parsing credentials to reduce forensic evidence?', fix: '/post-exploitation/anti-forensics/', fixLabel: 'Anti-Forensics' },
+      { q: 'Have you confirmed that Credential Guard is NOT enabled (which renders the dump useless for credential extraction)?', fix: '/post-exploitation/lsass-dumping/', fixLabel: 'Credential Guard Checks' },
+    ]
+  },
+  kerberoast: {
+    name: 'Kerberoasting',
+    checks: [
+      { q: 'Are you requesting service tickets using RC4 encryption only (to avoid AES ticket requests that generate additional log events on modern DCs)?', fix: '/active-directory/kerberoasting/', fixLabel: 'Kerberoasting Tradecraft' },
+      { q: 'Are you targeting only high-value service accounts (avoid requesting all tickets, which creates anomalous volume)?', fix: '/active-directory/kerberoasting/', fixLabel: 'Targeted Kerberoasting' },
+      { q: 'Are you using a legitimate user context (low-privilege domain user) to avoid alerting on the requesting account?', fix: '/active-directory/kerberoasting/', fixLabel: 'Kerberoasting Setup' },
+      { q: 'Are you requesting tickets slowly (not all at once) to avoid volume-based ATA/MDI detections?', fix: '/active-directory/kerberoasting/', fixLabel: 'Kerberoasting OPSEC' },
+      { q: 'Do you have the target service account SPN mapped and confirmed before making the request?', fix: '/active-directory/ad-enumeration/', fixLabel: 'AD Enumeration' },
+      { q: 'Is the cracking being performed offline on a dedicated system, not on the target network?', fix: '/active-directory/kerberoasting/', fixLabel: 'Offline Cracking' },
+      { q: 'Have you identified whether Microsoft ATA or Defender for Identity is monitoring the DC for anomalous ticket requests?', fix: '/active-directory/kerberoasting/', fixLabel: 'MDI Evasion' },
+      { q: 'Are you filtering out honeypot / canary accounts before making requests?', fix: '/active-directory/ad-enumeration/', fixLabel: 'Canary Account Detection' },
+    ]
+  },
+  'ps-cradle': {
+    name: 'PowerShell Download Cradle',
+    checks: [
+      { q: 'Is Script Block Logging disabled or are you using an obfuscated cradle that avoids SBL detection?', fix: '/evasion/amsi-bypass/', fixLabel: 'Script Block Logging Bypass' },
+      { q: 'Have you patched or bypassed AMSI in the current PowerShell session before executing the download?', fix: '/evasion/amsi-bypass/', fixLabel: 'AMSI Bypass' },
+      { q: 'Is the payload being served over HTTPS from a domain with a valid TLS certificate (not self-signed)?', fix: '/c2-frameworks/cobalt-strike/', fixLabel: 'C2 Infrastructure' },
+      { q: 'Are you using a less-monitored download method (e.g., .NET WebClient, certutil, or BitsAdmin) rather than Invoke-WebRequest directly?', fix: '/evasion/lolbins/', fixLabel: 'LOLBin Alternatives' },
+      { q: 'Is PowerShell execution policy set to Bypass or Unrestricted, or are you bypassing it via -ExecutionPolicy Bypass?', fix: '/programming/powershell-offensive-tools/', fixLabel: 'PowerShell Offensive Tools' },
+      { q: 'Is the payload hosted on an infrastructure domain with categorization (not a fresh uncategorized domain)?', fix: '/c2-frameworks/cobalt-strike/', fixLabel: 'C2 Infrastructure OPSEC' },
+      { q: 'Are you running in a constrained language mode context that would prevent the cradle from working?', fix: '/evasion/amsi-bypass/', fixLabel: 'Constrained Language Mode Bypass' },
+      { q: 'Is the PowerShell process being launched from a parent process that is not suspicious (e.g., not cmd.exe or Office)?', fix: '/evasion/lolbins/', fixLabel: 'Process Parent Spoofing' },
+      { q: 'Have you verified the payload is not being detected by AMSI or Defender at the download stage (pre-execution)?', fix: '/evasion/av-edr-evasion/', fixLabel: 'Payload Evasion Testing' },
+    ]
+  },
+  vba: {
+    name: 'VBA Macro Execution',
+    checks: [
+      { q: 'Is the document being delivered in a format that does not trigger Protected View (e.g., from a trusted location or via SMB share)?', fix: '/exploitation/vba-macro-shellcode/', fixLabel: 'VBA Macro Delivery' },
+      { q: 'Is the shellcode or payload embedded in the macro obfuscated (not plaintext strings that Defender will signature match)?', fix: '/evasion/amsi-bypass/', fixLabel: 'Macro Obfuscation' },
+      { q: 'Are you avoiding suspicious VBA function calls like Shell(), CreateObject("WScript.Shell"), or direct syscalls that trigger behavioral detections?', fix: '/exploitation/vba-macro-shellcode/', fixLabel: 'VBA Tradecraft' },
+      { q: 'Have you tested the document against the target\'s AV/EDR in an isolated environment before delivery?', fix: '/evasion/av-edr-evasion/', fixLabel: 'AV Testing' },
+      { q: 'Is the document designed to pass a visual inspection (legible content, correct branding, plausible pretext)?', fix: '/exploitation/vba-macro-shellcode/', fixLabel: 'Document Lure Design' },
+      { q: 'Are you aware that AMSI now scans VBA macro content in Office 365 and patching AMSI via the macro itself is unreliable?', fix: '/evasion/amsi-bypass/', fixLabel: 'AMSI in Office' },
+      { q: 'Have you considered an alternative initial stage (e.g., a dropper that downloads the real payload) rather than embedding shellcode directly?', fix: '/exploitation/vba-macro-shellcode/', fixLabel: 'Staged Payload Delivery' },
+      { q: 'Is Mark-of-the-Web (MotW) handling accounted for, especially if delivering via email or web download?', fix: '/evasion/lolbins/', fixLabel: 'MotW Bypass Techniques' },
+    ]
+  },
+  'process-inject': {
+    name: 'Process Injection (Remote Thread)',
+    checks: [
+      { q: 'Are you targeting a process that is not commonly monitored by EDR (not browser, Office, or high-visibility processes)?', fix: '/exploitation/process-injection/', fixLabel: 'Process Injection Targets' },
+      { q: 'Are you using direct syscalls (NtAllocateVirtualMemory, NtWriteVirtualMemory) rather than Win32 API wrappers to avoid userland hooking?', fix: '/exploitation/process-injection/', fixLabel: 'Direct Syscall Injection' },
+      { q: 'Have you verified the target process architecture matches your shellcode (x86 vs x64)?', fix: '/exploitation/process-injection/', fixLabel: 'Architecture Matching' },
+      { q: 'Are you using an injection technique other than CreateRemoteThread (which is heavily signatured), such as NtCreateThreadEx or QueueUserAPC?', fix: '/exploitation/process-injection-gallery/', fixLabel: 'Injection Technique Gallery' },
+      { q: 'Is your shellcode staged (not the full implant) to reduce the memory footprint written to the target process?', fix: '/exploitation/process-injection/', fixLabel: 'Staged Shellcode' },
+      { q: 'Have you cleared PE headers in the injected shellcode to avoid in-memory scanning?', fix: '/evasion/av-edr-evasion/', fixLabel: 'In-Memory Evasion' },
+      { q: 'Is the target process in a state where injection is expected (e.g., svchost with no unusual modules) rather than a freshly spawned process?', fix: '/exploitation/process-injection/', fixLabel: 'Target Process Selection' },
+      { q: 'Are you aware of and accounting for CFG (Control Flow Guard) in the target process?', fix: '/exploitation/process-injection/', fixLabel: 'CFG Bypass' },
+      { q: 'Is your injection attempt failing silently without crashing the target process?', fix: '/exploitation/process-injection-gallery/', fixLabel: 'Injection Stability' },
+    ]
+  },
+  pth: {
+    name: 'Pass-the-Hash',
+    checks: [
+      { q: 'Have you confirmed the target is NOT running Windows 10/11 with Credential Guard enabled (which blocks PTH against protected accounts)?', fix: '/active-directory/pass-the-hash/', fixLabel: 'PTH Prerequisites' },
+      { q: 'Are you using the NT hash specifically (not the LM hash) for modern PTH attacks?', fix: '/active-directory/pass-the-hash/', fixLabel: 'Pass-the-Hash Mechanics' },
+      { q: 'Is LocalAccountTokenFilterPolicy set correctly on the target, or are you targeting a domain account (to avoid UAC remote restrictions)?', fix: '/active-directory/pass-the-hash/', fixLabel: 'UAC Remote Restrictions' },
+      { q: 'Are you using impacket, CrackMapExec, or Mimikatz\'s sekurlsa::pth in a way that does not spawn a new suspicious process from a high-visibility parent?', fix: '/active-directory/pass-the-hash/', fixLabel: 'PTH Tooling' },
+      { q: 'Is the source machine (where you are running the PTH attack from) not being monitored for lateral movement indicators?', fix: '/post-exploitation/anti-forensics/', fixLabel: 'Source OPSEC' },
+      { q: 'Have you verified the hash is for an account that actually has access to the target resource (not a dead-end account)?', fix: '/active-directory/bloodhound/', fixLabel: 'BloodHound Path Validation' },
+      { q: 'Are you using overpass-the-hash (convert NTLM hash to a Kerberos ticket) to avoid NTLM authentication where NTLM is monitored?', fix: '/active-directory/pass-the-hash/', fixLabel: 'Overpass-the-Hash' },
+      { q: 'Is Defender for Identity (MDI) or ATA monitoring for lateral movement behavior on the domain?', fix: '/active-directory/pass-the-hash/', fixLabel: 'MDI Detection Evasion' },
+    ]
+  },
+  bloodhound: {
+    name: 'BloodHound / SharpHound',
+    checks: [
+      { q: 'Are you running a targeted collection (specific OU or user list) rather than a full domain sweep that generates thousands of LDAP queries?', fix: '/active-directory/bloodhound/', fixLabel: 'BloodHound Stealth Collection' },
+      { q: 'Are you using a non-default collection method to avoid the default SharpHound behavior signatures?', fix: '/active-directory/bloodhound/', fixLabel: 'BloodHound OPSEC' },
+      { q: 'Is SharpHound being executed in-memory (not written to disk) to avoid file-based detection?', fix: '/active-directory/bloodhound/', fixLabel: 'In-Memory SharpHound' },
+      { q: 'Are you running under a non-privileged domain user account (not a high-value account that would be suspicious making thousands of LDAP queries)?', fix: '/active-directory/ad-enumeration/', fixLabel: 'AD Enumeration OPSEC' },
+      { q: 'Is the LDAP query traffic blended with legitimate traffic (e.g., during business hours, not 3am)?', fix: '/active-directory/bloodhound/', fixLabel: 'Timing OPSEC' },
+      { q: 'Have you checked whether Microsoft Defender for Identity is deployed and monitoring for LDAP recon patterns?', fix: '/active-directory/bloodhound/', fixLabel: 'MDI LDAP Monitoring' },
+      { q: 'Are you avoiding the default SharpHound binary filename and output zip filename?', fix: '/active-directory/bloodhound/', fixLabel: 'SharpHound Naming' },
+      { q: 'Is the collected data being exfiltrated via a covert channel rather than a direct file copy to a foreign host?', fix: '/post-exploitation/dns-exfil/', fixLabel: 'Covert Data Exfil' },
+    ]
+  },
+  mimikatz: {
+    name: 'Mimikatz (Direct Execution)',
+    checks: [
+      { q: 'Is the Mimikatz binary compiled from source with a custom project name and strings (not the default binary which is detected by hash)?', fix: '/evasion/av-edr-evasion/', fixLabel: 'Custom Mimikatz Build' },
+      { q: 'Are you running Mimikatz in-memory (Invoke-Mimikatz or similar) rather than writing the binary to disk?', fix: '/evasion/amsi-bypass/', fixLabel: 'In-Memory Mimikatz' },
+      { q: 'Have you bypassed AMSI before loading or executing Mimikatz code?', fix: '/evasion/amsi-bypass/', fixLabel: 'AMSI Bypass' },
+      { q: 'Is Windows Defender real-time protection disabled or bypassed before execution?', fix: '/evasion/av-edr-evasion/', fixLabel: 'Defender Bypass' },
+      { q: 'Are you running in a high-integrity (admin) context, which Mimikatz requires for most credential-dumping operations?', fix: '/post-exploitation/token-impersonation/', fixLabel: 'Privilege Escalation First' },
+      { q: 'Are you using only the specific Mimikatz module you need (not running all commands, which generates more log events)?', fix: '/post-exploitation/lsass-dumping/', fixLabel: 'Targeted Mimikatz Usage' },
+      { q: 'Have you considered a Mimikatz alternative (e.g., Nanodump, PPLdump, or custom dumper) that has lower detection rates?', fix: '/post-exploitation/lsass-dumping/', fixLabel: 'Mimikatz Alternatives' },
+      { q: 'Is the output of Mimikatz being captured and deleted immediately rather than written to a file on disk?', fix: '/post-exploitation/anti-forensics/', fixLabel: 'Output Handling' },
+    ]
+  },
+  dcsync: {
+    name: 'DCSync',
+    checks: [
+      { q: 'Does your current user account have DS-Replication-Get-Changes and DS-Replication-Get-Changes-All permissions on the domain object?', fix: '/active-directory/dcsync/', fixLabel: 'DCSync Prerequisites' },
+      { q: 'Are you targeting specific user accounts (not replicating the entire domain) to reduce LDAP replication event volume?', fix: '/active-directory/dcsync/', fixLabel: 'Targeted DCSync' },
+      { q: 'Are you aware that MDI (Defender for Identity) actively detects DCSync replication from non-DC hosts?', fix: '/active-directory/dcsync/', fixLabel: 'MDI DCSync Detection' },
+      { q: 'Is the DCSync operation being performed from an IP address that is not obviously out of place (e.g., from the DC subnet range if possible)?', fix: '/active-directory/dcsync/', fixLabel: 'Source IP OPSEC' },
+      { q: 'Have you verified the domain functional level allows the replication permissions you intend to abuse?', fix: '/active-directory/dcsync/', fixLabel: 'Domain Functional Level' },
+      { q: 'Are you running the DCSync through a legitimate-looking process rather than spawning Mimikatz directly?', fix: '/evasion/av-edr-evasion/', fixLabel: 'Process OPSEC' },
+      { q: 'Have you considered using the krbtgt hash (retrieved via DCSync) only after confirming golden tickets will work in the environment?', fix: '/active-directory/dcsync/', fixLabel: 'Golden Ticket Usage' },
+      { q: 'Are you extracting only the specific account hashes you need (krbtgt, specific admin accounts) to minimize detection surface?', fix: '/active-directory/dcsync/', fixLabel: 'Minimal Footprint DCSync' },
+    ]
+  },
+  'sched-task': {
+    name: 'Scheduled Task Creation',
+    checks: [
+      { q: 'Is the scheduled task name and description designed to blend in with existing system tasks (not a generic or obviously malicious name)?', fix: '/post-exploitation/persistence/', fixLabel: 'Task Naming OPSEC' },
+      { q: 'Is the task being created using a native method (schtasks.exe or COM API) rather than a tool that generates suspicious telemetry?', fix: '/post-exploitation/persistence/', fixLabel: 'Task Creation Methods' },
+      { q: 'Is the task action pointing to a signed binary or LOLBin rather than a suspicious executable path?', fix: '/evasion/lolbins/', fixLabel: 'LOLBin Persistence' },
+      { q: 'Have you tested that the scheduled task trigger fires reliably in the target environment (correct time zone, correct trigger condition)?', fix: '/post-exploitation/persistence/', fixLabel: 'Task Trigger Verification' },
+      { q: 'Is the task running under a service account or SYSTEM rather than a specific user account (to survive user logout)?', fix: '/post-exploitation/persistence/', fixLabel: 'Task Account Selection' },
+      { q: 'Are the task XML attributes (Author, URI, URI path) set to plausible values to pass inspection?', fix: '/post-exploitation/persistence/', fixLabel: 'Task XML Manipulation' },
+      { q: 'Is the task hidden from the standard schtasks /query output (using SD manipulation or low-level COM access)?', fix: '/post-exploitation/persistence/', fixLabel: 'Hidden Task Techniques' },
+      { q: 'Have you verified the task persists across reboots and that the payload is still accessible at execution time?', fix: '/post-exploitation/persistence/', fixLabel: 'Persistence Verification' },
+    ]
+  },
+  regrun: {
+    name: 'Registry Run Key',
+    checks: [
+      { q: 'Is the registry key value name blending in with legitimate software (not "backdoor.exe" or similar)?', fix: '/post-exploitation/persistence/', fixLabel: 'Registry Key OPSEC' },
+      { q: 'Are you using HKCU instead of HKLM where possible (to avoid requiring admin privileges and reduce detection surface)?', fix: '/post-exploitation/persistence/', fixLabel: 'Registry Hive Selection' },
+      { q: 'Is the binary path pointing to a legitimate-looking location (System32, Program Files) rather than Temp or AppData?', fix: '/evasion/lolbins/', fixLabel: 'LOLBin Persistence' },
+      { q: 'Have you considered using a less-monitored Run key variant (e.g., RunOnce, RunServices, or Winlogon) instead of the standard Run key?', fix: '/post-exploitation/persistence/', fixLabel: 'Alternative Run Keys' },
+      { q: 'Is the payload being executed via a signed binary (wscript.exe, mshta.exe, regsvr32.exe) rather than directly?', fix: '/evasion/lolbins/', fixLabel: 'Signed Binary Proxy' },
+      { q: 'Have you verified the key persists after a simulated reboot in a test environment?', fix: '/post-exploitation/persistence/', fixLabel: 'Persistence Testing' },
+      { q: 'Are you aware that Sysmon Event ID 13 specifically monitors Registry value modifications?', fix: '/evasion/av-edr-evasion/', fixLabel: 'Sysmon Evasion' },
+      { q: 'Is the payload staged (downloads a second stage) rather than executing a known-bad binary directly?', fix: '/post-exploitation/persistence/', fixLabel: 'Staged Payload Persistence' },
+    ]
+  },
+  'remote-service': {
+    name: 'Remote Service Creation',
+    checks: [
+      { q: 'Is the service name and display name plausible and consistent with services already present on the target?', fix: '/post-exploitation/persistence/', fixLabel: 'Service Naming OPSEC' },
+      { q: 'Are you using sc.exe, SCManager COM API, or Impacket smbexec — and is the chosen method appropriate for the EDR present?', fix: '/post-exploitation/lateral-movement/', fixLabel: 'Remote Service Methods' },
+      { q: 'Is the service binary path pointing to a legitimate-looking location and not writing a new file to a suspicious path?', fix: '/evasion/lolbins/', fixLabel: 'Binary Path Selection' },
+      { q: 'Have you confirmed that the SMB named pipe (svcctl) traffic is not being monitored for new service creation events?', fix: '/post-exploitation/lateral-movement/', fixLabel: 'SMB Traffic Monitoring' },
+      { q: 'Is the service being deleted after use (if lateral movement) to minimize persistence artifacts?', fix: '/post-exploitation/anti-forensics/', fixLabel: 'Service Cleanup' },
+      { q: 'Is Windows Event ID 7045 (new service installed) being shipped to SIEM in the target environment?', fix: '/post-exploitation/lateral-movement/', fixLabel: 'Service Creation Logging' },
+      { q: 'Are you running the service under LocalSystem rather than a domain account to avoid credential exposure?', fix: '/post-exploitation/persistence/', fixLabel: 'Service Account Selection' },
+      { q: 'Is the service payload in-memory capable (reflective loader) rather than a standard disk-written PE file?', fix: '/exploitation/process-injection/', fixLabel: 'In-Memory Service Payload' },
+    ]
+  },
+  wmi: {
+    name: 'WMI Lateral Movement',
+    checks: [
+      { q: 'Are you using WMI over a covert authentication method (pass-the-hash, pass-the-ticket) rather than plaintext credentials?', fix: '/post-exploitation/wmi-lateral/', fixLabel: 'WMI Authentication' },
+      { q: 'Is the WMI command obfuscated (encoded payload, LOLBin chain) rather than a direct PowerShell or executable invocation?', fix: '/post-exploitation/wmi-lateral/', fixLabel: 'WMI Payload Obfuscation' },
+      { q: 'Are you cleaning up WMI event subscriptions after use if using persistent WMI execution?', fix: '/post-exploitation/persistence/', fixLabel: 'WMI Persistence Cleanup' },
+      { q: 'Is WMI traffic (DCOM port 135 + dynamic RPC) expected and unmonitored in the target network segment?', fix: '/post-exploitation/wmi-lateral/', fixLabel: 'WMI Network Considerations' },
+      { q: 'Are you using Win32_Process.Create rather than Win32_ScheduledJob (which is more heavily monitored)?', fix: '/post-exploitation/wmi-lateral/', fixLabel: 'WMI Method Selection' },
+      { q: 'Is the WMI execution being traced in Windows Event ID 4688 (process creation) on the remote host?', fix: '/evasion/av-edr-evasion/', fixLabel: 'Process Creation Logging' },
+      { q: 'Are you aware that some EDRs hook WMI provider host (wmiprvse.exe) for child process monitoring?', fix: '/post-exploitation/wmi-lateral/', fixLabel: 'WMI EDR Hooks' },
+      { q: 'Have you validated that WMI DCOM is not blocked by host-based firewall rules on the target?', fix: '/post-exploitation/wmi-lateral/', fixLabel: 'WMI Connectivity Check' },
+    ]
+  },
+  dcom: {
+    name: 'DCOM Lateral Movement',
+    checks: [
+      { q: 'Have you identified the specific DCOM application (CLSID) you intend to abuse on the target host?', fix: '/post-exploitation/dcom-lateral/', fixLabel: 'DCOM Application Discovery' },
+      { q: 'Is the target user account a local administrator on the remote host (required for most DCOM abuse)?', fix: '/post-exploitation/dcom-lateral/', fixLabel: 'DCOM Prerequisites' },
+      { q: 'Are you using a DCOM object that is less commonly abused (not MMC20.Application or ShellWindows which are heavily signatured)?', fix: '/post-exploitation/dcom-lateral/', fixLabel: 'DCOM Object Selection' },
+      { q: 'Is the DCOM invocation being made through a legitimate-looking process rather than PowerShell directly?', fix: '/post-exploitation/dcom-lateral/', fixLabel: 'DCOM Parent Process' },
+      { q: 'Have you verified that the DCOM application is registered and accessible on the target (not just on your test host)?', fix: '/post-exploitation/dcom-lateral/', fixLabel: 'DCOM Validation' },
+      { q: 'Is the payload being executed via the DCOM object in a way that avoids spawning obvious child processes from unexpected parents?', fix: '/post-exploitation/dcom-lateral/', fixLabel: 'DCOM Parent-Child OPSEC' },
+      { q: 'Is port 135 (RPC Endpoint Mapper) accessible from your current position to the target host?', fix: '/post-exploitation/dcom-lateral/', fixLabel: 'DCOM Connectivity' },
+      { q: 'Are you cleaning up after the DCOM execution (removing spawned processes, output files) to reduce forensic artifacts?', fix: '/post-exploitation/anti-forensics/', fixLabel: 'DCOM Cleanup' },
+    ]
+  },
+  portscan: {
+    name: 'Network Port Scan',
+    checks: [
+      { q: 'Are you limiting scan rate and concurrency to avoid triggering IDS/IPS rate-based alerts?', fix: '/recon/active-recon/', fixLabel: 'Slow Scan Techniques' },
+      { q: 'Are you scanning from a compromised internal host rather than your external infrastructure (to blend with internal traffic)?', fix: '/recon/active-recon/', fixLabel: 'Internal Reconnaissance' },
+      { q: 'Are you targeting only specific ports relevant to your objective rather than a full 65535-port sweep?', fix: '/recon/active-recon/', fixLabel: 'Targeted Port Scanning' },
+      { q: 'Are you using a tool that generates less distinctive scan fingerprints than the default nmap behavior (e.g., timing adjustments, fragmented packets)?', fix: '/recon/active-recon/', fixLabel: 'Scan Evasion Techniques' },
+      { q: 'Is your scan source IP address in a range that is not obviously foreign to the target network?', fix: '/pivoting/chisel/', fixLabel: 'Source IP Blending' },
+      { q: 'Are you avoiding scanning security devices, honeypot IPs, or addresses that are not genuine targets?', fix: '/recon/active-recon/', fixLabel: 'Honeypot Avoidance' },
+      { q: 'Have you checked whether NetFlow or packet capture is being collected at the network perimeter or internally?', fix: '/recon/active-recon/', fixLabel: 'Network Monitoring Awareness' },
+      { q: 'Is the scan being performed during business hours to blend in with normal network activity patterns?', fix: '/recon/active-recon/', fixLabel: 'Scan Timing OPSEC' },
+    ]
+  },
+};
+
+let currentTech = null;
+let checkStates = {};
+
+function updateScore() {
+  if (!currentTech) return;
+  const checks = TECHNIQUES[currentTech].checks;
+  const total = checks.length;
+  const checked = Object.values(checkStates).filter(Boolean).length;
+  const score = Math.round((checked / total) * 10);
+
+  document.getElementById('score-circle').textContent = score;
+  document.getElementById('bar-label').textContent = 'Score: ' + score + ' / 10  (' + checked + ' of ' + total + ' checks passed)';
+
+  let tier, label, desc;
+  if (score <= 4) {
+    tier = 'red';
+    label = 'STOP — HIGH DETECTION RISK';
+    desc = 'Significant evasion gaps detected. Proceeding now is likely to trigger alerts. Address all unchecked items before executing.';
+  } else if (score <= 7) {
+    tier = 'yellow';
+    label = 'CAUTION — MODERATE RISK';
+    desc = 'Some evasion measures are in place, but gaps remain. Proceeding carries elevated detection risk. Address unchecked items if possible.';
+  } else {
+    tier = 'green';
+    label = 'PROCEED — EVASION READY';
+    desc = 'Strong evasion posture. Minimal detection risk based on this checklist. Verify operationally and maintain noise discipline.';
+  }
+
+  const card = document.getElementById('verdict-card');
+  const circle = document.getElementById('score-circle');
+  const level = document.getElementById('verdict-level');
+  const descEl = document.getElementById('verdict-desc');
+  const bar = document.getElementById('score-bar');
+
+  card.className = 'verdict-card ' + tier;
+  circle.className = 'score-circle ' + tier;
+  level.className = 'verdict-level ' + tier;
+  level.textContent = label;
+  descEl.textContent = desc;
+
+  const pct = (score / 10) * 100;
+  bar.style.width = pct + '%';
+  bar.className = 'score-bar-fill ' + tier;
+
+  // Update fix links visibility
+  const items = document.querySelectorAll('.check-item');
+  items.forEach((item, i) => {
+    const fixEl = item.querySelector('.check-fix');
+    if (checkStates[i]) {
+      if (fixEl) fixEl.style.display = 'none';
+    } else {
+      if (fixEl) fixEl.style.display = 'inline-block';
+    }
+  });
+}
+
+function renderTechnique(key) {
+  const tech = TECHNIQUES[key];
+  currentTech = key;
+  checkStates = {};
+  tech.checks.forEach((_, i) => { checkStates[i] = false; });
+
+  document.getElementById('checklist-title').textContent = 'Evasion Checklist — ' + tech.name;
+
+  const container = document.getElementById('checklist-items');
+  container.innerHTML = '';
+
+  tech.checks.forEach((check, i) => {
+    const item = document.createElement('div');
+    item.className = 'check-item';
+    item.dataset.index = i;
+
+    const cbId = 'chk-' + i;
+    item.innerHTML = `<div class="check-row">
+      <input type="checkbox" id="${cbId}" />
+      <div class="check-content">
+        <label class="check-question" for="${cbId}">${check.q}</label>
+        <a class="check-fix" href="${check.fix}" target="_blank">→ Fix: ${check.fixLabel}</a>
+      </div>
+    </div>`;
+
+    const cb = item.querySelector('input[type="checkbox"]');
+    cb.addEventListener('change', () => {
+      checkStates[i] = cb.checked;
+      if (cb.checked) {
+        item.classList.add('checked');
+      } else {
+        item.classList.remove('checked');
+      }
+      updateScore();
+    });
+
+    container.appendChild(item);
+  });
+
+  document.getElementById('scorer-output').style.display = 'block';
+  document.getElementById('no-technique').style.display = 'none';
+  updateScore();
+}
+
+document.getElementById('tech-select').addEventListener('change', function() {
+  if (this.value) {
+    renderTechnique(this.value);
+  } else {
+    document.getElementById('scorer-output').style.display = 'none';
+    document.getElementById('no-technique').style.display = 'block';
+  }
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  const select = document.getElementById('tech-select');
+  if (currentTech && select.value) {
+    renderTechnique(select.value);
+  }
+});
+</script>

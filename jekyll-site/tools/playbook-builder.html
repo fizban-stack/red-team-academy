@@ -1,0 +1,712 @@
+---
+layout: base
+title: "Attack Playbook Builder — Red Team Academy"
+---
+
+<style>
+.pb-page { padding: 24px; max-width: 960px; }
+
+.pb-header { margin-bottom: 28px; }
+.pb-header h1 {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.pb-header .subtitle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.pb-form {
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  padding: 24px;
+  border-radius: var(--radius);
+  margin-bottom: 24px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pb-select {
+  background: var(--bg-3);
+  border: 1px solid var(--border-1);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition);
+}
+.pb-select:focus { border-color: var(--accent); }
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cb-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.cb-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.generate-btn {
+  background: var(--accent-dark);
+  border: 1px solid var(--accent-muted);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition);
+  letter-spacing: 0.3px;
+}
+.generate-btn:hover {
+  background: rgba(74, 222, 128, 0.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(74, 222, 128, 0.15);
+}
+
+/* Output */
+.pb-output { display: none; }
+.pb-output.visible { display: block; }
+
+.output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.output-title {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--accent);
+}
+.copy-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border-1);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+.copy-btn.copied { border-color: var(--accent); color: var(--accent); }
+
+.phase-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  border-left: 3px solid var(--accent-dim);
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+}
+.phase-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-0);
+}
+.technique-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-0);
+}
+.technique-item:last-child { border-bottom: none; padding-bottom: 0; }
+.tech-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-0);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tech-id {
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-dark);
+  border: 1px solid var(--accent-muted);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+.tech-link {
+  font-size: 10px;
+  color: var(--blue);
+  font-family: var(--font-mono);
+  text-decoration: none;
+}
+.tech-link:hover { color: var(--blue-dim); text-decoration: underline; }
+.tech-rationale {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  padding-left: 2px;
+  line-height: 1.5;
+}
+
+.profile-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--amber);
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.25);
+  padding: 2px 8px;
+  border-radius: 2px;
+  margin-left: 8px;
+}
+</style>
+
+<div class="pb-page">
+  <div class="pb-header">
+    <h1>// Attack Playbook Builder</h1>
+    <div class="subtitle">&gt; Fill out the target profile to generate a custom ordered attack playbook</div>
+  </div>
+
+  <div class="pb-form">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Industry</label>
+        <select class="pb-select" id="industry">
+          <option value="financial">Financial</option>
+          <option value="healthcare">Healthcare</option>
+          <option value="government">Government</option>
+          <option value="technology">Technology</option>
+          <option value="manufacturing">Manufacturing</option>
+          <option value="energy">Energy / Utilities</option>
+          <option value="retail">Retail</option>
+          <option value="education">Education</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Company Size</label>
+        <select class="pb-select" id="size">
+          <option value="smb">SMB (&lt;500 employees)</option>
+          <option value="midmarket">Mid-market (500–5000)</option>
+          <option value="enterprise">Enterprise (5000+)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Endpoint Security</label>
+        <select class="pb-select" id="edr">
+          <option value="none">None / Basic AV</option>
+          <option value="defender">Windows Defender</option>
+          <option value="crowdstrike">CrowdStrike Falcon</option>
+          <option value="sentinelone">SentinelOne</option>
+          <option value="carbonblack">Carbon Black</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Remote Access</label>
+        <div class="checkbox-group">
+          <label class="cb-item"><input type="checkbox" value="vpn" class="remote-cb" checked> VPN</label>
+          <label class="cb-item"><input type="checkbox" value="citrix" class="remote-cb"> Citrix</label>
+          <label class="cb-item"><input type="checkbox" value="rdp" class="remote-cb"> RDP Exposed</label>
+          <label class="cb-item"><input type="checkbox" value="o365" class="remote-cb" checked> O365 / M365</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Network Type</label>
+        <div class="checkbox-group">
+          <label class="cb-item"><input type="checkbox" value="onprem" class="net-cb" checked> On-Prem Active Directory</label>
+          <label class="cb-item"><input type="checkbox" value="azuread" class="net-cb"> Azure AD / Entra ID</label>
+          <label class="cb-item"><input type="checkbox" value="aws" class="net-cb"> AWS</label>
+          <label class="cb-item"><input type="checkbox" value="gcp" class="net-cb"> GCP</label>
+          <label class="cb-item"><input type="checkbox" value="hybrid" class="net-cb"> Hybrid</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Web Presence</label>
+        <div class="checkbox-group">
+          <label class="cb-item"><input type="checkbox" value="website" class="web-cb" checked> Public Website</label>
+          <label class="cb-item"><input type="checkbox" value="portal" class="web-cb"> Customer Portal</label>
+          <label class="cb-item"><input type="checkbox" value="adminportal" class="web-cb"> Admin Portal</label>
+          <label class="cb-item"><input type="checkbox" value="api" class="web-cb"> API Gateway</label>
+        </div>
+      </div>
+    </div>
+    <button class="generate-btn" id="generate-btn">&gt;_ Generate Playbook</button>
+  </div>
+
+  <div class="pb-output" id="pb-output">
+    <div class="output-header">
+      <div class="output-title" id="output-title">&gt; Playbook: <span id="playbook-label"></span></div>
+      <button class="copy-btn" id="copy-btn">[ Copy as Markdown ]</button>
+    </div>
+    <div id="playbook-phases"></div>
+  </div>
+</div>
+
+<script>
+const PLAYBOOKS = {
+
+  // Profile: Azure AD + strong EDR (CrowdStrike/SentinelOne)
+  cloud_hardened: {
+    label: 'Cloud-Forward / Hardened EDR',
+    phases: [
+      {
+        phase: '1. Reconnaissance',
+        techniques: [
+          { id:'T1589', name:'Gather Victim Identity Info', url:'/recon/passive-recon/', rationale:'Harvest employee emails from LinkedIn, Dehashed, and HaveIBeenPwned to build credential spray lists for Azure AD.' },
+          { id:'T1595', name:'Active Scanning', url:'/recon/active-recon/', rationale:'Identify cloud service endpoints, OAuth flows, and exposed APIs before touching the perimeter.' },
+        ]
+      },
+      {
+        phase: '2. Initial Access',
+        techniques: [
+          { id:'T1566.002', name:'Spearphishing Link (AiTM)', url:'/exploitation/vba-macro-shellcode/', rationale:'Adversary-in-the-Middle phishing bypasses MFA by relaying tokens — effective even when Authenticator is enforced.' },
+          { id:'T1078.002', name:'Valid Domain Accounts', url:'/active-directory/pass-the-hash/', rationale:'With Entra credentials from OSINT/spray, authenticate directly to O365 without touching an endpoint.' },
+        ]
+      },
+      {
+        phase: '3. Defense Evasion',
+        techniques: [
+          { id:'T1218', name:'Signed Binary Proxy Execution', url:'/evasion/lolbins/', rationale:'CrowdStrike heavily monitors injected processes; living-off-the-land with signed binaries avoids most behavioral detections.' },
+          { id:'T1027', name:'Obfuscated Payloads / AMSI Bypass', url:'/evasion/amsi-bypass/', rationale:'Required to execute any .NET tooling without triggering AMSI or the EDR\'s in-process scanner.' },
+        ]
+      },
+      {
+        phase: '4. Credential Access',
+        techniques: [
+          { id:'T1649', name:'Steal / Forge Auth Certificates (ADCS)', url:'/active-directory/adcs-attacks/', rationale:'ESC1/ESC8 ADCS attacks provide long-lived certificates that survive password resets and bypass MFA.' },
+          { id:'T1558.003', name:'Kerberoasting', url:'/active-directory/kerberoasting/', rationale:'Request service tickets offline; Falcon does not block ticket requests, only suspicious process access patterns.' },
+        ]
+      },
+      {
+        phase: '5. Lateral Movement & Objectives',
+        techniques: [
+          { id:'T1021.003', name:'DCOM Lateral Movement', url:'/post-exploitation/dcom-lateral/', rationale:'DCOM execution is less monitored than PSRemoting or SMB admin shares on hardened endpoints.' },
+          { id:'T1558.001', name:'Golden Ticket', url:'/active-directory/dcsync/', rationale:'After achieving domain admin, forge a golden ticket for persistent, untraceable domain access.' },
+        ]
+      },
+    ]
+  },
+
+  // Profile: On-prem AD, no/weak EDR
+  onprem_noEdr: {
+    label: 'On-Prem AD / Weak EDR',
+    phases: [
+      {
+        phase: '1. Reconnaissance',
+        techniques: [
+          { id:'T1595', name:'Active Scanning', url:'/recon/active-recon/', rationale:'Aggressively scan for SMB, RDP, and web application attack surface with no EDR to alert on nmap traffic.' },
+          { id:'T1046', name:'Network Service Discovery', url:'/recon/active-recon/', rationale:'Map internal services post-foothold; no EDR means SharpHound and nmap run freely.' },
+        ]
+      },
+      {
+        phase: '2. Initial Access',
+        techniques: [
+          { id:'T1566.001', name:'Spearphishing Attachment (VBA Macro)', url:'/exploitation/vba-macro-shellcode/', rationale:'Macro-enabled documents deliver shellcode directly; basic AV is easily bypassed with encryption.' },
+          { id:'T1190', name:'Exploit Public-Facing Application', url:'/exploitation/service-exploits/', rationale:'Look for unpatched services (Exchange, Confluence, Tomcat) — common in orgs with weak security posture.' },
+        ]
+      },
+      {
+        phase: '3. Privilege Escalation',
+        techniques: [
+          { id:'T1068', name:'Local Privilege Escalation', url:'/post-exploitation/privesc-windows/', rationale:'With no EDR, run WinPEAS freely to find unquoted service paths, weak ACLs, and AlwaysInstallElevated.' },
+          { id:'T1134', name:'Token Impersonation', url:'/post-exploitation/token-impersonation/', rationale:'Impersonate SYSTEM or privileged tokens from service accounts running on the compromised host.' },
+        ]
+      },
+      {
+        phase: '4. Credential Access',
+        techniques: [
+          { id:'T1003.001', name:'LSASS Memory Dump', url:'/post-exploitation/lsass-dumping/', rationale:'Direct LSASS access is viable with no EDR. Use Mimikatz or ProcDump to extract NTLM hashes and plaintext credentials.' },
+          { id:'T1557.001', name:'LLMNR/NBT-NS Poisoning', url:'/network-attacks/responder/', rationale:'Responder captures NTLMv2 hashes passively from network broadcasts — effective in flat on-prem networks.' },
+        ]
+      },
+      {
+        phase: '5. Lateral Movement & Persistence',
+        techniques: [
+          { id:'T1550.002', name:'Pass-the-Hash', url:'/active-directory/pass-the-hash/', rationale:'Use dumped NTLM hashes to authenticate across the domain without cracking passwords.' },
+          { id:'T1543.003', name:'Windows Service Persistence', url:'/post-exploitation/persistence/', rationale:'Install a malicious service for persistent access; no EDR means service creation goes unnoticed.' },
+        ]
+      },
+    ]
+  },
+
+  // Profile: Healthcare + Defender
+  healthcare_defender: {
+    label: 'Healthcare / Windows Defender',
+    phases: [
+      {
+        phase: '1. Reconnaissance',
+        techniques: [
+          { id:'T1589', name:'Gather Victim Identity (OSINT)', url:'/recon/passive-recon/', rationale:'Healthcare staff frequently reuse credentials; OSINT from breach databases is a high-yield starting point.' },
+          { id:'T1598', name:'Phishing for Information', url:'/recon/passive-recon/', rationale:'Pretexting as a vendor or IT support is highly effective in healthcare environments.' },
+        ]
+      },
+      {
+        phase: '2. Initial Access',
+        techniques: [
+          { id:'T1566.001', name:'Spearphishing with AMSI-Bypassed Macro', url:'/exploitation/vba-macro-shellcode/', rationale:'Defender is bypassable with obfuscated macros; healthcare users frequently open attachments without scrutiny.' },
+          { id:'T1133', name:'External Remote Services (Citrix/VPN)', url:'/pivoting/ssh-tunneling/', rationale:'Healthcare orgs commonly expose Citrix for remote clinical access — credential spray is effective here.' },
+        ]
+      },
+      {
+        phase: '3. Defense Evasion',
+        techniques: [
+          { id:'T1562.001', name:'Disable Windows Defender', url:'/evasion/av-edr-evasion/', rationale:'Defender can be disabled via tamper protection bypass or GPO modification with local admin rights.' },
+          { id:'T1027', name:'Obfuscated Files / AMSI Bypass', url:'/evasion/amsi-bypass/', rationale:'Invoke-Obfuscation or custom AMSI patches allow PowerShell tooling to run without Defender blocks.' },
+        ]
+      },
+      {
+        phase: '4. Lateral Movement',
+        techniques: [
+          { id:'T1021.001', name:'RDP Lateral Movement', url:'/post-exploitation/rdp-hijacking/', rationale:'RDP is heavily relied on in clinical environments; hijacking existing sessions is low-noise.' },
+          { id:'T1021.002', name:'SMB / Admin Shares', url:'/post-exploitation/lateral-movement/', rationale:'Flat healthcare networks with shared imaging and records systems expose admin$ on nearly every host.' },
+        ]
+      },
+      {
+        phase: '5. Exfiltration',
+        techniques: [
+          { id:'T1048', name:'Exfil Over ICMP / DNS', url:'/post-exploitation/icmp-exfil/', rationale:'Healthcare networks rarely inspect outbound ICMP or DNS, making them ideal covert exfil channels for PHI.' },
+          { id:'T1071.004', name:'DNS Tunneling', url:'/post-exploitation/dns-exfil/', rationale:'DNS exfil bypasses most DLP solutions and firewalls in clinical network segments.' },
+        ]
+      },
+    ]
+  },
+
+  // Profile: Financial + Enterprise + SentinelOne
+  financial_enterprise: {
+    label: 'Financial Enterprise / SentinelOne',
+    phases: [
+      {
+        phase: '1. Reconnaissance',
+        techniques: [
+          { id:'T1595', name:'Passive & Active Recon', url:'/recon/active-recon/', rationale:'Financial institutions have large external footprints; map IP ranges, certificate transparency logs, and API endpoints first.' },
+          { id:'T1589', name:'Gather Victim Identity (LinkedIn/Breaches)', url:'/recon/passive-recon/', rationale:'Target finance, treasury, and IT staff specifically — password spraying against M365 with valid usernames is low-noise.' },
+        ]
+      },
+      {
+        phase: '2. Initial Access',
+        techniques: [
+          { id:'T1566.002', name:'Spearphishing Link (Credential Harvest)', url:'/exploitation/vba-macro-shellcode/', rationale:'Fake login pages targeting O365 or internal banking portals are the primary initial access vector for financial targets.' },
+          { id:'T1190', name:'Exploit Web Application', url:'/exploitation/service-exploits/', rationale:'Customer-facing portals in financial institutions often lag on patching due to change management constraints.' },
+        ]
+      },
+      {
+        phase: '3. Defense Evasion',
+        techniques: [
+          { id:'T1218', name:'LOLBins (certutil, mshta, regsvr32)', url:'/evasion/lolbins/', rationale:'SentinelOne\'s behavioral AI is harder to bypass with traditional malware; living-off-the-land is mandatory.' },
+          { id:'T1055.012', name:'Process Hollowing', url:'/exploitation/process-injection-gallery/', rationale:'Injecting into a trusted process like svchost.exe reduces EDR confidence scores on behavioral alerts.' },
+        ]
+      },
+      {
+        phase: '4. Credential Access',
+        techniques: [
+          { id:'T1558.003', name:'Kerberoasting (AES Downgrade)', url:'/active-directory/kerberoasting/', rationale:'Request RC4 tickets for service accounts to enable offline cracking; SentinelOne does not alert on ticket requests.' },
+          { id:'T1649', name:'ADCS Certificate Theft (ESC1)', url:'/active-directory/adcs-attacks/', rationale:'ADCS misconfigurations are common even in large enterprises; certificates persist past password rotations.' },
+        ]
+      },
+      {
+        phase: '5. Objectives',
+        techniques: [
+          { id:'T1482', name:'Domain Trust Enumeration', url:'/active-directory/domain-trusts/', rationale:'Financial institutions often have M&A remnant trusts; enumerate to find paths to less-monitored domains.' },
+          { id:'T1567', name:'Exfil to Cloud Storage', url:'/post-exploitation/cloud-exfil/', rationale:'Exfil to legitimate cloud services (OneDrive, SharePoint) blends into normal business traffic at financial firms.' },
+        ]
+      },
+    ]
+  },
+
+  // Profile: Government / On-prem / moderate security
+  government_onprem: {
+    label: 'Government / On-Prem AD',
+    phases: [
+      {
+        phase: '1. Reconnaissance',
+        techniques: [
+          { id:'T1595', name:'Active Scanning (Shodan/Censys)', url:'/recon/active-recon/', rationale:'Government agencies frequently expose legacy services; identify VPN concentrators, mail gateways, and portals.' },
+          { id:'T1589', name:'OSINT / Identity Gathering', url:'/recon/passive-recon/', rationale:'Government employee directories and LinkedIn profiles reveal org structure and targeting priorities.' },
+        ]
+      },
+      {
+        phase: '2. Initial Access',
+        techniques: [
+          { id:'T1190', name:'Exploit Public-Facing Service', url:'/exploitation/service-exploits/', rationale:'Government orgs run legacy applications (Confluence, Jira, Exchange) with delayed patch cycles.' },
+          { id:'T1133', name:'External Remote Services (VPN/Citrix)', url:'/pivoting/ssh-tunneling/', rationale:'Credential spray against exposed VPN endpoints using breached credential lists is highly effective.' },
+        ]
+      },
+      {
+        phase: '3. Lateral Movement',
+        techniques: [
+          { id:'T1021.006', name:'WMI Lateral Movement', url:'/post-exploitation/wmi-lateral/', rationale:'WMI-based lateral movement is covert and rarely flagged on government networks with signature-based detection.' },
+          { id:'T1021.003', name:'DCOM Lateral Movement', url:'/post-exploitation/dcom-lateral/', rationale:'DCOM provides an alternative lateral movement path that bypasses SMB-focused detection rules.' },
+        ]
+      },
+      {
+        phase: '4. Persistence & Privilege Escalation',
+        techniques: [
+          { id:'T1484.001', name:'Group Policy Modification', url:'/active-directory/acl-abuse/', rationale:'GPO abuse provides domain-wide persistence and is difficult to detect without specialized AD monitoring.' },
+          { id:'T1068', name:'Privilege Escalation via Exploit', url:'/post-exploitation/privesc-windows/', rationale:'Unpatched local privilege escalation vulnerabilities are common in government environments with rigid patching windows.' },
+        ]
+      },
+      {
+        phase: '5. Exfiltration',
+        techniques: [
+          { id:'T1041', name:'Exfil Over C2 Channel', url:'/c2-frameworks/cobalt-strike/', rationale:'Use a malleable C2 profile mimicking legitimate traffic (HTTPS to cloud CDN) to exfil documents without DLP alerts.' },
+          { id:'T1070.001', name:'Clear Windows Event Logs', url:'/post-exploitation/anti-forensics/', rationale:'Wipe event logs before extraction to impede forensic reconstruction of the intrusion timeline.' },
+        ]
+      },
+    ]
+  },
+
+  // Profile: Technology company + Hybrid + CrowdStrike
+  tech_hybrid: {
+    label: 'Technology Company / Hybrid Cloud',
+    phases: [
+      {
+        phase: '1. Reconnaissance',
+        techniques: [
+          { id:'T1595', name:'GitHub/Code Recon', url:'/recon/active-recon/', rationale:'Tech companies frequently leak credentials, API keys, and internal hostnames in public GitHub repos.' },
+          { id:'T1589', name:'Gather Victim Identity', url:'/recon/passive-recon/', rationale:'Enumerate developer LinkedIn profiles and conference talks to identify high-value targets with privileged access.' },
+        ]
+      },
+      {
+        phase: '2. Initial Access',
+        techniques: [
+          { id:'T1078', name:'Valid Accounts (Leaked API Keys)', url:'/active-directory/pass-the-hash/', rationale:'Leaked CI/CD credentials or AWS access keys from repos provide direct cloud access without touching endpoints.' },
+          { id:'T1190', name:'Exploit Dev/Staging Environment', url:'/exploitation/service-exploits/', rationale:'Tech companies often expose staging environments with weaker controls than production.' },
+        ]
+      },
+      {
+        phase: '3. Defense Evasion',
+        techniques: [
+          { id:'T1218', name:'LOLBins / Signed Binary Proxy', url:'/evasion/lolbins/', rationale:'CrowdStrike monitors all unsigned execution; use signed Microsoft and third-party binaries exclusively.' },
+          { id:'T1572', name:'Protocol Tunneling (Chisel/ngrok)', url:'/pivoting/chisel/', rationale:'Tunnel C2 over HTTPS or WebSockets to blend with developer tooling traffic on tech company networks.' },
+        ]
+      },
+      {
+        phase: '4. Lateral Movement',
+        techniques: [
+          { id:'T1021.006', name:'WMI Lateral Movement', url:'/post-exploitation/wmi-lateral/', rationale:'Less alerting than PSRemoting in CrowdStrike; useful for moving between internal developer workstations.' },
+          { id:'T1078.002', name:'Valid Domain/Cloud Accounts', url:'/active-directory/bloodhound/', rationale:'Enumerate BloodHound paths to find developer accounts with privileged cloud role assignments.' },
+        ]
+      },
+      {
+        phase: '5. Objectives',
+        techniques: [
+          { id:'T1567', name:'Exfil to Cloud Storage (S3/Blob)', url:'/post-exploitation/cloud-exfil/', rationale:'Exfilling to cloud storage blends perfectly into tech company operations; rarely triggers DLP rules.' },
+          { id:'T1558.003', name:'Kerberoasting (Hybrid AD)', url:'/active-directory/kerberoasting/', rationale:'Hybrid environments often have on-prem service accounts synced to Entra — Kerberoast them for dual-environment access.' },
+        ]
+      },
+    ]
+  },
+
+  // Profile: SMB + no EDR + RDP exposed
+  smb_rdp: {
+    label: 'SMB / RDP Exposed / No EDR',
+    phases: [
+      {
+        phase: '1. Reconnaissance',
+        techniques: [
+          { id:'T1595', name:'Shodan/Censys RDP Discovery', url:'/recon/active-recon/', rationale:'Exposed RDP on 3389 is immediately visible on Shodan; enumerate all exposed IPs before attempting access.' },
+          { id:'T1046', name:'Port Scan / Service Discovery', url:'/recon/active-recon/', rationale:'SMBs rarely have IDS/IPS; aggressive nmap scanning reveals the full internal attack surface.' },
+        ]
+      },
+      {
+        phase: '2. Initial Access',
+        techniques: [
+          { id:'T1021.001', name:'RDP Brute Force / Credential Spray', url:'/post-exploitation/rdp-hijacking/', rationale:'Exposed RDP with common credentials or breached passwords is the fastest path into SMB networks.' },
+          { id:'T1566.001', name:'Phishing (Macro / HTA)', url:'/exploitation/vba-macro-shellcode/', rationale:'SMB employees have minimal security training; macro-enabled documents succeed at high rates.' },
+        ]
+      },
+      {
+        phase: '3. Privilege Escalation',
+        techniques: [
+          { id:'T1068', name:'Local Privilege Escalation', url:'/post-exploitation/privesc-windows/', rationale:'SMB systems are often unpatched; PrintNightmare, HiveNightmare, and AlwaysInstallElevated are common wins.' },
+          { id:'T1134', name:'Token Impersonation', url:'/post-exploitation/token-impersonation/', rationale:'Impersonate SYSTEM via SeImpersonatePrivilege using Juicy/Sweet/Rogue Potato techniques.' },
+        ]
+      },
+      {
+        phase: '4. Credential Access & Lateral Movement',
+        techniques: [
+          { id:'T1003.001', name:'LSASS Dump (Mimikatz)', url:'/post-exploitation/lsass-dumping/', rationale:'No EDR means direct Mimikatz execution. Dump all credentials from LSASS in seconds.' },
+          { id:'T1550.002', name:'Pass-the-Hash', url:'/active-directory/pass-the-hash/', rationale:'Relay or reuse NTLM hashes to authenticate to every machine in the flat SMB network.' },
+        ]
+      },
+      {
+        phase: '5. Persistence & Exfiltration',
+        techniques: [
+          { id:'T1547.001', name:'Registry Run Key Persistence', url:'/post-exploitation/persistence/', rationale:'Simple registry persistence survives reboots and goes unnoticed without an EDR.' },
+          { id:'T1048', name:'Exfil Over Alternative Protocol', url:'/post-exploitation/icmp-exfil/', rationale:'Data exfiltration over ICMP or FTP bypasses SMB perimeter firewalls that only block standard ports.' },
+        ]
+      },
+    ]
+  },
+
+  // Profile: Energy/Manufacturing + OT/ICS concern
+  energy_ot: {
+    label: 'Energy / Manufacturing (OT Risk)',
+    phases: [
+      {
+        phase: '1. Reconnaissance',
+        techniques: [
+          { id:'T1595', name:'ICS/SCADA Asset Discovery', url:'/recon/active-recon/', rationale:'Shodan indexes Modbus, DNP3, and Siemens S7 endpoints; identify exposed OT interfaces before engaging.' },
+          { id:'T1589', name:'Gather Vendor/Supply Chain Identity', url:'/recon/passive-recon/', rationale:'Energy sector attacks frequently leverage third-party vendors with trusted network access to OT environments.' },
+        ]
+      },
+      {
+        phase: '2. Initial Access',
+        techniques: [
+          { id:'T1566.001', name:'Spearphishing Engineering Staff', url:'/exploitation/vba-macro-shellcode/', rationale:'Target OT engineers and SCADA administrators with lures referencing HMI software or maintenance windows.' },
+          { id:'T1133', name:'External Remote Services (VPN/RDP to OT DMZ)', url:'/pivoting/ssh-tunneling/', rationale:'Vendor jump hosts with persistent VPN access to OT networks are a primary initial access vector.' },
+        ]
+      },
+      {
+        phase: '3. IT Network Pivoting',
+        techniques: [
+          { id:'T1572', name:'Protocol Tunneling to OT DMZ', url:'/pivoting/chisel/', rationale:'Use Chisel or SSH port forwarding to pivot from compromised IT hosts toward the OT DMZ.' },
+          { id:'T1021.001', name:'RDP to OT Jump Server', url:'/post-exploitation/rdp-hijacking/', rationale:'OT jump servers are often accessible from IT networks via RDP; hijack existing sessions for access.' },
+        ]
+      },
+      {
+        phase: '4. Credential Access',
+        techniques: [
+          { id:'T1003.001', name:'LSASS Dump on IT/OT Jump Host', url:'/post-exploitation/lsass-dumping/', rationale:'OT jump hosts store credentials for HMI and SCADA systems in LSASS; dump them for direct OT access.' },
+          { id:'T1558.003', name:'Kerberoasting IT Domain', url:'/active-directory/kerberoasting/', rationale:'Service accounts with access to OT management consoles often have weak passwords and SPN registrations.' },
+        ]
+      },
+      {
+        phase: '5. Persistence',
+        techniques: [
+          { id:'T1543.003', name:'Windows Service on IT/OT Boundary', url:'/post-exploitation/persistence/', rationale:'Install persistence on the IT/OT boundary host to maintain access across network segmentation boundaries.' },
+          { id:'T1070.001', name:'Clear Event Logs', url:'/post-exploitation/anti-forensics/', rationale:'OT environments have limited log centralization; local log clearing destroys most forensic evidence.' },
+        ]
+      },
+    ]
+  },
+};
+
+function getProfile(industry, size, edr, networks, remote) {
+  const hasAzure = networks.includes('azuread') || networks.includes('hybrid');
+  const hasOnprem = networks.includes('onprem') || networks.includes('hybrid');
+  const hasRdp = remote.includes('rdp');
+  const strongEdr = ['crowdstrike','sentinelone','carbonblack'].includes(edr);
+  const weakEdr = edr === 'none';
+  const isEnterprise = size === 'enterprise';
+  const isMidOrSmb = size !== 'enterprise';
+
+  if (industry === 'energy' || industry === 'manufacturing') return 'energy_ot';
+  if (industry === 'government') return 'government_onprem';
+  if (industry === 'healthcare') return 'healthcare_defender';
+  if (industry === 'financial' && isEnterprise) return 'financial_enterprise';
+  if (industry === 'technology' && (hasAzure || networks.includes('aws'))) return 'tech_hybrid';
+  if (hasAzure && strongEdr) return 'cloud_hardened';
+  if (hasOnprem && weakEdr && hasRdp && isMidOrSmb) return 'smb_rdp';
+  if (hasOnprem && weakEdr) return 'onprem_noEdr';
+  if (hasOnprem && !weakEdr) return 'onprem_noEdr';
+  return 'cloud_hardened';
+}
+
+function renderPlaybook(key) {
+  const pb = PLAYBOOKS[key];
+  const container = document.getElementById('playbook-phases');
+  container.innerHTML = '';
+  document.getElementById('playbook-label').innerHTML = pb.label +
+    '<span class="profile-badge">PROFILE MATCH</span>';
+
+  pb.phases.forEach(phase => {
+    const card = document.createElement('div');
+    card.className = 'phase-card';
+
+    let html = '<div class="phase-title">' + phase.phase + '</div>';
+    phase.techniques.forEach(t => {
+      html += `<div class="technique-item">
+        <div class="tech-name">
+          <span class="tech-id">${t.id}</span>
+          ${t.name}
+          <a class="tech-link" href="${t.url}" target="_blank">[open training →]</a>
+        </div>
+        <div class="tech-rationale">↳ ${t.rationale}</div>
+      </div>`;
+    });
+
+    card.innerHTML = html;
+    container.appendChild(card);
+  });
+}
+
+function buildMarkdown(key) {
+  const pb = PLAYBOOKS[key];
+  let md = '# Attack Playbook: ' + pb.label + '\n\nGenerated by Red Team Academy Playbook Builder\n\n---\n\n';
+  pb.phases.forEach(phase => {
+    md += '## ' + phase.phase + '\n\n';
+    phase.techniques.forEach(t => {
+      md += '### ' + t.id + ' — ' + t.name + '\n';
+      md += '**Training:** https://redteamacademy.local' + t.url + '\n\n';
+      md += '> ' + t.rationale + '\n\n';
+    });
+  });
+  return md;
+}
+
+document.getElementById('generate-btn').addEventListener('click', () => {
+  const industry = document.getElementById('industry').value;
+  const size = document.getElementById('size').value;
+  const edr = document.getElementById('edr').value;
+  const networks = [...document.querySelectorAll('.net-cb:checked')].map(c => c.value);
+  const remote = [...document.querySelectorAll('.remote-cb:checked')].map(c => c.value);
+
+  const key = getProfile(industry, size, edr, networks, remote);
+  renderPlaybook(key);
+
+  const output = document.getElementById('pb-output');
+  output.classList.add('visible');
+  output.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  document.getElementById('copy-btn').dataset.key = key;
+});
+
+document.getElementById('copy-btn').addEventListener('click', function() {
+  const key = this.dataset.key;
+  if (!key) return;
+  const md = buildMarkdown(key);
+  navigator.clipboard.writeText(md).then(() => {
+    this.textContent = '[ Copied! ✓ ]';
+    this.classList.add('copied');
+    setTimeout(() => {
+      this.textContent = '[ Copy as Markdown ]';
+      this.classList.remove('copied');
+    }, 2000);
+  });
+});
+</script>

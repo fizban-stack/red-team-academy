@@ -1,0 +1,856 @@
+---
+layout: base
+title: "Certification Prep Quiz — Red Team Academy"
+---
+
+<style>
+.quiz-page { padding: 24px; max-width: 820px; }
+
+.quiz-header { margin-bottom: 28px; }
+.quiz-header h1 {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.quiz-header .subtitle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* Track selector */
+.track-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+.track-btn {
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.track-btn:hover  { border-color: var(--accent); color: var(--accent); }
+.track-btn.active {
+  background: var(--accent-dark);
+  border-color: var(--accent-muted);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.start-btn {
+  background: var(--accent-dark);
+  border: 1px solid var(--accent-muted);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 32px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition);
+  letter-spacing: 0.3px;
+}
+.start-btn:hover {
+  background: rgba(74,222,128,0.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(74,222,128,0.15);
+}
+
+/* Progress */
+.progress-bar-wrap { margin-bottom: 20px; }
+.progress-top {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.progress-track {
+  height: 4px;
+  background: var(--bg-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Question card */
+.question-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.question-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.question-text {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-0);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+/* Options */
+.options-list { display: flex; flex-direction: column; gap: 8px; }
+
+.option-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border-1);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.option-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-dark);
+  color: var(--text-0);
+}
+.option-btn:disabled { cursor: default; }
+.option-btn.correct {
+  border-color: var(--accent);
+  background: rgba(74,222,128,0.12);
+  color: var(--accent);
+}
+.option-btn.wrong {
+  border-color: var(--red);
+  background: rgba(248,113,113,0.08);
+  color: var(--red);
+}
+.option-btn .letter {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-2);
+  flex-shrink: 0;
+}
+.option-btn.correct .letter { background: rgba(74,222,128,0.2); color: var(--accent); }
+.option-btn.wrong   .letter { background: rgba(248,113,113,0.2); color: var(--red); }
+
+/* Feedback */
+.feedback-card {
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-top: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  border: 1px solid;
+}
+.feedback-card.correct { background: rgba(74,222,128,0.06);  border-color: rgba(74,222,128,0.25); }
+.feedback-card.wrong   { background: rgba(248,113,113,0.06); border-color: rgba(248,113,113,0.25); }
+
+.feedback-verdict {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.feedback-card.correct .feedback-verdict { color: var(--accent); }
+.feedback-card.wrong   .feedback-verdict { color: var(--red); }
+.feedback-explanation { color: var(--text-2); margin-bottom: 8px; }
+.feedback-link a { color: var(--blue); font-size: 11px; text-decoration: none; }
+.feedback-link a:hover { text-decoration: underline; }
+
+.next-btn {
+  margin-top: 16px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-1);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 9px 20px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.next-btn:hover { border-color: var(--accent); background: var(--accent-dark); }
+
+/* Results screen */
+.results-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius);
+  padding: 32px;
+  text-align: center;
+}
+.results-grade {
+  font-family: var(--font-mono);
+  font-size: 72px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.results-score {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+.results-pct {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-2);
+  margin-bottom: 28px;
+}
+
+.results-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 28px; }
+.results-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border-1);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 9px 20px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.results-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Review wrong answers */
+.review-section { margin-top: 28px; text-align: left; }
+.review-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-0);
+}
+.review-item {
+  background: var(--bg-3);
+  border: 1px solid var(--border-0);
+  border-left: 3px solid var(--red);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.review-q { color: var(--text-0); margin-bottom: 6px; }
+.review-your { color: var(--red); margin-bottom: 3px; }
+.review-correct { color: var(--accent); margin-bottom: 6px; }
+.review-exp { color: var(--text-2); font-size: 11px; line-height: 1.55; }
+.review-link { margin-top: 5px; }
+.review-link a { color: var(--blue); font-size: 11px; text-decoration: none; }
+</style>
+
+<div class="quiz-page">
+  <div class="quiz-header">
+    <h1>// Certification Prep Quiz</h1>
+    <div class="subtitle">&gt; Select a certification track and test your knowledge</div>
+  </div>
+
+  <!-- Track selector + start screen -->
+  <div id="start-screen">
+    <div class="track-selector" id="track-selector">
+      <button class="track-btn active" data-track="oscp">OSCP</button>
+      <button class="track-btn" data-track="crto">CRTO</button>
+      <button class="track-btn" data-track="crte">CRTE</button>
+      <button class="track-btn" data-track="general">General Red Team</button>
+    </div>
+    <button class="start-btn" id="start-btn">&gt;_ Start Quiz</button>
+  </div>
+
+  <!-- Quiz screen -->
+  <div id="quiz-screen" style="display:none;">
+    <div class="progress-bar-wrap">
+      <div class="progress-top">
+        <span id="q-progress">Question 1 of 10</span>
+        <span id="q-track-label">OSCP</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="question-card" id="question-card">
+      <div class="question-meta" id="q-meta"></div>
+      <div class="question-text" id="q-text"></div>
+      <div class="options-list" id="q-options"></div>
+      <div id="q-feedback" style="display:none;"></div>
+    </div>
+
+    <button class="next-btn" id="next-btn" style="display:none;">Next Question →</button>
+  </div>
+
+  <!-- Results screen -->
+  <div id="results-screen" style="display:none;">
+    <div class="results-card">
+      <div class="results-grade" id="r-grade"></div>
+      <div class="results-score" id="r-score"></div>
+      <div class="results-pct" id="r-pct"></div>
+      <div class="results-btns">
+        <button class="results-btn" id="retry-btn">Retry This Track</button>
+        <button class="results-btn" id="new-track-btn">New Track</button>
+        <button class="results-btn" id="review-btn">Review Wrong Answers</button>
+      </div>
+      <div id="review-section" style="display:none;">
+        <div class="review-section">
+          <div class="review-title">// Wrong Answers — Review</div>
+          <div id="review-items"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const QUESTIONS = {
+  oscp: [
+    {
+      q: 'Which Mimikatz module dumps credentials from LSASS memory?',
+      opts: ['lsadump::lsa', 'sekurlsa::logonpasswords', 'privilege::debug', 'kerberos::list'],
+      answer: 1,
+      explanation: 'sekurlsa::logonpasswords reads from the LSASS process memory and dumps plaintext passwords, NTLM hashes, and Kerberos tickets for all logged-on users.',
+      link: '/post-exploitation/lsass-dumping/',
+      linkLabel: 'LSASS Dumping'
+    },
+    {
+      q: 'What technique does Pass-the-Hash use to authenticate without knowing the plaintext password?',
+      opts: ['Replaying a captured Kerberos ticket', 'Sending the NTLM hash directly during NTLM authentication', 'Cracking the hash offline and using the password', 'Forging a PAC attribute in the TGT'],
+      answer: 1,
+      explanation: 'PTH works because NTLM authentication only requires the NT hash, not the plaintext password. Tools like impacket and Mimikatz can inject the hash into authentication flows directly.',
+      link: '/active-directory/pass-the-hash/',
+      linkLabel: 'Pass-the-Hash'
+    },
+    {
+      q: 'Which command in Metasploit migrates your current meterpreter session to another process?',
+      opts: ['use migrate', 'migrate <PID>', 'getsystem --technique 1', 'post/multi/manage/migrate'],
+      answer: 1,
+      explanation: 'The "migrate <PID>" command moves the meterpreter agent into another running process, which is often used to gain persistence or avoid process termination.',
+      link: '/exploitation/process-injection/',
+      linkLabel: 'Process Injection'
+    },
+    {
+      q: 'What is the default listening port for a Netcat reverse shell?',
+      opts: ['4444 (Metasploit default)', 'Any port you specify with -lvnp', '1337', '8888'],
+      answer: 1,
+      explanation: 'Netcat reverse shells can use any port specified with -lvnp (listen, verbose, no DNS, port). There is no single default; the operator chooses the port.',
+      link: '/post-exploitation/lateral-movement/',
+      linkLabel: 'Reverse Shell Techniques'
+    },
+    {
+      q: 'Which privilege escalation technique exploits misconfigured Windows service binary paths with spaces and no quotes?',
+      opts: ['Token impersonation via SeImpersonate', 'Unquoted service path exploitation', 'DLL hijacking', 'AlwaysInstallElevated'],
+      answer: 1,
+      explanation: 'Unquoted service paths allow an attacker to plant a malicious executable in a path segment that Windows resolves before the intended binary when there are spaces and no quotes around the path.',
+      link: '/post-exploitation/privesc-windows/',
+      linkLabel: 'Windows Privilege Escalation'
+    },
+    {
+      q: 'What does the OSCP exam require regarding Metasploit usage?',
+      opts: ['Metasploit is fully banned on all machines', 'Metasploit can be used on only one machine in the exam', 'Metasploit is allowed on all machines except the AD set', 'Metasploit is unrestricted'],
+      answer: 1,
+      explanation: 'The OSCP exam allows Metasploit (including Meterpreter) on only one exam machine. The AD set and remaining standalone machines must use manual techniques.',
+      link: '/post-exploitation/lateral-movement/',
+      linkLabel: 'Lateral Movement Techniques'
+    },
+    {
+      q: 'Which tool is most commonly used to enumerate SUID binaries for Linux privilege escalation?',
+      opts: ['LinPEAS', 'BloodHound', 'Responder', 'PowerSploit'],
+      answer: 0,
+      explanation: 'LinPEAS (Linux Privilege Escalation Awesome Script) automatically enumerates SUID binaries, writable paths, cron jobs, and dozens of other local privilege escalation vectors.',
+      link: '/post-exploitation/privesc-windows/',
+      linkLabel: 'Privilege Escalation'
+    },
+    {
+      q: 'What does the Windows command "whoami /priv" reveal that is useful for privilege escalation?',
+      opts: ['Current user\'s password hash', 'Enabled and disabled Windows privileges for the current token', 'List of local administrators', 'Group Policy Objects applied to the host'],
+      answer: 1,
+      explanation: 'whoami /priv shows token privileges such as SeImpersonatePrivilege and SeDebugPrivilege. SeImpersonatePrivilege in particular enables Potato-family exploits for SYSTEM escalation.',
+      link: '/post-exploitation/token-impersonation/',
+      linkLabel: 'Token Impersonation'
+    },
+    {
+      q: 'Which MITRE ATT&CK technique ID covers Pass-the-Hash?',
+      opts: ['T1558.003', 'T1550.002', 'T1003.001', 'T1078'],
+      answer: 1,
+      explanation: 'T1550.002 (Use Alternate Authentication Material: Pass the Hash) covers using captured NTLM hashes to authenticate without knowing the cleartext password.',
+      link: '/active-directory/pass-the-hash/',
+      linkLabel: 'Pass-the-Hash'
+    },
+    {
+      q: 'What is the purpose of the "getsystem" command in Meterpreter?',
+      opts: ['Dump the SAM database', 'Attempt multiple privilege escalation techniques to achieve SYSTEM', 'Migrate into a SYSTEM-level process', 'Disable Windows Defender'],
+      answer: 1,
+      explanation: 'getsystem attempts multiple techniques (named pipe impersonation, token duplication, etc.) to escalate the current session\'s privileges to SYSTEM level.',
+      link: '/post-exploitation/token-impersonation/',
+      linkLabel: 'Token Impersonation'
+    },
+  ],
+
+  crto: [
+    {
+      q: 'What Cobalt Strike command executes a BOF (Beacon Object File)?',
+      opts: ['run-bof', 'inline-execute', 'execute-assembly', 'bof-run'],
+      answer: 1,
+      explanation: 'inline-execute loads and runs a BOF (Beacon Object File) directly within the Beacon process without spawning a new process, making it stealthier than fork-and-run.',
+      link: '/c2-frameworks/cobalt-strike/',
+      linkLabel: 'Cobalt Strike'
+    },
+    {
+      q: 'What is the purpose of a Malleable C2 profile in Cobalt Strike?',
+      opts: ['To configure listener encryption keys', 'To modify Beacon\'s network communication patterns to blend in with legitimate traffic', 'To automate post-exploitation workflows', 'To configure the team server firewall rules'],
+      answer: 1,
+      explanation: 'Malleable C2 profiles control how Beacon\'s HTTP/S communications look on the wire — headers, URIs, data transforms — allowing the traffic to mimic legitimate services like Office 365 or Amazon.',
+      link: '/c2-frameworks/cobalt-strike/',
+      linkLabel: 'Cobalt Strike C2 Profiles'
+    },
+    {
+      q: 'Which Cobalt Strike sleep technique reduces the memory footprint of Beacon while sleeping?',
+      opts: ['process-inject', 'sleep-mask / gargoyle', 'spawnto', 'blockdlls'],
+      answer: 1,
+      explanation: 'Sleep masking (including implementations like Gargoyle and Ekko) encrypts or unmaps Beacon from memory while it is sleeping to avoid in-memory scanning by EDRs.',
+      link: '/c2-frameworks/cobalt-strike/',
+      linkLabel: 'Cobalt Strike Tradecraft'
+    },
+    {
+      q: 'What does "fork and run" mean in the context of Cobalt Strike post-exploitation?',
+      opts: ['Forking the Beacon process for redundancy', 'Spawning a sacrificial process to run post-exploitation tasks, then killing it', 'Running a BOF inside the current Beacon thread', 'Pivoting to a new host via a forked session'],
+      answer: 1,
+      explanation: 'Fork-and-run spawns a new process (typically a temporary sacrificial process), injects a reflective DLL to run the post-exploitation task, collects output, and kills the child process. It protects the Beacon process but is more detectable due to process spawning.',
+      link: '/c2-frameworks/cobalt-strike/',
+      linkLabel: 'Cobalt Strike Post-Ex'
+    },
+    {
+      q: 'Which Cobalt Strike command is used to dump credentials without touching LSASS directly?',
+      opts: ['hashdump', 'logonpasswords', 'dcsync', 'mimikatz sekurlsa::logonpasswords'],
+      answer: 2,
+      explanation: 'dcsync in Cobalt Strike uses Mimikatz\'s lsadump::dcsync which abuses domain replication rights to request specific account hashes from a Domain Controller over LDAP — without touching LSASS memory on any machine.',
+      link: '/active-directory/dcsync/',
+      linkLabel: 'DCSync Attack'
+    },
+    {
+      q: 'What is the "spawnto" setting in Cobalt Strike used for?',
+      opts: ['Setting the process that Beacon spawns when using fork-and-run post-exploitation', 'Configuring the SMTP server for phishing campaigns', 'Setting the target for lateral movement', 'Specifying the C2 redirect server'],
+      answer: 0,
+      explanation: 'spawnto defines the sacrificial process Beacon spawns when running fork-and-run post-exploitation jobs (e.g., hashdump, screenshot). Changing it from the default rundll32.exe to a more legitimate binary reduces detection.',
+      link: '/c2-frameworks/cobalt-strike/',
+      linkLabel: 'Cobalt Strike OPSEC'
+    },
+    {
+      q: 'Which Cobalt Strike pivot method allows routing traffic through a compromised host without spawning a new agent?',
+      opts: ['SOCKS4a proxy via socks command', 'Use a pivot listener', 'Jump psexec_psh', 'Reverse port forward via rportfwd'],
+      answer: 0,
+      explanation: 'The "socks" command sets up a SOCKS4a proxy through the Beacon, allowing all tooling on the operator\'s machine to route through the compromised host without deploying another implant.',
+      link: '/pivoting/chisel/',
+      linkLabel: 'Pivoting Techniques'
+    },
+    {
+      q: 'What event log does Windows generate when a new service is installed (relevant for detecting Cobalt Strike\'s psexec lateral movement)?',
+      opts: ['Event ID 4625', 'Event ID 7045', 'Event ID 4688', 'Event ID 4776'],
+      answer: 1,
+      explanation: 'Event ID 7045 in the System log records new service creation. Cobalt Strike\'s psexec creates a temporary service on the target host, making Event ID 7045 a key detection point.',
+      link: '/post-exploitation/lateral-movement/',
+      linkLabel: 'Lateral Movement Detection'
+    },
+    {
+      q: 'What is blockdlls in Cobalt Strike designed to prevent?',
+      opts: ['Blocking all DLL injection into Beacon', 'Preventing non-Microsoft signed DLLs from loading into spawned processes', 'Blocking DNS resolution in Beacon', 'Preventing Beacon from loading shellcode'],
+      answer: 1,
+      explanation: 'blockdlls uses Process Mitigation Policies to prevent non-Microsoft-signed DLLs from loading into Beacon\'s spawned post-exploitation processes, making EDR userland hooking significantly harder.',
+      link: '/evasion/av-edr-evasion/',
+      linkLabel: 'EDR Evasion'
+    },
+    {
+      q: 'In a CRTO scenario, what is the typical first step after gaining a Beacon on an initial access machine?',
+      opts: ['Immediately run dcsync', 'Enumerate the local host and escalate privileges before touching the network', 'Start scanning the full domain', 'Establish persistence via a registry run key'],
+      answer: 1,
+      explanation: 'After initial access, the priority is local enumeration and privilege escalation to get a high-integrity Beacon before proceeding to domain enumeration — acting as low-priv first risks detection and limits capability.',
+      link: '/post-exploitation/privesc-windows/',
+      linkLabel: 'Post-Exploitation Workflow'
+    },
+  ],
+
+  crte: [
+    {
+      q: 'Which tool is used to map Active Directory attack paths and visualize domain privilege escalation routes?',
+      opts: ['PowerView', 'BloodHound', 'Rubeus', 'Impacket'],
+      answer: 1,
+      explanation: 'BloodHound collects AD relationship data (via SharpHound) and visualizes attack paths using graph theory to identify shortest paths to Domain Admin from any starting position.',
+      link: '/active-directory/bloodhound/',
+      linkLabel: 'BloodHound'
+    },
+    {
+      q: 'What does the Kerberoasting attack retrieve from Active Directory?',
+      opts: ['TGT tickets for offline cracking', 'Service ticket (TGS) encrypted with the service account\'s password hash for offline cracking', 'NTLM hashes from LSASS', 'Cleartext passwords from SYSVOL'],
+      answer: 1,
+      explanation: 'Kerberoasting requests TGS service tickets for accounts with SPNs. The tickets are encrypted with the service account\'s password hash and can be cracked offline with tools like Hashcat.',
+      link: '/active-directory/kerberoasting/',
+      linkLabel: 'Kerberoasting'
+    },
+    {
+      q: 'What AD misconfiguration does the ESC1 ADCS attack exploit?',
+      opts: ['Open LDAP anonymous bind', 'Certificate template allows any SAN (Subject Alternative Name) with enrollee-supplied values and no manager approval', 'Writable AdminSDHolder container', 'Unconstrained delegation on a DC'],
+      answer: 1,
+      explanation: 'ESC1 exploits ADCS templates that allow requestors to specify an arbitrary SAN. An attacker requests a certificate with an admin UPN in the SAN, then uses it to authenticate as that admin.',
+      link: '/active-directory/adcs-attacks/',
+      linkLabel: 'ADCS Attacks'
+    },
+    {
+      q: 'What permission is required on a Domain Controller to perform a DCSync attack?',
+      opts: ['GenericAll on the DC computer object', 'DS-Replication-Get-Changes and DS-Replication-Get-Changes-All on the domain object', 'WriteDACL on the NTDS.dit file', 'Remote Registry access to the DC'],
+      answer: 1,
+      explanation: 'DCSync abuses directory replication rights. The DS-Replication-Get-Changes-All permission (extended right) on the domain object allows requesting password hashes via the MS-DRSR replication protocol.',
+      link: '/active-directory/dcsync/',
+      linkLabel: 'DCSync'
+    },
+    {
+      q: 'What is Unconstrained Delegation in Active Directory?',
+      opts: ['A service account that can impersonate any user to any service', 'A computer that caches Kerberos TGTs of any user that authenticates to it', 'A user account with no Kerberos restrictions', 'A GPO that removes Kerberos pre-authentication'],
+      answer: 1,
+      explanation: 'Computers configured for Unconstrained Delegation store the full TGT of any user that authenticates to them. If an attacker compromises such a host and coerces a DC authentication, they capture the DC\'s TGT and can perform DCSync.',
+      link: '/active-directory/domain-trusts/',
+      linkLabel: 'Delegation Attacks'
+    },
+    {
+      q: 'What is the "printer bug" (SpoolSample) used for in AD attacks?',
+      opts: ['Exploiting print spooler RCE for code execution', 'Coercing NTLM authentication from a DC to an attacker-controlled host', 'Extracting credentials from print queues', 'Pivoting through print servers'],
+      answer: 1,
+      explanation: 'SpoolSample abuses the MS-RPRN protocol to force a domain controller\'s machine account to authenticate to an attacker-controlled host. Combined with Unconstrained Delegation, it captures the DC\'s TGT.',
+      link: '/network-attacks/responder/',
+      linkLabel: 'NTLM Coercion'
+    },
+    {
+      q: 'What tool is used to enumerate and exploit ACL-based attack paths in Active Directory?',
+      opts: ['SharpHound', 'PowerView', 'Both BloodHound/SharpHound and PowerView', 'Rubeus'],
+      answer: 2,
+      explanation: 'BloodHound (with SharpHound collector) visualizes ACL paths graphically. PowerView provides granular enumeration and exploitation of ACLs (e.g., GenericWrite, WriteDACL) interactively via PowerShell.',
+      link: '/active-directory/acl-abuse/',
+      linkLabel: 'ACL Abuse'
+    },
+    {
+      q: 'What does a Golden Ticket attack require as a prerequisite?',
+      opts: ['Local admin on all domain machines', 'The krbtgt account\'s NTLM hash', 'A valid TGT from any domain user', 'The DSRM password'],
+      answer: 1,
+      explanation: 'Golden Tickets are forged TGTs signed with the krbtgt account\'s hash. An attacker with this hash can forge tickets for any user (including non-existent ones) with any group memberships for the domain\'s Kerberos lifetime.',
+      link: '/active-directory/dcsync/',
+      linkLabel: 'Golden Ticket'
+    },
+    {
+      q: 'Which Rubeus command requests a Kerberos service ticket for Kerberoasting?',
+      opts: ['Rubeus.exe asktgt', 'Rubeus.exe kerberoast', 'Rubeus.exe roast /all', 'Rubeus.exe tgtdeleg'],
+      answer: 1,
+      explanation: 'Rubeus.exe kerberoast enumerates accounts with SPNs and requests their service tickets in a format ready for offline cracking with Hashcat (format $krb5tgs$23$ for RC4).',
+      link: '/active-directory/kerberoasting/',
+      linkLabel: 'Kerberoasting with Rubeus'
+    },
+    {
+      q: 'What is a cross-forest attack path and what prerequisite is typically required?',
+      opts: ['Attacking a cloud tenant from on-prem; requires MFA bypass', 'Pivoting between two AD forests via a bidirectional trust with SID filtering disabled', 'Exploiting a forest trust by abusing DNS delegation', 'Moving between AD sites via replication'],
+      answer: 1,
+      explanation: 'Cross-forest attacks leverage inter-forest Kerberos trusts. If SID filtering is disabled or a trust is configured as fully trusted (e.g., forest trust with SID history allowed), an attacker with DA in one forest can escalate into the trusted forest.',
+      link: '/active-directory/domain-trusts/',
+      linkLabel: 'Domain Trust Attacks'
+    },
+  ],
+
+  general: [
+    {
+      q: 'What MITRE ATT&CK tactic covers techniques used to maintain access after initial compromise?',
+      opts: ['Initial Access (TA0001)', 'Persistence (TA0003)', 'Defense Evasion (TA0005)', 'Collection (TA0009)'],
+      answer: 1,
+      explanation: 'Persistence (TA0003) covers techniques used to maintain a foothold across system restarts, credential changes, and interruptions — including Registry Run Keys, Scheduled Tasks, and Services.',
+      link: '/post-exploitation/persistence/',
+      linkLabel: 'Persistence Techniques'
+    },
+    {
+      q: 'Which network protocol does Responder poison to capture NTLMv2 hashes?',
+      opts: ['DNS and MDNS only', 'LLMNR, NBT-NS, and MDNS', 'LDAP and Kerberos', 'SMB and NetBIOS only'],
+      answer: 1,
+      explanation: 'Responder poisons LLMNR (Link-Local Multicast Name Resolution), NBT-NS (NetBIOS Name Service), and MDNS broadcasts to intercept authentication requests and capture NTLMv2 hashes.',
+      link: '/network-attacks/responder/',
+      linkLabel: 'Responder / LLMNR Poisoning'
+    },
+    {
+      q: 'What is AMSI and why does it matter for red teamers?',
+      opts: ['Active Memory Scan Interface — scans running processes for malware', 'Antimalware Scan Interface — allows AV engines to scan scripts and memory buffers before execution in PowerShell, VBA, and other runtimes', 'Automated Malware Signature Index — a Windows Defender signature database', 'Adaptive Multi-Stage Inspector — an EDR behavioral analysis engine'],
+      answer: 1,
+      explanation: 'AMSI (Antimalware Scan Interface) hooks into PowerShell, VBScript, JScript, Office VBA, and other runtimes to scan content before execution. Red teamers must bypass it before loading offensive tooling.',
+      link: '/evasion/amsi-bypass/',
+      linkLabel: 'AMSI Bypass'
+    },
+    {
+      q: 'What is the purpose of LOLBins in red team operations?',
+      opts: ['Payloads that self-destruct after execution', 'Legitimate, signed system binaries repurposed to execute attacker-controlled code while blending into normal activity', 'A list of banned binaries that EDRs always block', 'Remote access tools that use only standard ports'],
+      answer: 1,
+      explanation: 'Living Off the Land Binaries (LOLBins) are legitimate Windows tools (certutil, mshta, regsvr32, wmic, etc.) abused to download, execute, or proxy malicious code — bypassing application whitelisting and reducing suspicious telemetry.',
+      link: '/evasion/lolbins/',
+      linkLabel: 'LOLBins'
+    },
+    {
+      q: 'What does Chisel provide in a red team engagement?',
+      opts: ['A C2 framework with Beacon-like functionality', 'A fast TCP/UDP tunneling tool that creates encrypted tunnels over HTTP/HTTPS for pivoting', 'An LDAP enumeration tool for AD', 'A tool for generating shellcode and payloads'],
+      answer: 1,
+      explanation: 'Chisel creates encrypted TCP/UDP tunnels over HTTP/HTTPS, enabling red teamers to pivot into segmented networks and proxy tool traffic through compromised hosts without requiring SSH.',
+      link: '/pivoting/chisel/',
+      linkLabel: 'Chisel Pivoting'
+    },
+    {
+      q: 'In a red team engagement, what is the difference between a red team and a penetration test?',
+      opts: ['Red teams only test web applications; pentests test networks', 'Red teams have a defined scope and timeline; penetration tests are open-ended', 'Red teams focus on testing defenses and detection capabilities with adversary simulation; pentests focus on finding all vulnerabilities in scope', 'There is no meaningful difference'],
+      answer: 2,
+      explanation: 'Penetration tests aim to find and report all vulnerabilities in a defined scope. Red team engagements simulate real adversaries to test an organization\'s detection and response capabilities — stealth and realism over coverage.',
+      link: '/recon/passive-recon/',
+      linkLabel: 'Red Team Methodology'
+    },
+    {
+      q: 'What does DNS exfiltration use as the covert channel?',
+      opts: ['ICMP echo packets', 'DNS query and response packets to encode data in subdomains or TXT records', 'HTTP POST requests to legitimate DNS services', 'UDP broadcast traffic'],
+      answer: 1,
+      explanation: 'DNS exfiltration encodes data in DNS query subdomains (e.g., data.attacker.com) or TXT records. DNS traffic is rarely blocked or inspected deeply at perimeter firewalls, making it an effective covert channel.',
+      link: '/post-exploitation/dns-exfil/',
+      linkLabel: 'DNS Exfiltration'
+    },
+    {
+      q: 'What makes WMI lateral movement stealthier than PsExec?',
+      opts: ['WMI uses port 443 while PsExec uses port 445', 'WMI lateral movement does not create a new service (Event ID 7045) on the target host', 'WMI encrypts all traffic by default while PsExec does not', 'WMI requires no authentication while PsExec does'],
+      answer: 1,
+      explanation: 'PsExec (and Cobalt Strike\'s psexec) creates a temporary service on the target, generating Event ID 7045. WMI execution (Win32_Process.Create) does not create services, making it harder to detect with service-focused detection rules.',
+      link: '/post-exploitation/wmi-lateral/',
+      linkLabel: 'WMI Lateral Movement'
+    },
+    {
+      q: 'What is token impersonation used for in post-exploitation?',
+      opts: ['Generating new authentication tokens for phishing', 'Stealing a higher-privileged token from a running process to escalate privileges or change identity', 'Modifying Kerberos tickets in memory', 'Creating fake service accounts in Active Directory'],
+      answer: 1,
+      explanation: 'Token impersonation (via SeImpersonatePrivilege or SeAssignPrimaryTokenPrivilege) allows an attacker to steal tokens from higher-privileged processes and use them to execute code as SYSTEM or a domain admin.',
+      link: '/post-exploitation/token-impersonation/',
+      linkLabel: 'Token Impersonation'
+    },
+    {
+      q: 'What is the primary risk of running BloodHound\'s SharpHound collector with default settings on a production domain?',
+      opts: ['It requires domain admin rights and will fail silently', 'The volume of LDAP queries generated can trigger MDI/ATA alerts and be visible in network logs', 'It only collects data from the current user\'s OU', 'It stores data in plaintext on the DC'],
+      answer: 1,
+      explanation: 'Default SharpHound collection generates thousands of LDAP queries in a short time window, which Microsoft Defender for Identity (MDI) and legacy ATA are specifically tuned to detect as reconnaissance activity.',
+      link: '/active-directory/bloodhound/',
+      linkLabel: 'BloodHound OPSEC'
+    },
+  ],
+};
+
+const TRACK_LABELS = { oscp:'OSCP', crto:'CRTO', crte:'CRTE', general:'General Red Team' };
+const GRADE_THRESHOLDS = [
+  { min: 90, grade: 'A+', color: '#4ade80' },
+  { min: 80, grade: 'A',  color: '#4ade80' },
+  { min: 70, grade: 'B',  color: '#38bdf8' },
+  { min: 60, grade: 'C',  color: '#fbbf24' },
+  { min: 0,  grade: 'F',  color: '#f87171' },
+];
+
+let selectedTrack = 'oscp';
+let currentQuestions = [];
+let currentIndex = 0;
+let score = 0;
+let answered = false;
+let wrongAnswers = [];
+
+// Track selection
+document.querySelectorAll('.track-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.track-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    selectedTrack = this.dataset.track;
+  });
+});
+
+document.getElementById('start-btn').addEventListener('click', startQuiz);
+document.getElementById('next-btn').addEventListener('click', nextQuestion);
+document.getElementById('retry-btn').addEventListener('click', () => startQuiz());
+document.getElementById('new-track-btn').addEventListener('click', () => {
+  document.getElementById('results-screen').style.display = 'none';
+  document.getElementById('start-screen').style.display = 'block';
+});
+document.getElementById('review-btn').addEventListener('click', () => {
+  const section = document.getElementById('review-section');
+  if (section.style.display === 'none') {
+    renderReview();
+    section.style.display = 'block';
+  } else {
+    section.style.display = 'none';
+  }
+});
+
+function startQuiz() {
+  currentQuestions = shuffle([...QUESTIONS[selectedTrack]]);
+  currentIndex = 0;
+  score = 0;
+  wrongAnswers = [];
+  answered = false;
+
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('results-screen').style.display = 'none';
+  document.getElementById('quiz-screen').style.display = 'block';
+  document.getElementById('q-track-label').textContent = TRACK_LABELS[selectedTrack];
+  document.getElementById('review-section').style.display = 'none';
+
+  showQuestion();
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function showQuestion() {
+  answered = false;
+  const q = currentQuestions[currentIndex];
+  const total = currentQuestions.length;
+  const pct = (currentIndex / total) * 100;
+
+  document.getElementById('q-progress').textContent = `Question ${currentIndex + 1} of ${total}`;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('q-meta').textContent =
+    TRACK_LABELS[selectedTrack] + ' — Question ' + (currentIndex + 1);
+  document.getElementById('q-text').textContent = q.q;
+  document.getElementById('q-feedback').style.display = 'none';
+  document.getElementById('next-btn').style.display = 'none';
+
+  const optContainer = document.getElementById('q-options');
+  optContainer.innerHTML = '';
+  const letters = ['A','B','C','D'];
+
+  q.opts.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.innerHTML = `<span class="letter">${letters[i]}</span>${escHtml(opt)}`;
+    btn.addEventListener('click', () => selectAnswer(i, q));
+    optContainer.appendChild(btn);
+  });
+}
+
+function selectAnswer(chosen, q) {
+  if (answered) return;
+  answered = true;
+
+  const buttons = document.querySelectorAll('.option-btn');
+  const isCorrect = chosen === q.answer;
+
+  if (isCorrect) {
+    score++;
+    buttons[chosen].classList.add('correct');
+  } else {
+    buttons[chosen].classList.add('wrong');
+    buttons[q.answer].classList.add('correct');
+    wrongAnswers.push({ q, chosen });
+  }
+
+  buttons.forEach(b => b.disabled = true);
+
+  // Feedback
+  const feedback = document.getElementById('q-feedback');
+  feedback.style.display = 'block';
+  feedback.className = 'feedback-card ' + (isCorrect ? 'correct' : 'wrong');
+  feedback.innerHTML = `
+    <div class="feedback-verdict">${isCorrect ? '✓ CORRECT' : '✗ INCORRECT'}</div>
+    <div class="feedback-explanation">${escHtml(q.explanation)}</div>
+    <div class="feedback-link"><a href="${q.link}" target="_blank">→ Review: ${q.linkLabel}</a></div>
+  `;
+
+  const nextBtn = document.getElementById('next-btn');
+  nextBtn.style.display = 'inline-block';
+  if (currentIndex === currentQuestions.length - 1) {
+    nextBtn.textContent = 'See Results →';
+  } else {
+    nextBtn.textContent = 'Next Question →';
+  }
+}
+
+function nextQuestion() {
+  currentIndex++;
+  if (currentIndex >= currentQuestions.length) {
+    showResults();
+  } else {
+    showQuestion();
+  }
+}
+
+function showResults() {
+  document.getElementById('quiz-screen').style.display = 'none';
+  document.getElementById('results-screen').style.display = 'block';
+
+  const total = currentQuestions.length;
+  const pct = Math.round((score / total) * 100);
+
+  const threshold = GRADE_THRESHOLDS.find(t => pct >= t.min);
+  const gradeEl = document.getElementById('r-grade');
+  gradeEl.textContent = threshold.grade;
+  gradeEl.style.color = threshold.color;
+
+  document.getElementById('r-score').textContent = score + ' / ' + total + ' correct';
+  document.getElementById('r-pct').textContent = pct + '%  —  ' + TRACK_LABELS[selectedTrack];
+  document.getElementById('review-section').style.display = 'none';
+
+  const reviewBtn = document.getElementById('review-btn');
+  if (wrongAnswers.length === 0) {
+    reviewBtn.style.opacity = '0.4';
+    reviewBtn.disabled = true;
+    reviewBtn.textContent = 'No Wrong Answers!';
+  } else {
+    reviewBtn.style.opacity = '1';
+    reviewBtn.disabled = false;
+    reviewBtn.textContent = 'Review Wrong Answers (' + wrongAnswers.length + ')';
+  }
+}
+
+function renderReview() {
+  const container = document.getElementById('review-items');
+  container.innerHTML = '';
+  const letters = ['A','B','C','D'];
+
+  wrongAnswers.forEach(({ q, chosen }) => {
+    const div = document.createElement('div');
+    div.className = 'review-item';
+    div.innerHTML = `
+      <div class="review-q">${escHtml(q.q)}</div>
+      <div class="review-your">✗ Your answer: ${letters[chosen]}. ${escHtml(q.opts[chosen])}</div>
+      <div class="review-correct">✓ Correct: ${letters[q.answer]}. ${escHtml(q.opts[q.answer])}</div>
+      <div class="review-exp">${escHtml(q.explanation)}</div>
+      <div class="review-link"><a href="${q.link}" target="_blank">→ Study: ${q.linkLabel}</a></div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>

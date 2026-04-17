@@ -304,6 +304,28 @@
       title: macOS Initial Access
     - url: /exploitation/thick-client/
       title: Thick Client Application Testing
+    - url: /exploitation/dotnet-thick-client/
+      title: ".NET Thick Client Attacks"
+    - url: /exploitation/java-thick-client/
+      title: "Java Thick Client Attacks"
+    - url: /exploitation/electron-attacks/
+      title: "Electron App Attacks"
+    - url: /exploitation/sap-attacks/
+      title: "SAP & ERP Security"
+    - url: /exploitation/shellcode-loaders/
+      title: "Custom Shellcode Loaders"
+    - url: /exploitation/reflective-dll-injection/
+      title: "Reflective DLL Injection"
+    - url: /exploitation/process-injection-gallery/
+      title: "Process Injection Gallery"
+    - url: /exploitation/staged-payload-delivery/
+      title: "Staged Payload Delivery"
+    - url: /exploitation/sandbox-evasion/
+      title: "Sandbox Evasion Techniques"
+    - url: /exploitation/custom-packer/
+      title: "Custom Packer & Crypter Dev"
+    - url: /exploitation/custom-c2-protocol/
+      title: "Custom C2 Protocol Design"
 
 - num: "07"
   title: Post-Exploitation
@@ -650,6 +672,16 @@
       title: Fine-Tuning vs Prompt Engineering
     - url: /ai-agents/ai-red-team-eval/
       title: AI Red Team Evaluation
+    - url: /ai-agents/adversarial-ml/
+      title: Adversarial ML Overview
+    - url: /ai-agents/model-evasion/
+      title: Adversarial Examples & CV Evasion
+    - url: /ai-agents/data-poisoning/
+      title: Data Poisoning & Backdoor Attacks
+    - url: /ai-agents/llm-exploit-chains/
+      title: LLM Application Exploit Chains
+    - url: /ai-agents/ml-supply-chain/
+      title: ML Supply Chain Attacks
 
 - num: "13"
   title: Red Team Tools
@@ -740,6 +772,16 @@
       title: "AD Engagement Tools"
     - url: /tool-dev/android-red-team-tools/
       title: "Android Red Team Tools"
+    - url: /tool-dev/bof-overview/
+      title: "BOF Development Overview"
+    - url: /tool-dev/bof-credential-access/
+      title: "BOF: Credential Access"
+    - url: /tool-dev/bof-token-manipulation/
+      title: "BOF: Token Manipulation"
+    - url: /tool-dev/bof-network-enum/
+      title: "BOF: Network Enumeration"
+    - url: /tool-dev/bof-opsec/
+      title: "BOF: OPSEC & Memory Cleanup"
 
 - num: "15"
   title: Reporting
@@ -956,3 +998,139 @@
       title: Software Supply Chain Attack
     - url: /scenarios/insider-threat/
       title: Malicious Insider Simulation
+
+- num: "25"
+  title: OT/ICS Security
+  pages:
+    - url: /ot-ics/overview/
+      title: OT/ICS Red Team Overview
+    - url: /ot-ics/ics-architecture/
+      title: ICS Architecture & Purdue Model
+    - url: /ot-ics/modbus-attacks/
+      title: Modbus/TCP Attacks
+    - url: /ot-ics/dnp3-attacks/
+      title: DNP3 Protocol Attacks
+    - url: /ot-ics/plc-exploitation/
+      title: PLC Exploitation
+    - url: /ot-ics/scada-hmi-attacks/
+      title: SCADA HMI Attacks
+    - url: /ot-ics/historian-attacks/
+      title: Historian Server Attacks
+    - url: /ot-ics/ics-tools/
+      title: ICS/OT Tool Reference
+
+- num: "26"
+  title: Physical Red Team
+  pages:
+    - url: /physical/overview/
+      title: Physical Red Team Overview
+    - url: /physical/lock-picking/
+      title: Lock Picking & Bypass
+    - url: /physical/badge-cloning/
+      title: Badge Cloning & RFID
+    - url: /physical/physical-opsec/
+      title: Physical OPSEC
+    - url: /physical/covert-entry/
+      title: Covert Entry Techniques
+    - url: /physical/facility-recon/
+      title: Facility OSINT & Recon
+    - url: /physical/physical-payloads/
+      title: Physical Payload Delivery
+    - url: /physical/reporting-physical/
+      title: Physical Engagement Reporting
+
+- num: "27"
+  title: Infrastructure Engineering
+  pages:
+    - url: /infrastructure/overview/
+      title: Red Team Infrastructure Overview
+    - url: /infrastructure/redirector-setup/
+      title: Redirector Architecture & Setup
+    - url: /infrastructure/cdn-fronting/
+      title: CDN Domain Fronting
+    - url: /infrastructure/domain-categorization/
+      title: Domain Strategy & Categorization
+    - url: /infrastructure/anonymous-infra/
+      title: Anonymous Infrastructure
+    - url: /infrastructure/dns-c2-infra/
+      title: DNS C2 Infrastructure
+    - url: /infrastructure/email-infra/
+      title: Phishing Email Infrastructure
+    - url: /infrastructure/opsec-failures/
+      title: OPSEC Failure Post-Mortems
+
+- num: "28"
+  title: Vulnerability Research
+  pages:
+    - url: /vuln-research/overview/
+      title: Vulnerability Research Overview
+    - url: /vuln-research/fuzzing-methodology/
+      title: Fuzzing Methodology
+    - url: /vuln-research/afl-libfuzzer/
+      title: AFL++, LibFuzzer & Honggfuzz
+    - url: /vuln-research/symbolic-execution/
+      title: Symbolic Execution (angr & KLEE)
+    - url: /vuln-research/binary-analysis/
+      title: Binary Analysis (Ghidra & BN)
+    - url: /vuln-research/crash-to-exploit/
+      title: Crash to Exploit Pipeline
+    - url: /vuln-research/audit-tooling/
+      title: Source Code Audit (CodeQL & Semgrep)
+    - url: /vuln-research/patch-diff-analysis/
+      title: Patch Diff Analysis
+
+- num: "29"
+  title: Threat Actor Emulation
+  pages:
+    - url: /threat-actors/overview/
+      title: Emulation Methodology
+    - url: /threat-actors/apt28/
+      title: APT28 (Fancy Bear)
+    - url: /threat-actors/apt29/
+      title: APT29 (Cozy Bear)
+    - url: /threat-actors/lazarus/
+      title: Lazarus Group
+    - url: /threat-actors/volt-typhoon/
+      title: Volt Typhoon
+    - url: /threat-actors/lockbit/
+      title: LockBit Affiliates
+    - url: /threat-actors/blackcat/
+      title: BlackCat/ALPHV
+    - url: /threat-actors/sandworm/
+      title: Sandworm (GRU)
+
+- num: "30"
+  title: Learning Paths
+  pages:
+    - url: /learning-paths/overview/
+      title: Learning Paths Overview
+    - url: /learning-paths/oscp-prep/
+      title: OSCP Prep (8 Weeks)
+    - url: /learning-paths/crto-prep/
+      title: CRTO Prep (6 Weeks)
+    - url: /learning-paths/crte-prep/
+      title: CRTE Prep (6 Weeks)
+    - url: /learning-paths/bug-bounty/
+      title: Bug Bounty Starter (4 Weeks)
+    - url: /learning-paths/zero-trust-bypass/
+      title: Zero Trust Bypass (8 Weeks)
+
+- num: "31"
+  title: Reference
+  pages:
+    - url: /reference/detection-matrix/
+      title: EDR Detection Adversarial Matrix
+
+- num: "32"
+  title: Interactive Tools
+  pages:
+    - url: /tools/mitre-heatmap/
+      title: MITRE ATT&CK Coverage Map
+    - url: /tools/playbook-builder/
+      title: Attack Playbook Builder
+    - url: /tools/evasion-scorer/
+      title: Evasion Readiness Scorer
+    - url: /tools/ops-journal/
+      title: Red Team Ops Journal
+    - url: /tools/quiz/
+      title: Certification Prep Quiz

@@ -1,0 +1,728 @@
+---
+layout: base
+title: "Red Team Ops Journal — Red Team Academy"
+---
+
+<style>
+/* ── Layout ── */
+.oj-root {
+  display: flex;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+  font-family: var(--font-mono);
+}
+
+.oj-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-1);
+  border-right: 1px solid var(--border-0);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.oj-sidebar-header {
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--border-0);
+  flex-shrink: 0;
+}
+.oj-sidebar-title {
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+.new-campaign-btn {
+  width: 100%;
+  background: var(--accent-dark);
+  border: 1px solid var(--accent-muted);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: left;
+}
+.new-campaign-btn:hover {
+  background: rgba(74,222,128,0.18);
+  border-color: var(--accent);
+}
+
+.campaign-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.campaign-item {
+  padding: 9px 14px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all var(--transition);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.campaign-item:hover { background: var(--bg-2); color: var(--text-1); }
+.campaign-item.active {
+  background: var(--bg-2);
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+.campaign-item .camp-name { font-weight: 600; display: block; margin-bottom: 2px; }
+.campaign-item .camp-meta { font-size: 10px; color: var(--text-3); }
+
+/* ── Main area ── */
+.oj-main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.oj-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* ── Campaign view ── */
+.campaign-view { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+.camp-topbar {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-0);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: var(--bg-1);
+  flex-shrink: 0;
+}
+.camp-name-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-1);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  outline: none;
+  min-width: 200px;
+  padding: 2px 0;
+}
+.camp-name-input:focus { border-bottom-color: var(--accent); }
+
+.camp-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.meta-input {
+  background: var(--bg-3);
+  border: 1px solid var(--border-0);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition);
+}
+.meta-input:focus { border-color: var(--accent); }
+.meta-label { font-size: 10px; color: var(--text-3); white-space: nowrap; }
+
+.status-select {
+  background: var(--bg-3);
+  border: 1px solid var(--border-0);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition);
+}
+.status-select.active   { color: var(--accent); border-color: rgba(74,222,128,0.3); }
+.status-select.complete { color: var(--blue);   border-color: rgba(56,189,248,0.3); }
+.status-select.suspended{ color: var(--amber);  border-color: rgba(251,191,36,0.3); }
+
+.camp-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.action-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border-0);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.action-btn:hover { border-color: var(--accent); color: var(--accent); }
+.action-btn.danger:hover { border-color: var(--red); color: var(--red); }
+
+/* ── Content pane ── */
+.camp-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.timeline-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.add-entry-pane {
+  width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border-0);
+  background: var(--bg-1);
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.pane-title {
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-0);
+}
+
+/* Entry form */
+.form-field { margin-bottom: 12px; }
+.form-field label { display: block; font-size: 10px; color: var(--text-3); margin-bottom: 4px; }
+.form-field input, .form-field textarea, .form-field select {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border-0);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition);
+  resize: vertical;
+}
+.form-field input:focus,
+.form-field textarea:focus,
+.form-field select:focus { border-color: var(--accent); }
+.form-field textarea { min-height: 70px; }
+
+.add-entry-btn {
+  width: 100%;
+  background: var(--accent-dark);
+  border: 1px solid var(--accent-muted);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-top: 4px;
+}
+.add-entry-btn:hover {
+  background: rgba(74,222,128,0.18);
+  border-color: var(--accent);
+}
+
+/* Timeline entries */
+.entry-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border-0);
+  border-left: 3px solid var(--border-1);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+.entry-card.Discovery       { border-left-color: var(--blue); }
+.entry-card.Access          { border-left-color: var(--accent); }
+.entry-card.Lateral         { border-left-color: var(--amber); }
+.entry-card.Persistence     { border-left-color: #a78bfa; }
+.entry-card.Credential      { border-left-color: var(--red); }
+.entry-card.Exfiltration    { border-left-color: #fb923c; }
+.entry-card.Blocked         { border-left-color: var(--red); background: var(--red-dark); }
+.entry-card.Note            { border-left-color: var(--text-3); }
+
+.entry-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.entry-type-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  font-weight: 700;
+}
+.entry-type-badge.Discovery    { background: rgba(56,189,248,0.1);  color: var(--blue); }
+.entry-type-badge.Access       { background: var(--accent-dark);    color: var(--accent); }
+.entry-type-badge.Lateral      { background: var(--amber-dark);     color: var(--amber); }
+.entry-type-badge.Persistence  { background: rgba(167,139,250,0.1); color: #a78bfa; }
+.entry-type-badge.Credential   { background: var(--red-dark);       color: var(--red); }
+.entry-type-badge.Exfiltration { background: rgba(251,146,60,0.1);  color: #fb923c; }
+.entry-type-badge.Blocked      { background: var(--red-dark);       color: var(--red); }
+.entry-type-badge.Note         { background: var(--bg-3);           color: var(--text-2); }
+
+.entry-ts { font-size: 10px; color: var(--text-3); }
+.entry-host { font-size: 10px; color: var(--blue); }
+.entry-mitre { font-size: 10px; }
+.entry-mitre a { color: var(--accent); }
+.entry-tool { font-size: 10px; color: var(--amber); }
+.entry-desc { color: var(--text-1); line-height: 1.55; margin-top: 4px; }
+.entry-delete {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  transition: color var(--transition);
+}
+.entry-delete:hover { color: var(--red); }
+
+.no-entries {
+  color: var(--text-3);
+  font-size: 12px;
+  padding: 32px 0;
+  text-align: center;
+}
+</style>
+
+<div class="oj-root">
+  <!-- Sidebar -->
+  <div class="oj-sidebar">
+    <div class="oj-sidebar-header">
+      <div class="oj-sidebar-title">// Campaigns</div>
+      <button class="new-campaign-btn" id="new-campaign-btn">&gt;_ New Campaign</button>
+    </div>
+    <div class="campaign-list" id="campaign-list"></div>
+  </div>
+
+  <!-- Main -->
+  <div class="oj-main" id="oj-main">
+    <div class="oj-empty" id="oj-empty">&gt; Select or create a campaign to begin</div>
+    <div class="campaign-view" id="campaign-view" style="display:none;">
+      <div class="camp-topbar">
+        <input class="camp-name-input" id="camp-name" placeholder="Campaign Name" />
+        <div class="camp-meta-row">
+          <span class="meta-label">Target:</span>
+          <input class="meta-input" id="camp-target" placeholder="target.corp" style="width:130px;" />
+          <span class="meta-label">Start:</span>
+          <input class="meta-input" id="camp-start" type="date" style="width:130px;" />
+          <span class="meta-label">End:</span>
+          <input class="meta-input" id="camp-end" type="date" style="width:130px;" />
+          <select class="status-select active" id="camp-status">
+            <option value="Active">Active</option>
+            <option value="Complete">Complete</option>
+            <option value="Suspended">Suspended</option>
+          </select>
+        </div>
+        <div class="camp-actions">
+          <button class="action-btn" id="export-btn">[ Export MD ]</button>
+          <button class="action-btn" id="import-btn">[ Import JSON ]</button>
+          <button class="action-btn danger" id="delete-camp-btn">[ Delete ]</button>
+        </div>
+      </div>
+      <div class="camp-content">
+        <div class="timeline-pane" id="timeline-pane">
+          <div class="pane-title">// Timeline</div>
+          <div id="timeline-entries"></div>
+        </div>
+        <div class="add-entry-pane">
+          <div class="pane-title">// Add Entry</div>
+          <div class="form-field">
+            <label>Date / Time</label>
+            <input type="datetime-local" id="e-ts" />
+          </div>
+          <div class="form-field">
+            <label>Entry Type</label>
+            <select id="e-type">
+              <option value="Discovery">Discovery</option>
+              <option value="Access">Access Gained</option>
+              <option value="Lateral">Lateral Movement</option>
+              <option value="Persistence">Persistence</option>
+              <option value="Credential">Credential Access</option>
+              <option value="Exfiltration">Exfiltration</option>
+              <option value="Blocked">Blocked / Detected</option>
+              <option value="Note">Note</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Host / Target</label>
+            <input type="text" id="e-host" placeholder="DC01.corp.local" />
+          </div>
+          <div class="form-field">
+            <label>MITRE ATT&amp;CK ID</label>
+            <input type="text" id="e-mitre" placeholder="T1055" />
+          </div>
+          <div class="form-field">
+            <label>Tool Used</label>
+            <input type="text" id="e-tool" placeholder="Mimikatz, Cobalt Strike..." />
+          </div>
+          <div class="form-field">
+            <label>Description</label>
+            <textarea id="e-desc" placeholder="What happened..."></textarea>
+          </div>
+          <button class="add-entry-btn" id="add-entry-btn">&gt;_ Add Entry</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden import input -->
+<input type="file" id="import-file" accept=".json" style="display:none;" />
+
+<script>
+// ── MITRE ID → URL mapping ──
+const MITRE_URLS = {
+  'T1595':    '/recon/active-recon/',
+  'T1589':    '/recon/passive-recon/',
+  'T1566':    '/exploitation/vba-macro-shellcode/',
+  'T1566.001':'/exploitation/vba-macro-shellcode/',
+  'T1059.001':'/programming/powershell-offensive-tools/',
+  'T1059.003':'/post-exploitation/lateral-movement/',
+  'T1059.005':'/exploitation/vba-macro-shellcode/',
+  'T1190':    '/exploitation/service-exploits/',
+  'T1133':    '/pivoting/ssh-tunneling/',
+  'T1078':    '/active-directory/pass-the-hash/',
+  'T1078.002':'/active-directory/bloodhound/',
+  'T1055':    '/exploitation/process-injection/',
+  'T1055.012':'/exploitation/process-injection-gallery/',
+  'T1134':    '/post-exploitation/token-impersonation/',
+  'T1068':    '/post-exploitation/privesc-windows/',
+  'T1053.005':'/post-exploitation/persistence/',
+  'T1547.001':'/post-exploitation/persistence/',
+  'T1543.003':'/post-exploitation/persistence/',
+  'T1027':    '/evasion/amsi-bypass/',
+  'T1218':    '/evasion/lolbins/',
+  'T1562.001':'/evasion/av-edr-evasion/',
+  'T1070.001':'/post-exploitation/anti-forensics/',
+  'T1003.001':'/post-exploitation/lsass-dumping/',
+  'T1558.003':'/active-directory/kerberoasting/',
+  'T1558.001':'/active-directory/dcsync/',
+  'T1550.002':'/active-directory/pass-the-hash/',
+  'T1649':    '/active-directory/adcs-attacks/',
+  'T1484.001':'/active-directory/acl-abuse/',
+  'T1087.002':'/active-directory/ad-enumeration/',
+  'T1069.002':'/active-directory/ad-enumeration/',
+  'T1482':    '/active-directory/domain-trusts/',
+  'T1046':    '/recon/active-recon/',
+  'T1021.001':'/post-exploitation/rdp-hijacking/',
+  'T1021.002':'/post-exploitation/lateral-movement/',
+  'T1021.003':'/post-exploitation/dcom-lateral/',
+  'T1021.006':'/post-exploitation/wmi-lateral/',
+  'T1040':    '/network-attacks/arp-mitm/',
+  'T1557.001':'/network-attacks/responder/',
+  'T1041':    '/c2-frameworks/cobalt-strike/',
+  'T1048':    '/post-exploitation/icmp-exfil/',
+  'T1071.004':'/post-exploitation/dns-exfil/',
+  'T1567':    '/post-exploitation/cloud-exfil/',
+  'T1572':    '/pivoting/chisel/',
+};
+
+function linkMitreIds(text) {
+  return text.replace(/\b(T\d{4}(?:\.\d{3})?)\b/g, (match) => {
+    const url = MITRE_URLS[match];
+    if (url) {
+      return `<a href="${url}" target="_blank" style="color:var(--accent);">${match}</a>`;
+    }
+    return `<span style="color:var(--accent);">${match}</span>`;
+  });
+}
+
+// ── State ──
+let campaigns = [];
+let activeCampId = null;
+
+const STORAGE_KEY = 'rta-ops-journal-v1';
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(campaigns));
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) campaigns = JSON.parse(raw);
+  } catch(e) { campaigns = []; }
+}
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// ── Render sidebar ──
+function renderSidebar() {
+  const list = document.getElementById('campaign-list');
+  list.innerHTML = '';
+  if (!campaigns.length) {
+    list.innerHTML = '<div style="padding:14px;font-size:11px;color:var(--text-3);">No campaigns yet.</div>';
+    return;
+  }
+  campaigns.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'campaign-item' + (c.id === activeCampId ? ' active' : '');
+    el.innerHTML = `<span class="camp-name">${escHtml(c.name || 'Unnamed')}</span>
+      <span class="camp-meta">${escHtml(c.target || '—')} &bull; ${c.status}</span>`;
+    el.addEventListener('click', () => selectCampaign(c.id));
+    list.appendChild(el);
+  });
+}
+
+// ── Select / display campaign ──
+function selectCampaign(id) {
+  activeCampId = id;
+  const c = campaigns.find(x => x.id === id);
+  if (!c) return;
+
+  document.getElementById('oj-empty').style.display = 'none';
+  document.getElementById('campaign-view').style.display = 'flex';
+
+  document.getElementById('camp-name').value = c.name || '';
+  document.getElementById('camp-target').value = c.target || '';
+  document.getElementById('camp-start').value = c.startDate || '';
+  document.getElementById('camp-end').value = c.endDate || '';
+
+  const statusSel = document.getElementById('camp-status');
+  statusSel.value = c.status || 'Active';
+  updateStatusStyle(statusSel);
+
+  renderTimeline(c);
+  renderSidebar();
+
+  // Set default timestamp
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('e-ts').value =
+    now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) +
+    'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+}
+
+function updateStatusStyle(sel) {
+  sel.className = 'status-select ' + (sel.value || 'active').toLowerCase();
+}
+
+// ── Timeline ──
+function renderTimeline(c) {
+  const container = document.getElementById('timeline-entries');
+  container.innerHTML = '';
+
+  if (!c.entries || !c.entries.length) {
+    container.innerHTML = '<div class="no-entries">&gt; No entries yet. Add one on the right.</div>';
+    return;
+  }
+
+  const sorted = [...c.entries].reverse();
+  sorted.forEach(entry => {
+    const div = document.createElement('div');
+    div.className = 'entry-card ' + (entry.type || 'Note');
+
+    const mitreLinked = entry.mitreId ? linkMitreIds(entry.mitreId) : '';
+    const descLinked = entry.desc ? linkMitreIds(escHtml(entry.desc)) : '';
+
+    div.innerHTML = `
+      <div class="entry-header">
+        <span class="entry-type-badge ${entry.type || 'Note'}">${entry.type || 'Note'}</span>
+        <span class="entry-ts">${entry.ts || ''}</span>
+        ${entry.host ? `<span class="entry-host">${escHtml(entry.host)}</span>` : ''}
+        ${entry.mitreId ? `<span class="entry-mitre">${mitreLinked}</span>` : ''}
+        ${entry.tool ? `<span class="entry-tool">[${escHtml(entry.tool)}]</span>` : ''}
+        <button class="entry-delete" data-id="${entry.id}" title="Delete entry">[x]</button>
+      </div>
+      ${entry.desc ? `<div class="entry-desc">${descLinked}</div>` : ''}
+    `;
+
+    div.querySelector('.entry-delete').addEventListener('click', () => {
+      deleteEntry(c.id, entry.id);
+    });
+
+    container.appendChild(div);
+  });
+}
+
+function deleteEntry(campId, entryId) {
+  const c = campaigns.find(x => x.id === campId);
+  if (!c) return;
+  c.entries = c.entries.filter(e => e.id !== entryId);
+  save();
+  renderTimeline(c);
+}
+
+// ── Utilities ──
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Auto-save campaign metadata on change ──
+['camp-name','camp-target','camp-start','camp-end'].forEach(id => {
+  document.getElementById(id).addEventListener('input', saveCampMeta);
+});
+document.getElementById('camp-status').addEventListener('change', function() {
+  updateStatusStyle(this);
+  saveCampMeta();
+});
+
+function saveCampMeta() {
+  if (!activeCampId) return;
+  const c = campaigns.find(x => x.id === activeCampId);
+  if (!c) return;
+  c.name = document.getElementById('camp-name').value;
+  c.target = document.getElementById('camp-target').value;
+  c.startDate = document.getElementById('camp-start').value;
+  c.endDate = document.getElementById('camp-end').value;
+  c.status = document.getElementById('camp-status').value;
+  save();
+  renderSidebar();
+}
+
+// ── New campaign ──
+document.getElementById('new-campaign-btn').addEventListener('click', () => {
+  const c = {
+    id: uid(),
+    name: 'New Campaign',
+    target: '',
+    startDate: '',
+    endDate: '',
+    status: 'Active',
+    entries: [],
+  };
+  campaigns.unshift(c);
+  save();
+  selectCampaign(c.id);
+});
+
+// ── Add entry ──
+document.getElementById('add-entry-btn').addEventListener('click', () => {
+  if (!activeCampId) return;
+  const c = campaigns.find(x => x.id === activeCampId);
+  if (!c) return;
+
+  const entry = {
+    id: uid(),
+    ts: document.getElementById('e-ts').value,
+    type: document.getElementById('e-type').value,
+    host: document.getElementById('e-host').value.trim(),
+    mitreId: document.getElementById('e-mitre').value.trim(),
+    tool: document.getElementById('e-tool').value.trim(),
+    desc: document.getElementById('e-desc').value.trim(),
+  };
+
+  if (!entry.desc && !entry.host) return;
+
+  if (!c.entries) c.entries = [];
+  c.entries.push(entry);
+  save();
+  renderTimeline(c);
+
+  // Clear form (keep type and timestamp)
+  document.getElementById('e-host').value = '';
+  document.getElementById('e-mitre').value = '';
+  document.getElementById('e-tool').value = '';
+  document.getElementById('e-desc').value = '';
+});
+
+// ── Export ──
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (!activeCampId) return;
+  const c = campaigns.find(x => x.id === activeCampId);
+  if (!c) return;
+
+  let md = `# Campaign: ${c.name || 'Unnamed'}\n\n`;
+  md += `**Target:** ${c.target || '—'}  \n`;
+  md += `**Dates:** ${c.startDate || '—'} → ${c.endDate || '—'}  \n`;
+  md += `**Status:** ${c.status}  \n\n`;
+  md += '---\n\n## Timeline\n\n';
+
+  const sorted = [...(c.entries || [])];
+  sorted.forEach(e => {
+    md += `### [${e.ts || '—'}] ${e.type || 'Note'}\n\n`;
+    if (e.host)    md += `**Host:** ${e.host}  \n`;
+    if (e.mitreId) md += `**MITRE:** ${e.mitreId}  \n`;
+    if (e.tool)    md += `**Tool:** ${e.tool}  \n`;
+    if (e.desc)    md += `\n${e.desc}\n`;
+    md += '\n---\n\n';
+  });
+
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (c.name || 'campaign').replace(/\s+/g, '-').toLowerCase() + '.md';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── Import ──
+document.getElementById('import-btn').addEventListener('click', () => {
+  document.getElementById('import-file').click();
+});
+
+document.getElementById('import-file').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      // Accept single campaign or array
+      const toImport = Array.isArray(data) ? data : [data];
+      toImport.forEach(c => {
+        if (!c.id) c.id = uid();
+        campaigns.push(c);
+      });
+      save();
+      renderSidebar();
+      if (toImport.length) selectCampaign(toImport[0].id);
+    } catch(err) {
+      alert('Invalid JSON format. Expected campaign JSON exported from this tool.');
+    }
+  };
+  reader.readAsText(file);
+  this.value = '';
+});
+
+// ── Delete campaign ──
+document.getElementById('delete-camp-btn').addEventListener('click', () => {
+  if (!activeCampId) return;
+  const c = campaigns.find(x => x.id === activeCampId);
+  if (!confirm('Delete campaign "' + (c ? c.name : '') + '"? This cannot be undone.')) return;
+  campaigns = campaigns.filter(x => x.id !== activeCampId);
+  activeCampId = null;
+  save();
+  renderSidebar();
+  document.getElementById('campaign-view').style.display = 'none';
+  document.getElementById('oj-empty').style.display = 'flex';
+});
+
+// ── Init ──
+load();
+renderSidebar();
+if (campaigns.length) selectCampaign(campaigns[0].id);
+</script>

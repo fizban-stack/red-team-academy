@@ -1,0 +1,525 @@
+---
+layout: base
+title: "MITRE ATT&CK Coverage Map — Red Team Academy"
+---
+
+<style>
+.heatmap-page { padding: 24px; max-width: 100%; }
+
+.heatmap-header { margin-bottom: 24px; }
+.heatmap-header h1 {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.heatmap-header .subtitle {
+  color: var(--text-2);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+.heatmap-meta {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.coverage-count {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  padding: 6px 14px;
+  border-radius: var(--radius);
+}
+.coverage-count span { color: var(--accent); font-weight: 700; }
+
+.legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-dot {
+  width: 12px; height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.legend-dot.covered { background: var(--accent); }
+.legend-dot.uncovered { background: #1e2d42; border: 1px solid #263d58; }
+
+.matrix-scroll { overflow-x: auto; padding-bottom: 16px; }
+
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(130px, 1fr));
+  gap: 6px;
+  min-width: 1820px;
+}
+
+.tactic-col {}
+
+.tactic-header {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  border-bottom: 2px solid var(--accent-dim);
+  text-align: center;
+  margin-bottom: 4px;
+}
+.tactic-id {
+  font-size: 9px;
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.technique {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 6px 7px;
+  border-radius: var(--radius-sm);
+  cursor: default;
+  transition: all 0.12s ease;
+  border: 1px solid transparent;
+  line-height: 1.35;
+  margin-bottom: 3px;
+}
+.technique.covered {
+  background: rgba(74, 222, 128, 0.10);
+  border-color: rgba(74, 222, 128, 0.30);
+  color: var(--accent);
+  cursor: pointer;
+}
+.technique.covered:hover {
+  background: rgba(74, 222, 128, 0.20);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(74, 222, 128, 0.15);
+  z-index: 2;
+}
+.technique.uncovered {
+  background: var(--bg-2);
+  border-color: var(--border-0);
+  color: var(--text-3);
+}
+.technique.sub {
+  padding-left: 14px;
+}
+.technique .tid {
+  display: block;
+  font-size: 9px;
+  opacity: 0.7;
+  margin-bottom: 1px;
+}
+
+/* Tooltip */
+.hm-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--bg-3);
+  border: 1px solid var(--accent-muted);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-0);
+  z-index: 9999;
+  max-width: 240px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.hm-tooltip.visible { opacity: 1; }
+.hm-tooltip .tip-id { color: var(--accent); font-weight: 700; }
+.hm-tooltip .tip-status { font-size: 10px; margin-top: 3px; }
+.hm-tooltip .tip-status.cov { color: var(--accent); }
+.hm-tooltip .tip-status.nocov { color: var(--text-3); }
+</style>
+
+<div class="heatmap-page">
+  <div class="heatmap-header">
+    <h1>// MITRE ATT&CK Coverage Map</h1>
+    <div class="subtitle">&gt; Click any highlighted technique to open the training page</div>
+  </div>
+
+  <div class="heatmap-meta">
+    <div class="coverage-count">Coverage: <span id="cov-count">0</span> / <span id="total-count">0</span> techniques</div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot covered"></div><span>Covered by RTA</span></div>
+      <div class="legend-item"><div class="legend-dot uncovered"></div><span>Not yet covered</span></div>
+    </div>
+  </div>
+
+  <div class="matrix-scroll">
+    <div class="matrix-grid" id="matrix"></div>
+  </div>
+</div>
+
+<div class="hm-tooltip" id="tooltip">
+  <div class="tip-id" id="tip-id"></div>
+  <div id="tip-name"></div>
+  <div class="tip-status" id="tip-status"></div>
+</div>
+
+<script>
+const COVERED = {
+  'T1595':    { name: 'Active Scanning',                  url: '/recon/active-recon/' },
+  'T1589':    { name: 'Gather Victim Identity',           url: '/recon/passive-recon/' },
+  'T1566.001':{ name: 'Spearphishing Attachment',         url: '/exploitation/vba-macro-shellcode/' },
+  'T1059.001':{ name: 'PowerShell',                       url: '/programming/powershell-offensive-tools/' },
+  'T1059.003':{ name: 'Windows Command Shell',            url: '/post-exploitation/lateral-movement/' },
+  'T1059.005':{ name: 'Visual Basic',                     url: '/exploitation/vba-macro-shellcode/' },
+  'T1190':    { name: 'Exploit Public-Facing Application',url: '/exploitation/service-exploits/' },
+  'T1133':    { name: 'External Remote Services',         url: '/pivoting/ssh-tunneling/' },
+  'T1078':    { name: 'Valid Accounts',                   url: '/active-directory/pass-the-hash/' },
+  'T1078.002':{ name: 'Domain Accounts',                  url: '/active-directory/bloodhound/' },
+  'T1055':    { name: 'Process Injection',                url: '/exploitation/process-injection/' },
+  'T1055.012':{ name: 'Process Hollowing',                url: '/exploitation/process-injection-gallery/' },
+  'T1134':    { name: 'Token Manipulation',               url: '/post-exploitation/token-impersonation/' },
+  'T1068':    { name: 'Exploit for Privilege Escalation', url: '/post-exploitation/privesc-windows/' },
+  'T1053.005':{ name: 'Scheduled Task',                   url: '/post-exploitation/persistence/' },
+  'T1547.001':{ name: 'Registry Run Keys',                url: '/post-exploitation/persistence/' },
+  'T1543.003':{ name: 'Windows Service',                  url: '/post-exploitation/persistence/' },
+  'T1027':    { name: 'Obfuscated Files or Information',  url: '/evasion/amsi-bypass/' },
+  'T1218':    { name: 'Signed Binary Proxy Execution',    url: '/evasion/lolbins/' },
+  'T1562.001':{ name: 'Disable or Modify Tools',          url: '/evasion/av-edr-evasion/' },
+  'T1070.001':{ name: 'Clear Windows Event Logs',         url: '/post-exploitation/anti-forensics/' },
+  'T1003.001':{ name: 'LSASS Memory',                     url: '/post-exploitation/lsass-dumping/' },
+  'T1558.003':{ name: 'Kerberoasting',                    url: '/active-directory/kerberoasting/' },
+  'T1558.001':{ name: 'Golden Ticket',                    url: '/active-directory/dcsync/' },
+  'T1550.002':{ name: 'Pass the Hash',                    url: '/active-directory/pass-the-hash/' },
+  'T1649':    { name: 'Steal or Forge Auth Certs',        url: '/active-directory/adcs-attacks/' },
+  'T1484.001':{ name: 'Group Policy Modification',        url: '/active-directory/acl-abuse/' },
+  'T1087.002':{ name: 'Domain Account Discovery',         url: '/active-directory/ad-enumeration/' },
+  'T1069.002':{ name: 'Domain Groups',                    url: '/active-directory/ad-enumeration/' },
+  'T1482':    { name: 'Domain Trust Discovery',           url: '/active-directory/domain-trusts/' },
+  'T1046':    { name: 'Network Service Discovery',        url: '/recon/active-recon/' },
+  'T1021.001':{ name: 'Remote Desktop Protocol',          url: '/post-exploitation/rdp-hijacking/' },
+  'T1021.002':{ name: 'SMB/Windows Admin Shares',         url: '/post-exploitation/lateral-movement/' },
+  'T1021.003':{ name: 'DCOM',                             url: '/post-exploitation/dcom-lateral/' },
+  'T1021.006':{ name: 'Windows Management Instrumentation',url: '/post-exploitation/wmi-lateral/' },
+  'T1040':    { name: 'Network Sniffing',                  url: '/network-attacks/arp-mitm/' },
+  'T1557.001':{ name: 'LLMNR/NBT-NS Poisoning',           url: '/network-attacks/responder/' },
+  'T1041':    { name: 'Exfiltration Over C2 Channel',     url: '/c2-frameworks/cobalt-strike/' },
+  'T1048':    { name: 'Exfil Over Alternative Protocol',  url: '/post-exploitation/icmp-exfil/' },
+  'T1071.004':{ name: 'DNS',                              url: '/post-exploitation/dns-exfil/' },
+  'T1567':    { name: 'Exfil to Web Service',             url: '/post-exploitation/cloud-exfil/' },
+  'T1572':    { name: 'Protocol Tunneling',               url: '/pivoting/chisel/' },
+};
+
+const MATRIX = [
+  {
+    tactic: 'Reconnaissance', tacticId: 'TA0043',
+    techniques: [
+      { id:'T1595', name:'Active Scanning' },
+      { id:'T1595.001', name:'Scanning IP Blocks' },
+      { id:'T1595.002', name:'Vulnerability Scanning' },
+      { id:'T1589', name:'Gather Victim Identity' },
+      { id:'T1589.001', name:'Credentials' },
+      { id:'T1590', name:'Gather Victim Network Info' },
+      { id:'T1591', name:'Gather Victim Org Info' },
+      { id:'T1592', name:'Gather Victim Host Info' },
+      { id:'T1593', name:'Search Open Websites' },
+      { id:'T1596', name:'Search Open Tech DBs' },
+      { id:'T1597', name:'Search Closed Sources' },
+      { id:'T1598', name:'Phishing for Information' },
+    ]
+  },
+  {
+    tactic: 'Resource Dev', tacticId: 'TA0042',
+    techniques: [
+      { id:'T1583', name:'Acquire Infrastructure' },
+      { id:'T1583.001', name:'Domains' },
+      { id:'T1583.003', name:'Virtual Private Server' },
+      { id:'T1584', name:'Compromise Infrastructure' },
+      { id:'T1585', name:'Establish Accounts' },
+      { id:'T1586', name:'Compromise Accounts' },
+      { id:'T1587', name:'Develop Capabilities' },
+      { id:'T1587.001', name:'Malware' },
+      { id:'T1588', name:'Obtain Capabilities' },
+      { id:'T1608', name:'Stage Capabilities' },
+    ]
+  },
+  {
+    tactic: 'Initial Access', tacticId: 'TA0001',
+    techniques: [
+      { id:'T1566', name:'Phishing' },
+      { id:'T1566.001', name:'Spearphishing Attachment' },
+      { id:'T1566.002', name:'Spearphishing Link' },
+      { id:'T1566.003', name:'Spearphishing via Service' },
+      { id:'T1190', name:'Exploit Public-Facing App' },
+      { id:'T1133', name:'External Remote Services' },
+      { id:'T1078', name:'Valid Accounts' },
+      { id:'T1078.002', name:'Domain Accounts' },
+      { id:'T1200', name:'Hardware Additions' },
+      { id:'T1195', name:'Supply Chain Compromise' },
+      { id:'T1199', name:'Trusted Relationship' },
+    ]
+  },
+  {
+    tactic: 'Execution', tacticId: 'TA0002',
+    techniques: [
+      { id:'T1059', name:'Command and Scripting Interpreter' },
+      { id:'T1059.001', name:'PowerShell' },
+      { id:'T1059.003', name:'Windows Command Shell' },
+      { id:'T1059.005', name:'Visual Basic' },
+      { id:'T1059.007', name:'JavaScript' },
+      { id:'T1053', name:'Scheduled Task/Job' },
+      { id:'T1053.005', name:'Scheduled Task' },
+      { id:'T1047', name:'Windows Mgmt Instrumentation' },
+      { id:'T1569', name:'System Services' },
+      { id:'T1204', name:'User Execution' },
+      { id:'T1559', name:'Inter-Process Communication' },
+    ]
+  },
+  {
+    tactic: 'Persistence', tacticId: 'TA0003',
+    techniques: [
+      { id:'T1547', name:'Boot/Logon Autostart' },
+      { id:'T1547.001', name:'Registry Run Keys' },
+      { id:'T1543', name:'Create/Modify System Process' },
+      { id:'T1543.003', name:'Windows Service' },
+      { id:'T1053.005', name:'Scheduled Task' },
+      { id:'T1037', name:'Boot/Logon Init Scripts' },
+      { id:'T1078', name:'Valid Accounts' },
+      { id:'T1505', name:'Server Software Component' },
+      { id:'T1133', name:'External Remote Services' },
+      { id:'T1136', name:'Create Account' },
+      { id:'T1098', name:'Account Manipulation' },
+    ]
+  },
+  {
+    tactic: 'Privilege Escalation', tacticId: 'TA0004',
+    techniques: [
+      { id:'T1068', name:'Exploit for Priv Escalation' },
+      { id:'T1055', name:'Process Injection' },
+      { id:'T1055.012', name:'Process Hollowing' },
+      { id:'T1134', name:'Access Token Manipulation' },
+      { id:'T1547.001', name:'Registry Run Keys' },
+      { id:'T1543.003', name:'Windows Service' },
+      { id:'T1053.005', name:'Scheduled Task' },
+      { id:'T1484.001', name:'Group Policy Modification' },
+      { id:'T1611', name:'Escape to Host' },
+      { id:'T1078', name:'Valid Accounts' },
+    ]
+  },
+  {
+    tactic: 'Defense Evasion', tacticId: 'TA0005',
+    techniques: [
+      { id:'T1027', name:'Obfuscated Files or Info' },
+      { id:'T1055', name:'Process Injection' },
+      { id:'T1055.012', name:'Process Hollowing' },
+      { id:'T1218', name:'Signed Binary Proxy Exec' },
+      { id:'T1562.001', name:'Disable/Modify Tools' },
+      { id:'T1070.001', name:'Clear Windows Event Logs' },
+      { id:'T1134', name:'Access Token Manipulation' },
+      { id:'T1140', name:'Deobfuscate/Decode Files' },
+      { id:'T1202', name:'Indirect Command Execution' },
+      { id:'T1112', name:'Modify Registry' },
+      { id:'T1036', name:'Masquerading' },
+    ]
+  },
+  {
+    tactic: 'Credential Access', tacticId: 'TA0006',
+    techniques: [
+      { id:'T1003', name:'OS Credential Dumping' },
+      { id:'T1003.001', name:'LSASS Memory' },
+      { id:'T1558', name:'Steal/Forge Kerberos Tickets' },
+      { id:'T1558.001', name:'Golden Ticket' },
+      { id:'T1558.003', name:'Kerberoasting' },
+      { id:'T1550.002', name:'Pass the Hash' },
+      { id:'T1649', name:'Steal/Forge Auth Certs' },
+      { id:'T1110', name:'Brute Force' },
+      { id:'T1555', name:'Credentials from Stores' },
+      { id:'T1040', name:'Network Sniffing' },
+      { id:'T1557.001', name:'LLMNR/NBT-NS Poisoning' },
+    ]
+  },
+  {
+    tactic: 'Discovery', tacticId: 'TA0007',
+    techniques: [
+      { id:'T1087.002', name:'Domain Account Discovery' },
+      { id:'T1069.002', name:'Domain Groups' },
+      { id:'T1482', name:'Domain Trust Discovery' },
+      { id:'T1046', name:'Network Service Discovery' },
+      { id:'T1018', name:'Remote System Discovery' },
+      { id:'T1083', name:'File and Directory Discovery' },
+      { id:'T1057', name:'Process Discovery' },
+      { id:'T1012', name:'Query Registry' },
+      { id:'T1082', name:'System Info Discovery' },
+      { id:'T1016', name:'System Network Config' },
+      { id:'T1135', name:'Network Share Discovery' },
+    ]
+  },
+  {
+    tactic: 'Lateral Movement', tacticId: 'TA0008',
+    techniques: [
+      { id:'T1021.001', name:'Remote Desktop Protocol' },
+      { id:'T1021.002', name:'SMB/Windows Admin Shares' },
+      { id:'T1021.003', name:'DCOM' },
+      { id:'T1021.006', name:'Windows Mgmt Instrumentation' },
+      { id:'T1550.002', name:'Pass the Hash' },
+      { id:'T1558.001', name:'Golden Ticket' },
+      { id:'T1534', name:'Internal Spearphishing' },
+      { id:'T1570', name:'Lateral Tool Transfer' },
+      { id:'T1563', name:'Remote Service Session Hijack' },
+    ]
+  },
+  {
+    tactic: 'Collection', tacticId: 'TA0009',
+    techniques: [
+      { id:'T1560', name:'Archive Collected Data' },
+      { id:'T1005', name:'Data from Local System' },
+      { id:'T1039', name:'Data from Network Share' },
+      { id:'T1025', name:'Data from Removable Media' },
+      { id:'T1074', name:'Data Staged' },
+      { id:'T1113', name:'Screen Capture' },
+      { id:'T1056', name:'Input Capture' },
+      { id:'T1557', name:'Adversary-in-the-Middle' },
+      { id:'T1557.001', name:'LLMNR/NBT-NS Poisoning' },
+    ]
+  },
+  {
+    tactic: 'C2', tacticId: 'TA0011',
+    techniques: [
+      { id:'T1071.004', name:'DNS' },
+      { id:'T1572', name:'Protocol Tunneling' },
+      { id:'T1041', name:'Exfil Over C2 Channel' },
+      { id:'T1090', name:'Proxy' },
+      { id:'T1095', name:'Non-Application Layer Protocol' },
+      { id:'T1105', name:'Ingress Tool Transfer' },
+      { id:'T1571', name:'Non-Standard Port' },
+      { id:'T1573', name:'Encrypted Channel' },
+      { id:'T1001', name:'Data Obfuscation' },
+    ]
+  },
+  {
+    tactic: 'Exfiltration', tacticId: 'TA0010',
+    techniques: [
+      { id:'T1041', name:'Exfil Over C2 Channel' },
+      { id:'T1048', name:'Exfil Over Alt Protocol' },
+      { id:'T1071.004', name:'DNS' },
+      { id:'T1567', name:'Exfil to Web Service' },
+      { id:'T1020', name:'Automated Exfiltration' },
+      { id:'T1022', name:'Data Encrypted' },
+      { id:'T1030', name:'Data Transfer Size Limits' },
+      { id:'T1052', name:'Exfil Over Physical Medium' },
+    ]
+  },
+  {
+    tactic: 'Impact', tacticId: 'TA0040',
+    techniques: [
+      { id:'T1486', name:'Data Encrypted for Impact' },
+      { id:'T1490', name:'Inhibit System Recovery' },
+      { id:'T1489', name:'Service Stop' },
+      { id:'T1485', name:'Data Destruction' },
+      { id:'T1491', name:'Defacement' },
+      { id:'T1498', name:'Network DoS' },
+      { id:'T1529', name:'System Shutdown/Reboot' },
+      { id:'T1565', name:'Data Manipulation' },
+    ]
+  },
+];
+
+function isCovered(id) {
+  return COVERED.hasOwnProperty(id);
+}
+
+function buildMatrix() {
+  const grid = document.getElementById('matrix');
+  let coveredCount = 0;
+  let totalCount = 0;
+  const seenIds = new Set();
+
+  MATRIX.forEach(col => {
+    const div = document.createElement('div');
+    div.className = 'tactic-col';
+
+    const header = document.createElement('div');
+    header.className = 'tactic-header';
+    header.innerHTML = col.tactic + '<span class="tactic-id">' + col.tacticId + '</span>';
+    div.appendChild(header);
+
+    col.techniques.forEach(t => {
+      const isSub = t.id.includes('.');
+      const covered = isCovered(t.id);
+
+      if (!seenIds.has(t.id)) {
+        seenIds.add(t.id);
+        totalCount++;
+        if (covered) coveredCount++;
+      }
+
+      const el = document.createElement('div');
+      el.className = 'technique' + (covered ? ' covered' : ' uncovered') + (isSub ? ' sub' : '');
+      el.innerHTML = '<span class="tid">' + t.id + '</span>' + t.name;
+      el.dataset.id = t.id;
+      el.dataset.name = t.name;
+
+      if (covered) {
+        el.addEventListener('click', () => {
+          window.open(COVERED[t.id].url, '_blank');
+        });
+      }
+
+      el.addEventListener('mouseenter', (e) => showTooltip(e, t.id, t.name, covered));
+      el.addEventListener('mousemove', moveTooltip);
+      el.addEventListener('mouseleave', hideTooltip);
+
+      div.appendChild(el);
+    });
+
+    grid.appendChild(div);
+  });
+
+  document.getElementById('cov-count').textContent = coveredCount;
+  document.getElementById('total-count').textContent = totalCount;
+}
+
+const tooltip = document.getElementById('tooltip');
+
+function showTooltip(e, id, name, covered) {
+  document.getElementById('tip-id').textContent = id;
+  document.getElementById('tip-name').textContent = name;
+  const statusEl = document.getElementById('tip-status');
+  if (covered) {
+    statusEl.textContent = '✓ Covered — click to open training page';
+    statusEl.className = 'tip-status cov';
+  } else {
+    statusEl.textContent = '○ Not yet covered';
+    statusEl.className = 'tip-status nocov';
+  }
+  tooltip.classList.add('visible');
+  moveTooltip(e);
+}
+
+function moveTooltip(e) {
+  let x = e.clientX + 14;
+  let y = e.clientY + 14;
+  if (x + 250 > window.innerWidth) x = e.clientX - 254;
+  if (y + 80 > window.innerHeight) y = e.clientY - 84;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+}
+
+buildMatrix();
+</script>

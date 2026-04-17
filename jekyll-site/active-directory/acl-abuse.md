@@ -227,11 +227,11 @@ Set-DomainUserPassword -Identity 'target' -AccountPassword (ConvertTo-SecureStri
 
 ## Key Resources
 
-- `https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/acl-persistence-abuse` — HackTricks ACL abuse guide
-- `https://github.com/PowerShellMafia/PowerSploit/blob/master/Recon/PowerView.ps1` — PowerView
-- `https://github.com/eladshamir/Whisker` — Whisker (Shadow Credentials, C#)
-- `https://github.com/ShutdownRepo/pywhisker` — pywhisker (Shadow Credentials, Python)
-- `https://www.ired.team/offensive-security-experiments/active-directory-kerberos-abuse/abusing-active-directory-acls-aces` — ired.team ACE abuse reference
+- [HackTricks ACL abuse guide](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/acl-persistence-abuse)
+- [PowerView](https://github.com/PowerShellMafia/PowerSploit/blob/master/Recon/PowerView.ps1)
+- [Whisker (Shadow Credentials, C#)](https://github.com/eladshamir/Whisker)
+- [pywhisker (Shadow Credentials, Python)](https://github.com/ShutdownRepo/pywhisker)
+- [ired.team ACE abuse reference](https://www.ired.team/offensive-security-experiments/active-directory-kerberos-abuse/abusing-active-directory-acls-aces)
 
 ## ACL Types Overview
 

@@ -56,4 +56,4 @@ ffuf -u https://<TARGET>/FUZZ -w /path/to/wordlist -mc 200,301,302,403
 
 - [Web pentest checklist](/web/web-pentest-checklist/)
 - [Bug bounty methodology](/web/bug-bounty-methodology/)
-- OWASP WSTG — `https://owasp.org/www-project-web-security-testing-guide/`
+- OWASP WSTG — [https://owasp.org/www-project-web-security-testing-guide/](https://owasp.org/www-project-web-security-testing-guide/)

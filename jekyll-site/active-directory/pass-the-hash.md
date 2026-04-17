@@ -378,7 +378,7 @@ level: high
 
 ## Key Resources
 
-- `https://github.com/GhostPack/Rubeus` — Rubeus Kerberos toolkit
-- `https://github.com/Hackplayers/evil-winrm` — evil-winrm
-- `https://github.com/SecureAuthCorp/impacket` — Impacket tools
-- `https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/pass-the-hash` — HackTricks PtH guide
+- [Rubeus Kerberos toolkit](https://github.com/GhostPack/Rubeus)
+- [evil-winrm](https://github.com/Hackplayers/evil-winrm)
+- [Impacket tools](https://github.com/SecureAuthCorp/impacket)
+- [HackTricks PtH guide](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/pass-the-hash)

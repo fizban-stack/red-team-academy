@@ -376,10 +376,10 @@ Invoke-Mimikatz -Command '"lsadump::trust /patch"' -ComputerName dcorp-dc
 
 ## Key Resources
 
-- `https://github.com/gentilkiwi/mimikatz` — Mimikatz
-- `https://github.com/SecureAuthCorp/impacket` — Impacket (secretsdump.py)
-- `https://adsecurity.org/?p=1640` — Sean Metcalf — DCSync Attack explanation
-- `https://adsecurity.org/?p=1640` — Golden Ticket internals
+- [Mimikatz](https://github.com/gentilkiwi/mimikatz)
+- [Impacket (secretsdump.py)](https://github.com/SecureAuthCorp/impacket)
+- [Sean Metcalf — DCSync Attack explanation](https://adsecurity.org/?p=1640)
+- [Golden Ticket internals](https://adsecurity.org/?p=1640)
 
 ## DCSync — Prevention and Detection
 

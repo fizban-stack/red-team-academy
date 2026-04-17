@@ -231,10 +231,10 @@ bloodhound-python -d sevenkingdoms.local \
 
 ## Key Resources
 
-- `https://github.com/PowerShellMafia/PowerSploit/blob/master/Recon/PowerView.ps1` — PowerView
-- `https://github.com/fox-it/BloodHound.py` — BloodHound-Python
-- `https://github.com/Pennyw0rth/NetExec` — NetExec (CME successor)
-- `https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/implementing-least-privilege-administrative-models` — Microsoft AD security docs
+- [PowerView](https://github.com/PowerShellMafia/PowerSploit/blob/master/Recon/PowerView.ps1)
+- [BloodHound-Python](https://github.com/fox-it/BloodHound.py)
+- [NetExec (CME successor)](https://github.com/Pennyw0rth/NetExec)
+- [Microsoft AD security docs](https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/implementing-least-privilege-administrative-models)
 
 ## Credentials in Object Properties
 

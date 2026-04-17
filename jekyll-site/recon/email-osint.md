@@ -235,9 +235,9 @@ The goal of all this OSINT is to build a believable pretext — the story that m
 
 ## Key Resources
 
-- `https://hunter.io` — Email discovery and verification
-- `https://phonebook.cz` — Breach data email search
-- `https://haveibeenpwned.com` — Breach notification
-- `https://dehashed.com` — Breach credential search
-- `https://github.com/initstring/linkedin2username` — LinkedIn email generation
-- `https://osintframework.com` — OSINT tool index by category
+- [Email discovery and verification](https://hunter.io)
+- [Breach data email search](https://phonebook.cz)
+- [Breach notification](https://haveibeenpwned.com)
+- [Breach credential search](https://dehashed.com)
+- [LinkedIn email generation](https://github.com/initstring/linkedin2username)
+- [OSINT tool index by category](https://osintframework.com)

@@ -634,9 +634,9 @@ index=wineventlog EventCode=4624 LogonType=3 AuthenticationPackageName=NTLM
 
 ## Key References
 
-- `https://www.fireeye.com/blog/threat-research/2020/12/evasive-attacker-leverages-solarwinds-supply-chain-compromises.html` — FireEye Sunburst initial disclosure
-- `https://www.crowdstrike.com/blog/sunspot-malware-technical-analysis/` — CrowdStrike SunSpot build tool analysis
-- `https://www.cisa.gov/news-events/cybersecurity-advisories/aa20-352a` — US-CERT SolarWinds advisory
-- `https://github.com/gitleaks/gitleaks` — Git secrets scanning tool
-- `https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions` — GitHub Actions hardening guide
-- `https://slsa.dev` — SLSA framework for supply chain security levels
+- [FireEye Sunburst initial disclosure](https://www.fireeye.com/blog/threat-research/2020/12/evasive-attacker-leverages-solarwinds-supply-chain-compromises.html)
+- [CrowdStrike SunSpot build tool analysis](https://www.crowdstrike.com/blog/sunspot-malware-technical-analysis/)
+- [US-CERT SolarWinds advisory](https://www.cisa.gov/news-events/cybersecurity-advisories/aa20-352a)
+- [Git secrets scanning tool](https://github.com/gitleaks/gitleaks)
+- [GitHub Actions hardening guide](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions)
+- [SLSA framework for supply chain security levels](https://slsa.dev)

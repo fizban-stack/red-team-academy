@@ -245,7 +245,7 @@ python3 sf.py -s targetcompany.com -t INTERNET_NAME \
 
 ### Maltego CE (Free Tier)
 
-- Download from `https://www.maltego.com` — Community Edition is free
+- Download from [https://www.maltego.com](https://www.maltego.com) — Community Edition is free
 - Start with a Domain entity → Run all transforms → builds a visual graph
 - Key transforms: DNS to IP, IP to ASN, Domain to Email, Person to Social
 - Export graph as PDF for report appendix
@@ -286,10 +286,10 @@ echo "[*] Identified $(wc -l < final_scope.txt) assets for active recon"
 
 ## Key Resources
 
-- `https://bgp.he.net` — ASN and prefix lookup
-- `https://bgpview.io` — BGP route visualization
-- `https://crt.sh` — Certificate transparency search
-- `https://api.hackertarget.com` — Reverse IP and network tools
-- `https://ip-ranges.amazonaws.com/ip-ranges.json` — AWS IP ranges
-- `https://github.com/smicallef/spiderfoot` — SpiderFoot OSINT automation
-- `https://osintframework.com` — OSINT tool index
+- [ASN and prefix lookup](https://bgp.he.net)
+- [BGP route visualization](https://bgpview.io)
+- [Certificate transparency search](https://crt.sh)
+- [Reverse IP and network tools](https://api.hackertarget.com)
+- [AWS IP ranges](https://ip-ranges.amazonaws.com/ip-ranges.json)
+- [SpiderFoot OSINT automation](https://github.com/smicallef/spiderfoot)
+- [OSINT tool index](https://osintframework.com)

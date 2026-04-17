@@ -34,4 +34,4 @@ One-screen references for live operations: copy-ready commands, triage order, an
 ## Resources
 
 - [Authoring guide](/fundamentals/authoring-guide/) — how pages in this site are structured
-- MITRE ATT&CK — `https://attack.mitre.org/`
+- MITRE ATT&CK — [https://attack.mitre.org/](https://attack.mitre.org/)

@@ -146,7 +146,7 @@ roadrecon serve
 
 ## Microsoft Graph API Enumeration
 
-The Microsoft Graph API (`https://graph.microsoft.com`) is the primary programmatic interface for Azure AD and Microsoft 365. Any valid OAuth 2.0 access token can query it — even tokens obtained via phishing or refresh token replay.
+The Microsoft Graph API ([https://graph.microsoft.com](https://graph.microsoft.com)) is the primary programmatic interface for Azure AD and Microsoft 365. Any valid OAuth 2.0 access token can query it — even tokens obtained via phishing or refresh token replay.
 
 ```
 # Acquire a token for Graph API using AADInternals

@@ -234,7 +234,7 @@ VBoxManage snapshot "Metasploitable2" restore "clean-state"
 ## Additional Vulnerable Lab Resources
 
 - **DVWA** — Damn Vulnerable Web Application. PHP/MySQL web app for OWASP Top 10 practice. `docker run -d -p 80:80 vulnerables/web-dvwa`
-- **VulnHub** — Free downloadable vulnerable VMs. `https://www.vulnhub.com`
+- **VulnHub** — Free downloadable vulnerable VMs. [https://www.vulnhub.com](https://www.vulnhub.com)
 - **HackTheBox** — Cloud-hosted lab VMs. Monthly subscription. Best for CTF-style practice.
 - **TryHackMe** — Guided learning paths, browser-based labs. Best for beginners and structured curriculum.
 - **PentesterLab** — Web and binary exploitation focused. Excellent for web app security.

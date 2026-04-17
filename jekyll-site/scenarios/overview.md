@@ -218,12 +218,12 @@ After completing a scenario, assess your detection coverage using the MITRE ATT&
 
 ## Key References
 
-- `https://attack.mitre.org` — MITRE ATT&CK Enterprise Matrix
-- `https://github.com/center-for-threat-informed-defense/adversary_emulation_library` — CTID Adversary Emulation Plans
-- `https://www.microsoft.com/en-us/security/blog/tag/threat-intelligence/` — Microsoft MSTIC threat intelligence
-- `https://www.crowdstrike.com/adversaries/` — CrowdStrike adversary profiles (Fancy Bear, Cozy Bear, etc.)
-- `https://attack.mitre.org/groups/G0016/` — APT29 MITRE ATT&CK group page
-- `https://mitre-attack.github.io/attack-navigator/` — MITRE ATT&CK Navigator (heat mapping)
-- `https://www.scythe.io/library/purple-team-exercise-framework` — PTEF Purple Team Exercise Framework
+- [MITRE ATT&CK Enterprise Matrix](https://attack.mitre.org)
+- [CTID Adversary Emulation Plans](https://github.com/center-for-threat-informed-defense/adversary_emulation_library)
+- [Microsoft MSTIC threat intelligence](https://www.microsoft.com/en-us/security/blog/tag/threat-intelligence/)
+- [CrowdStrike adversary profiles (Fancy Bear, Cozy Bear, etc.)](https://www.crowdstrike.com/adversaries/)
+- [APT29 MITRE ATT&CK group page](https://attack.mitre.org/groups/G0016/)
+- [MITRE ATT&CK Navigator (heat mapping)](https://mitre-attack.github.io/attack-navigator/)
+- [PTEF Purple Team Exercise Framework](https://www.scythe.io/library/purple-team-exercise-framework)
 - *Operator Handbook* by Joshua Picolet — operational tradecraft reference
 - *The Art of Cyberwar* — strategic context for nation-state operations

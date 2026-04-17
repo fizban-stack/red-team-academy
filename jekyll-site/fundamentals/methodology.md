@@ -148,7 +148,7 @@ Document every action with timestamps. Remove all artifacts, backdoors, and test
 
 ## Formal Methodology Frameworks
 
-- **PTES (Penetration Testing Execution Standard)** — Seven phases: pre-engagement, intelligence gathering, threat modeling, vulnerability analysis, exploitation, post-exploitation, reporting. `http://www.pentest-standard.org/`
+- **PTES (Penetration Testing Execution Standard)** — Seven phases: pre-engagement, intelligence gathering, threat modeling, vulnerability analysis, exploitation, post-exploitation, reporting. [http://www.pentest-standard.org/](http://www.pentest-standard.org/)
 - **TIBER-EU** — European Central Bank framework for financial sector red team testing. Requires dedicated threat intelligence phase with external provider.
 - **CBEST** — UK FCA/Bank of England equivalent. Intelligence-led, threat-actor-emulation focused.
 - **MITRE ATT&CK** — Not a methodology but the universal taxonomy. Use it to plan, execute, and report every engagement. See the MITRE ATT&CK page for full details.
@@ -220,9 +220,9 @@ mstsc.exe /v:<TARGET>:23389         # Non-default RDP port
 
 ## Key Resources
 
-- `https://attack.mitre.org` — MITRE ATT&CK knowledge base
-- `http://www.pentest-standard.org` — PTES methodology
-- `https://www.tiber.eu` — TIBER-EU framework
-- `https://github.com/center-for-threat-informed-defense` — Adversary emulation plans
+- [MITRE ATT&CK knowledge base](https://attack.mitre.org)
+- [PTES methodology](http://www.pentest-standard.org)
+- [TIBER-EU framework](https://www.tiber.eu)
+- [Adversary emulation plans](https://github.com/center-for-threat-informed-defense)
 - *The Hacker Playbook 3* by Peter Kim — Practical red team methodology
 - *Red Team Development and Operations* by Joe Vest & James Tubberville

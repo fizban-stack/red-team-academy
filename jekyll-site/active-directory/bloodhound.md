@@ -232,8 +232,8 @@ RETURN n.name,type(r),u.name
 
 ## Key Resources
 
-- `https://github.com/SpecterOps/BloodHound` — BloodHound CE repository
-- `https://github.com/BloodHoundAD/SharpHound` — SharpHound collector
-- `https://github.com/fox-it/BloodHound.py` — BloodHound-Python
-- `https://support.bloodhoundenterprise.io/hc/en-us/articles/17481394564251` — CE installation guide
-- `https://hausec.com/2019/09/09/bloodhound-cypher-cheatsheet/` — Cypher query cheatsheet
+- [BloodHound CE repository](https://github.com/SpecterOps/BloodHound)
+- [SharpHound collector](https://github.com/BloodHoundAD/SharpHound)
+- [BloodHound-Python](https://github.com/fox-it/BloodHound.py)
+- [CE installation guide](https://support.bloodhoundenterprise.io/hc/en-us/articles/17481394564251)
+- [Cypher query cheatsheet](https://hausec.com/2019/09/09/bloodhound-cypher-cheatsheet/)

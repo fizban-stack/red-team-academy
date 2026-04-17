@@ -355,8 +355,8 @@ Every action you take creates artifacts. Effective C2 OPSEC means knowing what a
 
 ## Key Resources
 
-- `https://blog.cobaltstrike.com/2017/06/23/opsec-considerations-for-beacon-commands/` — Official CS OPSEC guidance
-- `https://github.com/bluscreenofjeff/Red-Team-Infrastructure-Wiki` — Red team infrastructure wiki
-- `https://www.cobaltstrike.com/help-malleable-c2` — Malleable C2 profile documentation
-- `https://github.com/BC-SECURITY/Malleable-C2-Profiles` — Community malleable profiles
+- [Official CS OPSEC guidance](https://blog.cobaltstrike.com/2017/06/23/opsec-considerations-for-beacon-commands/)
+- [Red team infrastructure wiki](https://github.com/bluscreenofjeff/Red-Team-Infrastructure-Wiki)
+- [Malleable C2 profile documentation](https://www.cobaltstrike.com/help-malleable-c2)
+- [Community malleable profiles](https://github.com/BC-SECURITY/Malleable-C2-Profiles)
 - *Red Team Development and Operations* by Joe Vest & James Tubberville — infrastructure OPSEC chapter

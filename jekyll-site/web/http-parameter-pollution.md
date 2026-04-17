@@ -245,7 +245,7 @@ url=https://legitimate.com&url=http://169.254.169.254/latest/meta-data/
 ```
 
 This is effective when:
-- The security layer reads `url` first (gets `https://legitimate.com`, passes the check)
+- The security layer reads `url` first (gets [https://legitimate.com](https://legitimate.com), passes the check)
 - The downstream HTTP client reads `url` last (gets `http://169.254.169.254/...`, makes the request)
 
 SSRF via duplicate Host header (HTTP Request Smuggling adjacent):

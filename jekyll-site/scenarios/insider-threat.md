@@ -597,10 +597,10 @@ TECHNOLOGY (minimum viable):
 
 ## Key References
 
-- `https://attack.mitre.org/tactics/TA0043/` — MITRE ATT&CK Reconnaissance tactic
-- `https://www.cisa.gov/sites/default/files/publications/Insider_Threat_Mitigation_Guide_Final.pdf` — CISA Insider Threat Mitigation Guide
-- `https://www.carnegiemellon.edu/cert/insider-threat/` — CERT Insider Threat Center research
-- `https://docs.microsoft.com/en-us/microsoft-365/compliance/insider-risk-management` — Microsoft Purview Insider Risk Management
-- `https://www.varonis.com/blog/insider-threat-statistics` — Insider threat statistics and case studies
-- `https://github.com/microsoft/Microsoft-365-Defender-Hunting-Queries` — M365 Defender hunting queries
+- [MITRE ATT&CK Reconnaissance tactic](https://attack.mitre.org/tactics/TA0043/)
+- [CISA Insider Threat Mitigation Guide](https://www.cisa.gov/sites/default/files/publications/Insider_Threat_Mitigation_Guide_Final.pdf)
+- [CERT Insider Threat Center research](https://www.carnegiemellon.edu/cert/insider-threat/)
+- [Microsoft Purview Insider Risk Management](https://docs.microsoft.com/en-us/microsoft-365/compliance/insider-risk-management)
+- [Insider threat statistics and case studies](https://www.varonis.com/blog/insider-threat-statistics)
+- [M365 Defender hunting queries](https://github.com/microsoft/Microsoft-365-Defender-Hunting-Queries)
 - *The CERT Guide to Insider Threats* by Dawn Cappelli, Andrew Moore, Randall Trzeciak — definitive reference

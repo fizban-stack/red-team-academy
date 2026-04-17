@@ -177,9 +177,9 @@ Set-DomainObject -Identity 'cersei.lannister' \
 
 ## Key Resources
 
-- `https://github.com/GhostPack/Rubeus` — Rubeus (.NET Kerberos toolkit)
-- `https://github.com/SecureAuthCorp/impacket` — Impacket (GetUserSPNs.py, GetNPUsers.py)
-- `https://www.tarlogic.com/blog/how-kerberos-works/` — Kerberos internals explained
+- [Rubeus (.NET Kerberos toolkit)](https://github.com/GhostPack/Rubeus)
+- [Impacket (GetUserSPNs.py, GetNPUsers.py)](https://github.com/SecureAuthCorp/impacket)
+- [Kerberos internals explained](https://www.tarlogic.com/blog/how-kerberos-works/)
 
 ## Kerberoasting from Linux — Impacket GetUserSPNs.py
 

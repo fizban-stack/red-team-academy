@@ -118,4 +118,4 @@ cat /etc/os-release
 - [SSRF](/web/ssrf/) — full chains and cloud metadata
 - [SQL injection](/web/sql-injection/)
 - [Reverse shells](/exploitation/reverse-shells/)
-- PayloadsAllTheThings — `https://github.com/swisskyrepo/PayloadsAllTheThings`
+- PayloadsAllTheThings — [https://github.com/swisskyrepo/PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)

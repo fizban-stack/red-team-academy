@@ -312,7 +312,7 @@ site:twitter.com "targetcompany.com"
 
 Maltego visualizes OSINT relationships as a graph. Starting from a domain, transforms pivot to IPs, ASNs, emails, social accounts, and physical locations — all through public data.
 
-- Download: `https://www.maltego.com` — Community Edition is free
+- Download: [https://www.maltego.com](https://www.maltego.com) — Community Edition is free
 - Create a Domain entity → right-click → Run All Transforms → watch the graph build
 - Key passive transforms: **DNS to IP**, **Domain to Email**, **Domain to Subdomains**, **IP to ASN**
 - Import theHarvester results (XML output) directly into Maltego for visualization
@@ -350,11 +350,11 @@ gau targetcompany.com | sort -u > all_urls.txt
 
 ## Key Resources
 
-- `https://www.exploit-db.com/google-hacking-database` — Google Hacking Database (GHDB)
-- `https://shodan.io` — Internet-wide device scanner
-- `https://search.censys.io` — Certificate and host intelligence
-- `https://crt.sh` — Certificate transparency search
-- `https://web.archive.org` — Wayback Machine
-- `https://github.com/laramies/theHarvester` — theHarvester OSINT tool
-- `https://github.com/lanmaster53/recon-ng` — Recon-ng framework
-- `https://osintframework.com` — OSINT tool index by category
+- [Google Hacking Database (GHDB)](https://www.exploit-db.com/google-hacking-database)
+- [Internet-wide device scanner](https://shodan.io)
+- [Certificate and host intelligence](https://search.censys.io)
+- [Certificate transparency search](https://crt.sh)
+- [Wayback Machine](https://web.archive.org)
+- [theHarvester OSINT tool](https://github.com/laramies/theHarvester)
+- [Recon-ng framework](https://github.com/lanmaster53/recon-ng)
+- [OSINT tool index by category](https://osintframework.com)

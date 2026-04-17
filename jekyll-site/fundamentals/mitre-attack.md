@@ -68,7 +68,7 @@ Always cite sub-techniques when reporting. `T1003` is too vague — `T1003.006 D
 
 ## ATT&CK Navigator
 
-The ATT&CK Navigator is a web-based visualization tool for annotating the ATT&CK matrix. Access it at `https://mitre-attack.github.io/attack-navigator/` or self-host via GitHub.
+The ATT&CK Navigator is a web-based visualization tool for annotating the ATT&CK matrix. Access it at [https://mitre-attack.github.io/attack-navigator/](https://mitre-attack.github.io/attack-navigator/) or self-host via GitHub.
 
 ### Red Team Use Cases
 
@@ -157,8 +157,8 @@ stratus revert aws.credential-access.ec2-get-password-data
 
 ## Key Resources
 
-- `https://attack.mitre.org` — Main ATT&CK knowledge base
-- `https://mitre-attack.github.io/attack-navigator/` — Navigator (online)
-- `https://github.com/mitre-attack/attack-navigator` — Self-hosted Navigator
-- `https://attack.mitre.org/resources/adversary-emulation-plans/` — AEPs
-- `https://github.com/center-for-threat-informed-defense` — CTID adversary emulation library
+- [Main ATT&CK knowledge base](https://attack.mitre.org)
+- [Navigator (online)](https://mitre-attack.github.io/attack-navigator/)
+- [Self-hosted Navigator](https://github.com/mitre-attack/attack-navigator)
+- [AEPs](https://attack.mitre.org/resources/adversary-emulation-plans/)
+- [CTID adversary emulation library](https://github.com/center-for-threat-informed-defense)

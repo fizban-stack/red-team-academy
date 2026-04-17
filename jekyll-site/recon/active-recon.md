@@ -359,8 +359,8 @@ echo "[*] Done. Results in $OUTDIR/"
 
 ## Key Resources
 
-- `https://nmap.org/book/man.html` — Official Nmap manual
-- `https://nmap.org/nsedoc/` — NSE script documentation
-- `https://github.com/robertdavidgraham/masscan` — Masscan GitHub
-- `https://github.com/RustScan/RustScan` — Rustscan GitHub
+- [Official Nmap manual](https://nmap.org/book/man.html)
+- [NSE script documentation](https://nmap.org/nsedoc/)
+- [Masscan GitHub](https://github.com/robertdavidgraham/masscan)
+- [Rustscan GitHub](https://github.com/RustScan/RustScan)
 - `/usr/share/nmap/scripts/` — Local NSE scripts on Kali

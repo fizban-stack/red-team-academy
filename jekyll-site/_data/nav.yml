@@ -75,6 +75,8 @@
       title: AD Enumeration
     - url: /active-directory/goad/
       title: Game of Active Directory
+    - url: /active-directory/nha/
+      title: Ninja Hacker Academy (NHA)
     - url: /active-directory/kerberoasting/
       title: Kerberoasting & AS-REP
     - url: /active-directory/pass-the-hash/

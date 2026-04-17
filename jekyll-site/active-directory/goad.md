@@ -245,8 +245,8 @@ psexec.py -k -no-pass Administrator@braavos.essos.local
 
 ## Key Resources
 
-- `https://github.com/Orange-Cyberdefense/GOAD` — GOAD repository and full documentation
-- `https://mayfly277.github.io` — GOAD author's blog with detailed attack walkthroughs
-- `https://github.com/Orange-Cyberdefense/GOAD/tree/main/docs` — Detailed per-attack walkthroughs in GOAD docs
+- [GOAD repository and full documentation](https://github.com/Orange-Cyberdefense/GOAD)
+- [GOAD author's blog with detailed attack walkthroughs](https://mayfly277.github.io)
+- [Detailed per-attack walkthroughs in GOAD docs](https://github.com/Orange-Cyberdefense/GOAD/tree/main/docs)
 
 **// GOAD-NG** — Orange Cyberdefense is working on GOAD-NG (Next Generation), a rewrite using the `goad.sh` provisioner with support for additional AD misconfiguration scenarios, Azure AD integration, and more modern attack paths. Check the GOAD GitHub for the latest version before installation.

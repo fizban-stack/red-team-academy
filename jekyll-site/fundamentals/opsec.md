@@ -341,14 +341,14 @@ phishlets hostname microsoft yourdomain.com   # configure phishlet
 
 ## Key Resources
 
-- `https://github.com/bluscreenofjeff/Red-Team-Infrastructure-Wiki` — Red team infrastructure design guide
-- `https://github.com/rsmudge/Malleable-C2-Profiles` — Cobalt Strike malleable profile examples
-- `https://www.cobaltstrike.com/blog/malleable-command-and-control/` — Cobalt Strike malleable C2 docs
-- `https://lolbas-project.github.io` — LOLBins for living off the land
-- `https://owasp.org/www-project-top-10-for-large-language-model-applications/` — OWASP LLM Top 10
-- `https://atlas.mitre.org` — MITRE ATLAS: adversarial ML techniques framework
-- `https://github.com/refraction-networking/utls` — uTLS: TLS fingerprint randomization
-- `https://crt.sh` — Certificate Transparency log search
+- [Red team infrastructure design guide](https://github.com/bluscreenofjeff/Red-Team-Infrastructure-Wiki)
+- [Cobalt Strike malleable profile examples](https://github.com/rsmudge/Malleable-C2-Profiles)
+- [Cobalt Strike malleable C2 docs](https://www.cobaltstrike.com/blog/malleable-command-and-control/)
+- [LOLBins for living off the land](https://lolbas-project.github.io)
+- [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/)
+- [MITRE ATLAS: adversarial ML techniques framework](https://atlas.mitre.org)
+- [uTLS: TLS fingerprint randomization](https://github.com/refraction-networking/utls)
+- [Certificate Transparency log search](https://crt.sh)
 - *Red Team Development and Operations* — Joe Vest & James Tubberville — dedicated OPSEC chapter
 - *SpecterOps Blog* — OpSec Considerations in Adversary Simulation Campaigns
 

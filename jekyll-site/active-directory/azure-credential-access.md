@@ -245,7 +245,7 @@ The OAuth Device Code flow is designed for input-limited devices (CLI tools, sma
 ### How the Attack Works
 
 1. Attacker initiates a device code request for a malicious (or legitimate-looking) app
-2. Microsoft returns a device code and verification URL (`https://microsoft.com/devicelogin`)
+2. Microsoft returns a device code and verification URL ([https://microsoft.com/devicelogin](https://microsoft.com/devicelogin))
 3. Attacker sends phishing message: "Enter code ABCD-1234 at microsoft.com/devicelogin to verify your VPN access"
 4. Victim authenticates legitimately at Microsoft's real domain
 5. Attacker's polling loop receives the access token + refresh token

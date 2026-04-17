@@ -376,7 +376,7 @@ ls -la /etc/sudoers /etc/sudoers.d/ 2>/dev/null
 
 ## Useful Resources
 
-- `https://gtfobins.github.io` — GTFOBins: SUID/sudo/capabilities abuse
-- `https://github.com/peass-ng/PEASS-ng` — LinPEAS automated enumeration
-- `https://book.hacktricks.xyz/linux-hardening/privilege-escalation` — HackTricks Linux privesc
-- `https://explainshell.com` — Explain any shell command
+- [GTFOBins: SUID/sudo/capabilities abuse](https://gtfobins.github.io)
+- [LinPEAS automated enumeration](https://github.com/peass-ng/PEASS-ng)
+- [HackTricks Linux privesc](https://book.hacktricks.xyz/linux-hardening/privilege-escalation)
+- [Explain any shell command](https://explainshell.com)

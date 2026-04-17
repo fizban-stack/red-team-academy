@@ -190,9 +190,9 @@ The `COMPlus_ETWEnabled=0` environment variable disables .NET ETW at process sta
 | `NtTraceControl` monitoring | Inline hook on `NtTraceControl` syscall to detect provider disabling | High |
 
 **Key GitHub References:**
-- `https://github.com/med0x2e/NoAmci` — AMSI + ETW bypass via memory patching
-- `https://github.com/boku7/HOLLOW` — ETW patching as part of process hollowing
-- `https://github.com/RedTeamOperations/Advanced-Process-Injection-Workshop` — workshop including ETW bypasses
+- [AMSI + ETW bypass via memory patching](https://github.com/med0x2e/NoAmci)
+- [ETW patching as part of process hollowing](https://github.com/boku7/HOLLOW)
+- [workshop including ETW bypasses](https://github.com/RedTeamOperations/Advanced-Process-Injection-Workshop)
 - Research blog: "Detecting and Preventing ETW Bypass" — posts by Elastic Security, CrowdStrike, MDSec
 
 ---
@@ -219,7 +219,7 @@ This means any memory scan during the sleep window finds only encrypted garbage 
 ### Ekko — Timer-Based Encryption
 
 **Author:** `Cracked5pider` / `5pider`
-**GitHub:** `https://github.com/Cracked5pider/Ekko`
+**GitHub:** [https://github.com/Cracked5pider/Ekko](https://github.com/Cracked5pider/Ekko)
 
 Ekko is the most widely referenced sleep obfuscation implementation. It uses **Windows timer queue timers** (`CreateTimerQueueTimer`) to sequence the encrypt → sleep → decrypt operations without requiring the implant's own thread to remain executable during sleep.
 
@@ -272,7 +272,7 @@ VOID EkkoSleep(DWORD SleepTime) {
 
 ### Foliage — NtContinue Chained APC
 
-**GitHub:** `https://github.com/SecIdiot/FOLIAGE`
+**GitHub:** [https://github.com/SecIdiot/FOLIAGE](https://github.com/SecIdiot/FOLIAGE)
 
 Foliage takes a different approach: instead of timer callbacks, it uses **NtQueueApcThread + NtContinue chaining** to build a sequence of function calls (an "APC gadget chain") that performs encrypt → sleep → decrypt.
 
@@ -288,7 +288,7 @@ The key advantage: the call stack during sleep looks like it originates from a l
 
 ### Cronos — Thread Timer
 
-**GitHub:** `https://github.com/Idov31/Cronos`
+**GitHub:** [https://github.com/Idov31/Cronos](https://github.com/Idov31/Cronos)
 
 Cronos is similar to Ekko but uses `CreateWaitableTimer` + `SetWaitableTimer` rather than timer queue timers. It also adds stack spoofing during the sleep window.
 
@@ -310,7 +310,7 @@ The alertable wait is key — it means the thread has a normal-looking wait stat
 4. Sleeps
 5. Restores original stack and decrypts
 
-**Poppy** (`https://github.com/nicholasmckinney/poppy`) is a PoC implementing sleep obfuscation with memory permission changes. During sleep, it changes the beacon memory region's protection to `PAGE_NOACCESS` (causing an immediate AV exception if scanned) then `PAGE_EXECUTE_READ` on wake. This causes scanning threads to fault rather than read implant memory.
+**Poppy** ([https://github.com/nicholasmckinney/poppy](https://github.com/nicholasmckinney/poppy)) is a PoC implementing sleep obfuscation with memory permission changes. During sleep, it changes the beacon memory region's protection to `PAGE_NOACCESS` (causing an immediate AV exception if scanned) then `PAGE_EXECUTE_READ` on wake. This causes scanning threads to fault rather than read implant memory.
 
 **NOTELST/Gargoyle** — Related: Gargoyle (by **JLospinoso**) is an older (2017) but conceptually important technique where the beacon becomes non-executable during sleep by using ROP gadgets to change memory protection, sleep, then make it executable again. Modern sleep obfuscation tools build on this foundation.
 
@@ -325,7 +325,7 @@ The encryption algorithm used during sleep matters for detection:
 | Custom ChaCha20/XOR | Fastest | Variable | No Windows API call — harder to detect via API monitoring |
 | `BCryptEncrypt` | Moderate | Variable | Standard CNG API, less suspicious in isolation |
 
-Modern implementations like **Ekko-ng** and **ShellcodeFluctuation** (`https://github.com/mgeeky/ShellcodeFluctuation`) use a combination: XOR the memory, then change the page permissions to `PAGE_NOACCESS` or `PAGE_READONLY`, so even if the XOR key is found, the memory can't be read without triggering a fault.
+Modern implementations like **Ekko-ng** and **ShellcodeFluctuation** ([https://github.com/mgeeky/ShellcodeFluctuation](https://github.com/mgeeky/ShellcodeFluctuation)) use a combination: XOR the memory, then change the page permissions to `PAGE_NOACCESS` or `PAGE_READONLY`, so even if the XOR key is found, the memory can't be read without triggering a fault.
 
 ### WaitForSingleObject vs CreateTimerQueueTimer
 
@@ -337,11 +337,11 @@ Modern implementations like **Ekko-ng** and **ShellcodeFluctuation** (`https://g
 | `SetWaitableTimer` alertable (Cronos) | Thread pool-independent; APCs look native | Alertable sleep state with APC delivery can be a detection signal |
 
 **GitHub References:**
-- `https://github.com/Cracked5pider/Ekko` — Ekko sleep obfuscation
-- `https://github.com/mgeeky/ShellcodeFluctuation` — permission-change sleep obfuscation
-- `https://github.com/Idov31/Cronos` — waitable timer approach
-- `https://github.com/SecIdiot/FOLIAGE` — NtContinue APC chain
-- `https://github.com/nicholasmckinney/poppy` — PAGE_NOACCESS approach
+- [Ekko sleep obfuscation](https://github.com/Cracked5pider/Ekko)
+- [permission-change sleep obfuscation](https://github.com/mgeeky/ShellcodeFluctuation)
+- [waitable timer approach](https://github.com/Idov31/Cronos)
+- [NtContinue APC chain](https://github.com/SecIdiot/FOLIAGE)
+- [PAGE_NOACCESS approach](https://github.com/nicholasmckinney/poppy)
 - Research: "Bypassing Memory Scanners with Obfuscated Payloads" — Cobalt Strike blog posts
 
 ---
@@ -426,7 +426,7 @@ This is more complex operationally and risks destabilizing the target thread, bu
 
 ### ThreadStackSpoofer by mgeeky
 
-**GitHub:** `https://github.com/mgeeky/ThreadStackSpoofer`
+**GitHub:** [https://github.com/mgeeky/ThreadStackSpoofer](https://github.com/mgeeky/ThreadStackSpoofer)
 
 mgeeky's implementation is the canonical reference for x64 Windows stack spoofing. Key features:
 
@@ -451,7 +451,7 @@ A more recent technique (2023+) uses **hardware breakpoints** (via the `Dr0`–`
 
 **Advantage over memory patching:** No modification to executable memory regions — the function code is unmodified. The breakpoint is set via `SetThreadContext` or direct register writes, which is harder for EDRs to detect via memory integrity checks.
 
-**GitHub:** `https://github.com/rad9800/hwbp4mw` — hardware breakpoint-based memory watches
+**GitHub:** [https://github.com/rad9800/hwbp4mw](https://github.com/rad9800/hwbp4mw) — hardware breakpoint-based memory watches
 
 ### Interlaced Frames Technique
 
@@ -467,9 +467,9 @@ Real frame:    NtAllocateVirtualMemory            [API being called]
 The insight: even if an EDR detects one "suspicious" frame, surrounding it with enough legitimate frames may cause the heuristic to score the overall call chain as benign. Some EDRs only flag stacks where the *bottom* frames are anonymous — interlacing puts a legitimate-looking bottom frame.
 
 **References:**
-- `https://github.com/mgeeky/ThreadStackSpoofer` — mgeeky's implementation
-- `https://github.com/klezVirus/SilentMoonwalk` — "shadow stack" spoofing implementation
-- `https://github.com/WithSecureLabs/CallStackMasker` — WithSecure call stack masking PoC
+- [mgeeky's implementation](https://github.com/mgeeky/ThreadStackSpoofer)
+- ["shadow stack" spoofing implementation](https://github.com/klezVirus/SilentMoonwalk)
+- [WithSecure call stack masking PoC](https://github.com/WithSecureLabs/CallStackMasker)
 - Blog: "Masking Malicious Memory Artifacts" — MDSec blog (2022)
 - Blog: "Hiding Your .NET/C# Tools in Process" — Adam Chester / XPN (2022)
 
@@ -496,7 +496,7 @@ Static analysis of shellcode/PE files reveals syscall stubs at fixed offsets wit
 ### Hell's Gate — Dynamic SSN Resolution
 
 **Authors:** am0nsec, RtlMateusz
-**GitHub:** `https://github.com/am0nsec/HellsGate`
+**GitHub:** [https://github.com/am0nsec/HellsGate](https://github.com/am0nsec/HellsGate)
 **Paper:** VX-Underground white paper, 2020
 
 Hell's Gate resolves SSNs **dynamically at runtime** by parsing the in-memory ntdll export table and reading the actual syscall stub bytes.
@@ -543,7 +543,7 @@ BOOL GetSyscallNumber(LPCSTR functionName, PDWORD pSsn) {
 
 ### Halo's Gate — Handling Hooked ntdll
 
-**GitHub:** `https://github.com/trickster0/TartarusGate` (Halo's Gate concept)
+**GitHub:** [https://github.com/trickster0/TartarusGate](https://github.com/trickster0/TartarusGate) (Halo's Gate concept)
 
 When EDR hooks ntdll, the stub bytes are replaced with a JMP to the EDR's trampoline. The `4C 8B D1 B8` pattern is gone. Halo's Gate extends Hell's Gate to handle this:
 
@@ -578,7 +578,7 @@ BOOL HalosGate(LPCSTR functionName, PDWORD pSsn) {
 
 ### FreshyCalls — Sorting EAT by Address
 
-**GitHub:** `https://github.com/crummie5/FreshyCalls`
+**GitHub:** [https://github.com/crummie5/FreshyCalls](https://github.com/crummie5/FreshyCalls)
 
 Rather than relying on adjacent stubs having predictable SSN offsets, FreshyCalls sorts the entire ntdll Export Address Table (EAT) by **function address** (RVA). Because Windows ntdll lays out `Nt*` syscall stubs in SSN order in memory, sorting by address gives you SSN order directly.
 
@@ -598,7 +598,7 @@ Rather than relying on adjacent stubs having predictable SSN offsets, FreshyCall
 ### SysWhispers3 — Randomized Stubs + Indirect Calls
 
 **Author:** klezVirus (fork of SysWhispers2 by jthuraisamy)
-**GitHub:** `https://github.com/klezVirus/SysWhispers3`
+**GitHub:** [https://github.com/klezVirus/SysWhispers3](https://github.com/klezVirus/SysWhispers3)
 
 SysWhispers3 is the most widely used syscall toolkit (2022-2024). It generates C header/ASM stub files for direct or indirect syscalls with several evasion features:
 
@@ -652,7 +652,7 @@ NtAllocateVirtualMemory ENDP
 
 ### Tartarus Gate
 
-**GitHub:** `https://github.com/trickster0/TartarusGate`
+**GitHub:** [https://github.com/trickster0/TartarusGate](https://github.com/trickster0/TartarusGate)
 
 Tartarus Gate combines Hell's Gate + Halo's Gate into a unified framework and adds **VEH-based (Vectored Exception Handler) hook detection**. When a stub is hooked with an INT3 (breakpoint) rather than a JMP, the Hell's Gate byte-pattern check fails. Tartarus Gate detects this by examining additional byte patterns:
 
@@ -670,7 +670,7 @@ Tartarus Gate is a common base for custom implant syscall resolution in 2023-202
 
 ### RecycledGate
 
-**GitHub:** `https://github.com/thefLink/RecycleGate`
+**GitHub:** [https://github.com/thefLink/RecycleGate](https://github.com/thefLink/RecycleGate)
 
 RecycledGate avoids the need to resolve SSNs entirely by **re-using existing syscall stubs in ntdll** rather than building new ones. The approach:
 
@@ -682,11 +682,11 @@ RecycledGate avoids the need to resolve SSNs entirely by **re-using existing sys
 This means the `syscall` instruction always executes inside ntdll — similar to indirect syscalls but without needing a separate stub generation tool. The SSN is still needed, but only for the `mov eax` — no custom stub code is ever executed.
 
 **Tool references:**
-- `https://github.com/am0nsec/HellsGate` — original Hell's Gate
-- `https://github.com/klezVirus/SysWhispers3` — SysWhispers3
-- `https://github.com/trickster0/TartarusGate` — Tartarus Gate
-- `https://github.com/thefLink/RecycleGate` — RecycledGate
-- `https://github.com/crummie5/FreshyCalls` — FreshyCalls
+- [original Hell's Gate](https://github.com/am0nsec/HellsGate)
+- [SysWhispers3](https://github.com/klezVirus/SysWhispers3)
+- [Tartarus Gate](https://github.com/trickster0/TartarusGate)
+- [RecycledGate](https://github.com/thefLink/RecycleGate)
+- [FreshyCalls](https://github.com/crummie5/FreshyCalls)
 
 ---
 
@@ -698,7 +698,7 @@ These three techniques all exploit different points in the Windows process creat
 
 **Author:** enSilo (Tal Liberman, Eugene Kogan)
 **Presented:** Black Hat Europe 2017
-**GitHub:** Multiple PoCs — `https://github.com/hasherezade/process_doppelganging`
+**GitHub:** Multiple PoCs — [https://github.com/hasherezade/process_doppelganging](https://github.com/hasherezade/process_doppelganging)
 
 **Mechanism:**
 
@@ -719,7 +719,7 @@ Exploits Windows NTFS Transactions (TxF — Transactional NTFS):
 ### Process Herpaderping
 
 **Author:** jxy-s
-**GitHub:** `https://github.com/jxy-s/herpaderping`
+**GitHub:** [https://github.com/jxy-s/herpaderping](https://github.com/jxy-s/herpaderping)
 **Published:** 2020
 
 **Mechanism:**
@@ -742,7 +742,7 @@ Rather than using NTFS transactions, Herpaderping exploits a race condition in *
 ### Process Ghosting
 
 **Author:** Gabriel Landau (Elastic)
-**GitHub:** `https://github.com/gabriellandau/PPLFault` (related — Ghosting concept)
+**GitHub:** [https://github.com/gabriellandau/PPLFault](https://github.com/gabriellandau/PPLFault) (related — Ghosting concept)
 **Blog:** "Process Ghosting: Putting Malware in a Ghost" — Elastic, 2021
 
 **Mechanism:**
@@ -772,10 +772,10 @@ Extends Herpaderping's concept but adds a **delete-pending** trick:
 
 ### Tools
 
-- `https://github.com/hasherezade/process_doppelganging` — hasherezade's Doppelgänging PoC
-- `https://github.com/jxy-s/herpaderping` — Herpaderping
-- `https://github.com/gabriellandau/PPLFault` — Ghosting-adjacent work by Landau
-- `https://github.com/Hagrid29/PEBFuscator` — related process creation evasion
+- [hasherezade's Doppelgänging PoC](https://github.com/hasherezade/process_doppelganging)
+- [Herpaderping](https://github.com/jxy-s/herpaderping)
+- [Ghosting-adjacent work by Landau](https://github.com/gabriellandau/PPLFault)
+- [related process creation evasion](https://github.com/Hagrid29/PEBFuscator)
 
 ---
 
@@ -927,11 +927,11 @@ Detecting which specific functions are hooked lets a red teamer choose between:
 - Syscall bypass (avoid ntdll entirely for sensitive calls)
 
 **GitHub References:**
-- `https://github.com/TheWover/donut` — includes unhooking as part of in-memory loading
-- `https://github.com/plackyhacker/Perun-s-Fart` — Perun's Fart implementation
-- `https://github.com/EthicalChaos/EarlyBird` — unhooking via early bird
-- `https://github.com/Mr-Un1k0d3r/EDRs` — EDR hook detection tool
-- `https://github.com/slaeryan/AQUARMOURY` — Anthropic collection includes unhooking
+- [includes unhooking as part of in-memory loading](https://github.com/TheWover/donut)
+- [Perun's Fart implementation](https://github.com/plackyhacker/Perun-s-Fart)
+- [unhooking via early bird](https://github.com/EthicalChaos/EarlyBird)
+- [EDR hook detection tool](https://github.com/Mr-Un1k0d3r/EDRs)
+- [Anthropic collection includes unhooking](https://github.com/slaeryan/AQUARMOURY)
 
 ---
 
@@ -1060,7 +1060,7 @@ NTSTATUS status = NtQueueApcThreadEx(
 ### Ghost Writing via APC
 
 **Author:** Ired.team / various
-**GitHub:** `https://github.com/gabriellandau/GhostWriting`
+**GitHub:** [https://github.com/gabriellandau/GhostWriting](https://github.com/gabriellandau/GhostWriting)
 
 Ghost Writing avoids `WriteProcessMemory` (which is heavily monitored) by using APC injection to make the **target process write to its own memory**.
 
@@ -1082,9 +1082,9 @@ This means the memory writes appear as self-writes from the target process rathe
 | Shellcode at APC routine address (no backing image) | Memory scan of APC target address | High |
 
 **GitHub References:**
-- `https://github.com/gabriellandau/GhostWriting` — Ghost Writing
-- `https://github.com/thefLink/Hunt-Sleeping-Beacons` — detection tool (defender perspective)
-- `https://github.com/3xpl01tc0d3r/ProcessInjection` — APC injection PoC collection
+- [Ghost Writing](https://github.com/gabriellandau/GhostWriting)
+- [detection tool (defender perspective)](https://github.com/thefLink/Hunt-Sleeping-Beacons)
+- [APC injection PoC collection](https://github.com/3xpl01tc0d3r/ProcessInjection)
 - Research: "A Deep Dive into APC Injection Variants" — Akamai Security, 2022
 
 ---
@@ -1236,8 +1236,8 @@ A reflective loader is a piece of code embedded in a DLL that can load itself in
 4. Resolving imports (walking the PEB LDR list)
 5. Calling `DllMain`
 
-**GitHub:** `https://github.com/stephenfewer/ReflectiveDLLInjection` — original
-**GitHub:** `https://github.com/monoxgas/sRDI` — shellcode RDI (more evasive variant)
+**GitHub:** [https://github.com/stephenfewer/ReflectiveDLLInjection](https://github.com/stephenfewer/ReflectiveDLLInjection) — original
+**GitHub:** [https://github.com/monoxgas/sRDI](https://github.com/monoxgas/sRDI) — shellcode RDI (more evasive variant)
 
 **Without PE headers — the evolution:**
 
@@ -1279,11 +1279,11 @@ PVOID LoadWithoutHeaders(PBYTE rawDll, SIZE_T rawSize) {
 ```
 
 **Tools:**
-- `https://github.com/stephenfewer/ReflectiveDLLInjection` — original reflective loader
-- `https://github.com/monoxgas/sRDI` — shellcode reflective DLL injection (no PE headers in memory)
-- `https://github.com/TheWover/donut` — in-memory loader with PE header stomping
-- `https://github.com/Cracked5pider/KaynLdr` — modern reflective loader (2022)
-- `https://github.com/EddieIvan01/mem-loader` — PE-header-free loader PoC
+- [original reflective loader](https://github.com/stephenfewer/ReflectiveDLLInjection)
+- [shellcode reflective DLL injection (no PE headers in memory)](https://github.com/monoxgas/sRDI)
+- [in-memory loader with PE header stomping](https://github.com/TheWover/donut)
+- [modern reflective loader (2022)](https://github.com/Cracked5pider/KaynLdr)
+- [PE-header-free loader PoC](https://github.com/EddieIvan01/mem-loader)
 
 ---
 

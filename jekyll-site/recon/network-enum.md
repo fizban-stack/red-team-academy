@@ -393,9 +393,9 @@ python nmap-to-sqlite.py scan2.xml
 
 ## Key Resources
 
-- `https://github.com/hackertarget/nmap-did-what` — nmap-did-what Grafana dashboard
-- `https://github.com/Pennyw0rth/NetExec` — NetExec (CrackMapExec successor)
-- `https://github.com/cddmp/enum4linux-ng` — enum4linux-ng
-- `https://github.com/dirkjanm/ldapdomaindump` — ldapdomaindump
-- `https://github.com/SecureAuthCorp/impacket` — Impacket toolkit
-- `https://www.seclists.org` — SecLists wordlists (SNMP community strings, etc.)
+- [nmap-did-what Grafana dashboard](https://github.com/hackertarget/nmap-did-what)
+- [NetExec (CrackMapExec successor)](https://github.com/Pennyw0rth/NetExec)
+- [enum4linux-ng](https://github.com/cddmp/enum4linux-ng)
+- [ldapdomaindump](https://github.com/dirkjanm/ldapdomaindump)
+- [Impacket toolkit](https://github.com/SecureAuthCorp/impacket)
+- [SecLists wordlists (SNMP community strings, etc.)](https://www.seclists.org)

@@ -313,10 +313,10 @@ echo "[*] Results in $OUT/"
 
 ## Key Resources
 
-- `https://github.com/projectdiscovery/subfinder` — subfinder
-- `https://github.com/tomnomnom/assetfinder` — assetfinder
-- `https://github.com/projectdiscovery/dnsx` — dnsx DNS resolver
-- `https://github.com/OWASP/Amass` — Amass (now projectdiscovery/amass)
-- `https://github.com/OJ/gobuster` — gobuster
-- `https://github.com/ffuf/ffuf` — ffuf fuzzer
-- `https://github.com/danielmiessler/SecLists` — SecLists DNS wordlists
+- [subfinder](https://github.com/projectdiscovery/subfinder)
+- [assetfinder](https://github.com/tomnomnom/assetfinder)
+- [dnsx DNS resolver](https://github.com/projectdiscovery/dnsx)
+- [Amass (now projectdiscovery/amass)](https://github.com/OWASP/Amass)
+- [gobuster](https://github.com/OJ/gobuster)
+- [ffuf fuzzer](https://github.com/ffuf/ffuf)
+- [SecLists DNS wordlists](https://github.com/danielmiessler/SecLists)

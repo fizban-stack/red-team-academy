@@ -676,8 +676,8 @@ index=wineventlog source="Microsoft-Windows-DistributedCOM"
 
 ## Key References
 
-- `https://www.microsoft.com/security/blog/2021/05/28/breaking-down-nobeliums-latest-early-stage-toolset/` — MSTIC NOBELIUM analysis
-- `https://attack.mitre.org/groups/G0016/` — APT29 ATT&CK group page
-- `https://www.mandiant.com/resources/blog/unc2452-merged-into-apt29` — Mandiant APT29/UNC2452 attribution
-- `https://github.com/dafthack/GraphRunner` — GraphRunner for M365 post-exploitation via Graph API
-- `https://github.com/dirkjanm/ROADtools` — ROADtools Azure AD enumeration
+- [MSTIC NOBELIUM analysis](https://www.microsoft.com/security/blog/2021/05/28/breaking-down-nobeliums-latest-early-stage-toolset/)
+- [APT29 ATT&CK group page](https://attack.mitre.org/groups/G0016/)
+- [Mandiant APT29/UNC2452 attribution](https://www.mandiant.com/resources/blog/unc2452-merged-into-apt29)
+- [GraphRunner for M365 post-exploitation via Graph API](https://github.com/dafthack/GraphRunner)
+- [ROADtools Azure AD enumeration](https://github.com/dirkjanm/ROADtools)

@@ -540,12 +540,12 @@ fetch('/static/app.js')
 
 ## Key Resources
 
-- `https://github.com/OJ/gobuster` — gobuster (dir/dns/vhost)
-- `https://github.com/epi052/feroxbuster` — feroxbuster (recursive)
-- `https://github.com/ffuf/ffuf` — ffuf (flexible fuzzer)
-- `https://github.com/urbanadventurer/WhatWeb` — whatweb
-- `https://github.com/EnableSecurity/wafw00f` — WAF detection
-- `https://github.com/tomnomnom/waybackurls` — Wayback URL extractor
-- `https://github.com/GerbenJavado/LinkFinder` — JS endpoint extractor
-- `https://github.com/PortSwigger/endlets` — in-browser endpoint discovery bookmarklet
-- `https://github.com/danielmiessler/SecLists` — SecLists wordlists
+- [gobuster (dir/dns/vhost)](https://github.com/OJ/gobuster)
+- [feroxbuster (recursive)](https://github.com/epi052/feroxbuster)
+- [ffuf (flexible fuzzer)](https://github.com/ffuf/ffuf)
+- [whatweb](https://github.com/urbanadventurer/WhatWeb)
+- [WAF detection](https://github.com/EnableSecurity/wafw00f)
+- [Wayback URL extractor](https://github.com/tomnomnom/waybackurls)
+- [JS endpoint extractor](https://github.com/GerbenJavado/LinkFinder)
+- [in-browser endpoint discovery bookmarklet](https://github.com/PortSwigger/endlets)
+- [SecLists wordlists](https://github.com/danielmiessler/SecLists)

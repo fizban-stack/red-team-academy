@@ -318,6 +318,74 @@ coercer -u user -p password -d domain.local \
 coercer --list-methods
 ```
 
+## Detection
+
+### Event Log Sources
+- **Event ID 4624 Logon Type 3** (Network Logon) — A successful relay produces a Type 3 NTLM logon on the target. The `IpAddress` field will show the attacker's relay host (ntlmrelayx server) rather than the victim's actual IP — an attacker IP appearing in logon events for accounts that should only log in from specific workstations is anomalous.
+- **Event ID 4625** (Failed Logon) — Failed relay attempts (e.g., relay to a host with SMB signing enabled) generate Type 3 failures with NTLM; bursts of failures from the same source indicate relay tooling.
+- **Event ID 5136** (Directory Service Object Modified) — LDAP relay attacks that add computer accounts or modify group membership leave AD object modification events on the DC.
+- **Event ID 4741** (Computer Account Created) — ntlmrelayx LDAP relay with `--add-computer` creates a machine account; unexpected computer account creation is a high-signal indicator.
+
+### Sysmon Events
+- **Event ID 3 (Network Connection)** — Responder/Inveigh processes making connections on ports 137, 138, 445, 80 simultaneously. Also: ntlmrelayx outbound connections from the attacker's host to SMB/LDAP on targets.
+- **Event ID 22 (DNS Query)** — LLMNR/NBT-NS poisoning will cause victim hosts to query for non-existent hostnames; observe broadcasts in DNS query logs or network captures. High volume of failed DNS lookups followed by NTLM auth to an unexpected host is a relay precursor pattern.
+- **Event ID 1 (Process Creation)** — Responder, Inveigh, ntlmrelayx, or mitm6 process names on an attacker host.
+
+### Key Indicators
+- **NTLM authentication from unexpected source IPs** — a user's NTLM logon arriving at a server from an IP that is not the user's workstation; relay inserts the attacker between victim and target
+- **SMB signing status** — hosts with `MessageSigningEnabled: False` and `MessageSigningRequired: False` are relay targets; audit your environment with `nxc smb <subnet> --gen-relay-list` and treat the output as a vulnerability list
+- **LLMNR/NBT-NS broadcast traffic** — network captures showing LLMNR (UDP 5355) or NBT-NS (UDP 137) queries for hostnames that do not exist in DNS; these are the bait Responder responds to
+- **DHCPv6 requests followed by IPv6 DNS assignments** — mitm6 responds to DHCPv6 (port 547); sudden IPv6 gateway/DNS changes on workstations indicate active mitm6 poisoning
+- **Responder default User-Agent / fingerprints** — Responder's HTTP server has a distinctive response pattern; network IDS signatures for `Responder` tool responses exist in Suricata/Snort rulesets
+- **SAM dump artifacts** — `Impacket-ntlmrelayx` default action dumps SAM to console; sensitive files like `samhashes.txt` or registry exports appearing on attacker-controlled paths
+
+### Sigma Rule Concept
+```yaml
+# Sigma concept — NTLM relay indicator: auth source IP mismatch
+title: Potential NTLM Relay — Authentication from Unexpected Source
+status: experimental
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID: 4624
+        LogonType: 3
+        AuthenticationPackageName: 'NTLM'
+    filter_expected_sources:
+        IpAddress:
+            - '10.0.0.0/8'       # replace with your legitimate admin IP ranges
+            - '192.168.1.0/24'
+    # Alert when source IP is NOT in the expected ranges for admin accounts
+    condition: selection and not filter_expected_sources
+falsepositives:
+    - VPN users authenticating from external IPs
+    - Cloud-based management tools
+level: medium
+
+# NBT-NS / LLMNR poisoning detection (network-based):
+title: LLMNR Poisoning Indicator — High Volume Failed DNS with Subsequent NTLM Auth
+# Requires network tap or DNS log correlation
+# Alert: >5 LLMNR queries for non-existent hosts from a subnet followed by
+#        NTLM auth to a host that has no prior relationship with the querying user
+level: high
+```
+
+### EDR Behavior Alerts
+- **Microsoft Defender for Identity (MDI)**: "NTLM Relay Attack" — MDI specifically detects when NTLM authentication for an account arrives from a host that is not the account's primary workstation, and correlates it with known relay tool patterns
+- **CrowdStrike Falcon**: "NTLM Relay" / "Man-in-the-Middle" — detects relay tool execution and anomalous NTLM authentication chains
+- **SentinelOne**: "Credential Relay" behavioral indicator — fires on tooling associated with Responder/ntlmrelayx process signatures and NTLM interception patterns
+- **Microsoft Defender for Endpoint**: "Possible NTLM relay attack" when relay tools are detected or when authentication patterns indicate a relay chain
+
+### Defensive Countermeasures
+- **Enable SMB Signing (required, not just enabled)** — the single most effective control; relay attacks against hosts requiring signing fail immediately. Enable via GPO: Microsoft network server: Digitally sign communications (always) → Enabled
+- **Disable LLMNR** — GPO: Computer Configuration → Administrative Templates → Network → DNS Client → Turn off multicast name resolution → Enabled
+- **Disable NBT-NS** — Disable NetBIOS over TCP/IP per adapter via DHCP option 001 or PowerShell on each host
+- **Disable IPv6 if not required** — prevents mitm6 DHCPv6 attacks; if IPv6 is needed, deploy a legitimate DHCPv6 server and configure DNS Guard on switches
+- **Network IDS rules** — Suricata/Snort signatures for Responder HTTP responses, LLMNR flood patterns, and DHCPv6 rogue advertisements
+- **LDAP signing and channel binding** — requires LDAP clients to sign requests; prevents relay to LDAP even when SMB signing is enforced elsewhere (KB4520412)
+- **Tiered administration and network segmentation** — limit which workstations can authenticate to which servers; relay is only useful if the relayed credential has access to the target
+
 ## Coercer + ADCS WebDAV Relay Chain
 
 When ADCS HTTP enrollment is available, coerce the DC over WebDAV (HTTP) instead of SMB. This avoids the SMB signing requirement and allows relaying the machine account authentication to the certificate authority to obtain a DC certificate — which can then be used to DCSync the entire domain.

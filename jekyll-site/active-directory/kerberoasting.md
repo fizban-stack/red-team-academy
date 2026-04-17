@@ -623,6 +623,74 @@ KRB5CCNAME='Administrator@TERMSRV_DC01.INLANEFREIGHT.LOCAL@INLANEFREIGHT.LOCAL.c
   wmiexec.py DC01.INLANEFREIGHT.LOCAL -k -no-pass
 ```
 
+## Detection
+
+### Event Log Sources
+- **Event ID 4769** (Kerberos Service Ticket Operations) — The primary Kerberoasting indicator. Filter for: `TicketEncryptionType = 0x17` (RC4-HMAC) combined with `ServiceName` not ending in `$` (computer accounts) and not equal to `krbtgt`. A burst of 4769 events from a single source IP requesting RC4 tickets for many different SPNs within seconds is a high-confidence Kerberoasting signal.
+- **Event ID 4768** (Kerberos TGT Request) — Useful for correlating the source account. Kerbrute user enumeration generates 4768 events with `PRINCIPAL_UNKNOWN (0x6)` error codes.
+- **Event ID 4771** (Kerberos Pre-Authentication Failed) — Fires during password spraying via Kerberos.
+- **Event ID 4741** (Computer Account Created) — Targeted Kerberoasting via RBCD first creates a machine account; monitor for unexpected computer account creation especially outside of provisioning windows.
+
+### Sysmon Events
+- **Event ID 1 (Process Creation)** — `Rubeus.exe kerberoast` or `GetUserSPNs.py` running from unexpected paths or parent processes. Command line will contain `kerberoast`, `/spn`, or `GetUserSPNs`.
+- **Event ID 3 (Network Connection)** — Connections from attacker tools to DC on port 88 (Kerberos) and 389/636 (LDAP for SPN enumeration) from non-standard systems or at unusual hours.
+
+### Key Indicators
+- Multiple Event ID 4769 events with `EncryptionType = 0x17` (RC4) from a single source in under 60 seconds — Rubeus default behavior requests all tickets in rapid succession
+- A honey account SPN (a service account with a strong password and an SPN that is never legitimately used) generating **any** 4769 event — this is a near-zero false-positive indicator of Kerberoasting
+- `setspn -T domain -Q */*` or `Get-DomainUser -SPN` LDAP queries from non-admin workstations
+- `$krb5tgs$23$` hashes appearing in log files or on-disk artifacts (e.g., Rubeus output files)
+- 4769 events where `ServiceName` matches accounts recently added with a fake SPN (targeted Kerberoasting via GenericWrite ACL abuse)
+
+### Sigma Rule Concept
+```yaml
+# Sigma concept — Kerberoasting via RC4 ticket volume
+title: Kerberoasting Activity via High Volume RC4 TGS Requests
+status: experimental
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID: 4769
+        TicketEncryptionType: '0x17'   # RC4-HMAC — weak, downgraded
+        Status: '0x0'                  # success only
+    filter_computer_accounts:
+        ServiceName|endswith: '$'      # exclude machine accounts
+    filter_krbtgt:
+        ServiceName: 'krbtgt'
+    timeframe: 30s
+    condition: selection and not filter_computer_accounts and not filter_krbtgt | count() by SubjectUserName > 5
+falsepositives:
+    - Legacy applications requiring RC4 Kerberos
+    - Scheduled batch jobs requesting multiple service tickets
+level: high
+
+# Honey account rule (zero false positives):
+title: Kerberoasting Honeypot SPN Triggered
+detection:
+    selection:
+        EventID: 4769
+        ServiceName: 'honeysvc_NEVERUSED'  # replace with your honey SPN
+    condition: selection
+level: critical
+```
+
+### EDR Behavior Alerts
+- **CrowdStrike Falcon**: "Kerberos Service Ticket Request with Weak Encryption" / "Potential Kerberoasting" — correlates RC4 ticket requests with SPN enumeration LDAP queries from the same host
+- **SentinelOne**: "Kerberoasting Attempt" — behavioral alert combining LDAP SPN enumeration with subsequent 4769 RC4 events
+- **Microsoft Defender for Identity (MDI)**: Built-in "Kerberoasting" alert — MDI natively detects bulk RC4 TGS requests and correlates them with account enumeration; also alerts on honey account SPN access
+- **Microsoft Defender for Endpoint**: "Suspicious Kerberos ticket request" alert when Rubeus or similar tooling is detected via process telemetry
+
+### Defensive Countermeasures
+- **Enforce AES-only Kerberos** — set `msDS-SupportedEncryptionTypes = 0x18` (AES128 + AES256) on service accounts; RC4 downgrade requests become detectable or fail outright
+- **Group Managed Service Accounts (gMSA)** — 127-character randomly-rotated passwords make Kerberoasted hashes computationally infeasible to crack regardless of encryption type
+- **Honeypot SPNs** — create service accounts with SPNs that are never legitimately accessed; alert on any 4769 for these accounts
+- **Fine-Grained Password Policy** — enforce 25+ character passwords on all service accounts with SPNs
+- **Audit SPN assignments** — review all accounts with SPNs regularly; remove unnecessary SPNs from high-privilege accounts
+- **Protected Users group** — members cannot use RC4 Kerberos; any Kerberoast attempt against them uses AES only (harder to crack, also more detectable as unusual)
+- **Privileged Identity Management (PIM)** — enforce just-in-time access for service accounts, reducing the window where an SPN is exposed
+
 ## Rubeus — Real-Time Ticket Harvesting
 
 Beyond requesting tickets on demand, Rubeus can monitor the current host for *new* Kerberos tickets as users log in. This is effective on shared systems (jump boxes, terminal servers) where multiple domain accounts authenticate and their tickets land in memory.

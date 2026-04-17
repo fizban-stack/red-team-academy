@@ -552,3 +552,117 @@ function initSearch() {
     runSearch();
   });
 }
+
+/* ─────────────────────────────────────────────────────
+   STALENESS WARNING — amber banner when content > 12 months old
+   ───────────────────────────────────────────────────── */
+
+function initStalenessWarning() {
+  var panel = document.querySelector('.content-panel');
+  if (!panel) return;
+
+  var updated = (panel.getAttribute('data-updated') || '').trim();
+  if (!updated) return;
+
+  var updatedDate = new Date(updated);
+  if (isNaN(updatedDate.getTime())) return;
+
+  var monthsAgo = (Date.now() - updatedDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
+  if (monthsAgo < 12) return;
+
+  var banner = document.createElement('div');
+  banner.className = 'stale-warning';
+  banner.innerHTML =
+    '<span class="stale-icon">⚠</span>' +
+    '<span>Last verified <strong>' + updated + '</strong> — offensive techniques evolve quickly. Verify tool syntax and CVE status before use in engagements.</span>' +
+    '<button class="stale-dismiss" aria-label="Dismiss">×</button>';
+
+  banner.querySelector('.stale-dismiss').addEventListener('click', function() {
+    banner.remove();
+  });
+
+  var meta = panel.querySelector('.page-meta');
+  if (meta && meta.parentNode) {
+    meta.parentNode.insertBefore(banner, meta.nextSibling);
+  } else {
+    panel.insertBefore(banner, panel.firstChild);
+  }
+}
+
+/* ─────────────────────────────────────────────────────
+   NOTES I/O — export all notes as markdown, import from file
+   ───────────────────────────────────────────────────── */
+
+function initNotesIO() {
+  var exportBtn  = document.getElementById('notes-export-btn');
+  var importInput = document.getElementById('notes-import-input');
+  if (!exportBtn && !importInput) return;
+
+  if (exportBtn) {
+    exportBtn.addEventListener('click', function() {
+      var lines = [];
+      var keys = [];
+
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('rta-notes-') === 0) keys.push(k);
+      }
+
+      keys.sort();
+
+      keys.forEach(function(k) {
+        var content = (localStorage.getItem(k) || '').trim();
+        if (!content) return;
+        var slug = k.replace('rta-notes-', '');
+        lines.push('# ' + slug + '\n\n' + content + '\n');
+      });
+
+      if (!lines.length) {
+        alert('No notes to export.');
+        return;
+      }
+
+      var blob = new Blob([lines.join('\n---\n\n')], { type: 'text/markdown' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'rta-notes-' + new Date().toISOString().slice(0, 10) + '.md';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  if (importInput) {
+    importInput.addEventListener('change', function() {
+      var file = importInput.files && importInput.files[0];
+      if (!file) return;
+
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var text = (e.target.result || '');
+        var sections = text.split(/\n---\n\n/);
+        var count = 0;
+
+        sections.forEach(function(section) {
+          var match = section.match(/^# ([^\n]+)\n\n([\s\S]*)/);
+          if (!match) return;
+          var slug = match[1].trim();
+          var content = match[2].trim();
+          if (!slug || !content) return;
+          localStorage.setItem('rta-notes-' + slug, content);
+          count++;
+        });
+
+        if (count > 0) {
+          alert('Imported ' + count + ' note page' + (count !== 1 ? 's' : '') + '. Reload the page to see this page\'s notes.');
+        } else {
+          alert('No valid notes found in the file.');
+        }
+        importInput.value = '';
+      };
+      reader.readAsText(file);
+    });
+  }
+}

@@ -646,3 +646,91 @@ sqlmap -u "URL" --dbms=mysql --technique=BT --batch --no-cast
 - PayloadsAllTheThings — `github.com/swisskyrepo/PayloadsAllTheThings`
 - HackTricks SQLi — `book.hacktricks.xyz/pentesting-web/sql-injection`
 - SecLists SQLi payloads — [Web Fuzzing Payloads](/web/fuzzing-payloads/)
+
+## Detection
+
+### Event Log Sources
+- **Web Server Access Logs (IIS / Apache / Nginx)** — The primary detection source for SQLi. Log the full query string including URL-encoded characters. Look for: single quotes (`%27`, `'`), comment sequences (`--`, `/*`, `#`), SQL keywords (`UNION`, `SELECT`, `FROM`, `WHERE`, `SLEEP`, `WAITFOR`, `EXEC`) in parameter values, and response size anomalies (UNION-based injection returns different content lengths).
+- **Database Audit Logging** — Enable query auditing on the database engine: SQL Server Extended Events / SQL Server Audit (Event ID 33205); MySQL General Query Log or Audit Plugin; PostgreSQL `pgaudit` extension. Logs show the exact malicious query executed even if the application layer is bypassed.
+- **SQL Server Event IDs 1222 and 1205** (Deadlock and Lock Timeout) — Time-based blind SQLi with `WAITFOR DELAY` can cause lock contention on shared resources; repeated deadlock events from the web application service account at unusual rates indicate time-based blind injection attempts.
+- **Application Error Logs** — Error-based SQLi deliberately triggers database errors; a high rate of SQL syntax errors or unhandled exceptions from a single source IP indicates active injection probing.
+
+### Sysmon Events
+- **Event ID 3 (Network Connection)** — OOB SQLi via DNS (`xp_dirtree` on MSSQL, `LOAD_FILE` on MySQL) causes the database server process to make outbound DNS/HTTP connections; `sqlservr.exe`, `mysqld.exe`, or `postgres.exe` making outbound connections to external IPs or DNS resolving external domains is a strong OOB exfiltration indicator.
+- **Event ID 1 (Process Creation)** — `xp_cmdshell` abuse: `sqlservr.exe` spawning `cmd.exe`, `powershell.exe`, or any shell process is a critical signal. PostgreSQL `COPY TO PROGRAM` causes `postgres.exe` to spawn child processes.
+
+### Key Indicators
+- **SQL keywords in HTTP parameters** — `UNION`, `SELECT`, `FROM`, `SLEEP`, `WAITFOR`, `EXEC`, `xp_cmdshell`, `BENCHMARK`, `pg_sleep` appearing in query string or POST body parameters outside of legitimate search contexts
+- **SQLMap User-Agent string** — default SQLMap sends `sqlmap/1.x.x#stable (https://sqlmap.org)` as User-Agent; easily detected in access logs unless `--random-agent` is used
+- **Anomalous response time patterns** — time-based blind injection: requests to a specific endpoint taking exactly 5 seconds (or multiples) repeatedly from the same source IP; statistical analysis of response times reveals `SLEEP()` / `WAITFOR DELAY` patterns
+- **Error message leakage** — database error messages in HTTP responses (500 errors containing "ORA-", "MySQL", "Unclosed quotation mark", "syntax error") indicate injectable parameters and are detectable via WAF rules or log analysis
+- **Boolean-based injection pattern** — rapid requests to the same endpoint with incrementing parameter values and alternating response sizes; automated blind injection tools send hundreds of requests per minute
+- **OOB DNS exfiltration** — DNS queries for subdomains following the pattern `<extracted_data>.<attacker_domain>` originating from database server processes or the database server's IP
+
+### Sigma Rule Concept
+```yaml
+# Sigma concept — SQL injection keywords in web access logs
+title: SQL Injection Attempt — SQL Keywords in HTTP Request
+status: experimental
+logsource:
+    product: webserver
+    # Requires web access log ingestion (IIS/Apache/Nginx)
+detection:
+    selection:
+        cs-uri-query|contains:
+            - 'UNION+SELECT'
+            - 'UNION%20SELECT'
+            - 'union+select'
+            - 'WAITFOR+DELAY'
+            - 'SLEEP('
+            - 'xp_cmdshell'
+            - "'+OR+'1'='1"
+            - "'--"
+            - '%27--'
+            - 'EXTRACTVALUE('
+            - 'UPDATEXML('
+    condition: selection
+falsepositives:
+    - Security researchers or pen testers
+    - SQLMap during authorized scans
+level: high
+
+# Time-based blind injection detection (requires SIEM aggregation):
+title: Potential Time-Based Blind SQL Injection — Consistent Response Delays
+# Alert: same source IP sending >10 requests to same endpoint within 5 minutes
+#        where response_time > 4500ms for >50% of requests
+# Requires: proxy/WAF logs with response time fields
+level: high
+
+# Database server spawning shell (MSSQL xp_cmdshell):
+title: Database Process Spawning Command Shell
+logsource:
+    product: windows
+    category: process_creation
+detection:
+    selection:
+        ParentImage|endswith:
+            - '\sqlservr.exe'
+            - '\mysqld.exe'
+            - '\postgres.exe'
+        Image|endswith:
+            - '\cmd.exe'
+            - '\powershell.exe'
+    condition: selection
+level: critical
+```
+
+### EDR Behavior Alerts
+- **WAF (Web Application Firewall)**: Most WAFs (ModSecurity, AWS WAF, Cloudflare WAF, Imperva) have SQLi rule sets (OWASP CRS) that block or alert on Union/Select patterns, comment sequences, and known SQLi polyglots. WAF block rate spikes from a single IP indicate active injection scanning.
+- **CrowdStrike Falcon**: Detects `xp_cmdshell` abuse via `sqlservr.exe` spawning child processes; also detects SQLMap's characteristic request patterns via network sensor
+- **SentinelOne**: "SQL Injection Attempt" via network inspection; database process spawning shells triggers "OS Command Injection" behavioral alert
+- **Microsoft Defender for Endpoint**: "Suspicious database activity" when `sqlservr.exe` or other database processes perform unusual operations including spawning shells or making outbound network connections
+
+### Defensive Countermeasures
+- **Parameterized queries / Prepared Statements** — the only reliable prevention; parameterized queries separate code from data at the protocol level, making injection structurally impossible regardless of input content
+- **Web Application Firewall (WAF)** — deploy ModSecurity with OWASP CRS, or a cloud WAF; WAFs detect and block common SQLi patterns including UNION-based, time-based, and error-based injection; not foolproof (WAF bypass techniques exist) but raises the cost significantly
+- **Least privilege database accounts** — web application database accounts should have only SELECT/INSERT/UPDATE/DELETE on specific tables; no FILE privileges (prevents `LOAD_FILE`/`INTO OUTFILE`), no EXECUTE (prevents stored procedure abuse), no `xp_cmdshell`
+- **Disable dangerous database features** — disable `xp_cmdshell` on MSSQL (enabled: `sp_configure 'xp_cmdshell', 0`), disable `FILE` privilege grants in MySQL, restrict `COPY TO PROGRAM` in PostgreSQL to superusers only
+- **Database audit logging** — enable query logging on the database engine; alerts on unusual query patterns (UNION SELECT, information_schema access, bulk data extraction) from the application service account
+- **Response time monitoring** — instrument application endpoints with response time percentile alerts; p99 response times suddenly spiking to 5000ms+ for a specific endpoint indicate time-based blind injection
+- **Suppress detailed error messages** — configure the application to return generic error pages (HTTP 500) without database error details; prevents error-based extraction and reduces information leakage

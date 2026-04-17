@@ -316,3 +316,64 @@ C:\Windows\Tasks\CLMBypass.exe "[Ref].Assembly.GetType('System.Management.Automa
 powershell.exe -version 2
 # Only works if PowerShell 2.0 optional feature is installed (deprecated since 2017)
 ```
+
+## Detection
+
+### Event Log Sources
+- **Event ID 4104** (PowerShell ScriptBlock Logging) — Logs the full content of every script block executed. AMSI bypass attempts using `[Ref].Assembly`, `AmsiUtils`, `amsiInitFailed`, or `AmsiScanBuffer` strings appear here even if obfuscated, because PowerShell logs the de-obfuscated content after variable expansion.
+- **Event ID 400/800** (Windows PowerShell log) — Engine lifecycle events; note when PowerShell 2.0 (`EngineVersion: 2.0`) is invoked — PS2 lacks AMSI and script block logging.
+- **Event ID 4688** (Process Creation with command line) — Captures `powershell.exe -version 2` invocations and encoded command lines (`-enc`, `-e` flags).
+
+### Sysmon Events
+- **Event ID 10 (ProcessAccess)** — A process opening a handle to `amsi.dll` memory with `PROCESS_VM_WRITE` access is a strong indicator of in-memory patching. Monitor for non-system processes accessing amsi.dll loaded in their own address space via reflection.
+- **Event ID 8 (CreateRemoteThread)** — Unusual thread creation within PowerShell processes can indicate injection-based AMSI bypass delivery.
+- **Event ID 7 (ImageLoad)** — Unexpected or duplicated loading of `amsi.dll` from non-standard paths is suspicious.
+
+### Key Indicators
+- `[Ref].Assembly.GetType` combined with `AmsiUtils`, `amsiInitFailed`, or `amsiContext` in script block logs
+- `VirtualProtect` calls on `amsi.dll` address range from PowerShell process (indicates memory patching)
+- `powershell.exe -version 2` — downgrade attack; any PS2 execution should be treated as suspicious in modern environments
+- Encoded commands (`-enc`, `-EncodedCommand`) containing base64 that decodes to reflection-based assembly manipulation
+- `InvisiShell` registry key: `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\powershell.exe` with a `Debugger` value
+- Script blocks containing string patterns: `Amsi`, `Scan`, `Buffer`, `InitFailed`, `0xB8`, `0x80070057`, `0x80004005`
+
+### Sigma Rule Concept
+```yaml
+# Sigma concept — AMSI bypass via amsiInitFailed reflection
+title: PowerShell AMSI Bypass via Reflection
+status: experimental
+logsource:
+    product: windows
+    service: powershell
+    definition: Script Block Logging must be enabled (Event ID 4104)
+detection:
+    selection:
+        EventID: 4104
+        ScriptBlockText|contains:
+            - 'AmsiUtils'
+            - 'amsiInitFailed'
+            - 'AmsiScanBuffer'
+            - 'amsiContext'
+            - '[Ref].Assembly'
+    filter_legitimate:
+        ScriptBlockText|contains: 'Test-AmsiBypass'  # example exclusion for known-good tooling
+    condition: selection and not filter_legitimate
+falsepositives:
+    - Security testing tools
+    - AV product self-tests
+level: high
+```
+
+### EDR Behavior Alerts
+- **CrowdStrike Falcon**: "Suspicious PowerShell Script Block" / "AMSI Bypass Attempt" — triggers on known reflection patterns in script block content
+- **SentinelOne**: "AMSI Bypass" behavioral indicator — detects VirtualProtect calls on amsi.dll from within the same process
+- **Microsoft Defender for Endpoint**: "Suspicious PowerShell cmdlets" / "Potential AMSI bypass" — flags encoded commands and reflection-based assembly type lookups
+- All major EDRs alert on PowerShell 2.0 downgrade as a "Legacy PowerShell Version" or "AMSI Evasion" alert category
+
+### Defensive Countermeasures
+- **Enable Script Block Logging** (GPO: Computer Configuration → Administrative Templates → Windows Components → Windows PowerShell → Turn on Script Block Logging) — logs deobfuscated script content even after bypass
+- **Disable PowerShell 2.0** (`Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root`) — removes the most reliable AMSI/logging bypass
+- **Enable Constrained Language Mode** via AppLocker or WDAC — restricts `[Ref].Assembly` and `Add-Type` usage that underlies most reflection-based bypasses
+- **Protected Event Logging** — encrypts PowerShell logs using a certificate so tampered-with logs are detectable
+- **WDAC (Windows Defender Application Control)** — prevents unsigned scripts and arbitrary .NET assembly loading
+- **Credential Guard / VBS** — does not directly prevent AMSI bypass but hardens the overall attack surface

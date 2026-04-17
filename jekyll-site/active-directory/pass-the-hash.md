@@ -302,6 +302,80 @@ Rubeus.exe asktgt /user:administrator /aes256:AES256_KEY /domain:corp.local /ptt
 - **OPSEC:** For wmiexec vs psexec — wmiexec doesn't drop a service binary, making it less detectable than psexec's service-based approach.
 - **OPSEC:** Use AES keys for OPtH instead of RC4/NTLM hashes where possible — AES Kerberos requests are less suspicious and bypass some detections tuned specifically for RC4 downgrade.
 
+## Detection
+
+### Event Log Sources
+- **Event ID 4624 Logon Type 3** (Network Logon) — Every successful PtH generates a Type 3 logon on the target host. The `AuthenticationPackageName` field will be `NTLM` and the `LmPackageName` field will be `NTLM V2`. The `WorkstationName` and `IpAddress` fields show the attacker's source.
+- **Event ID 4776** (NTLM Authentication) — Logged on the DC when NTLM auth is validated against the domain. Shows the source workstation and account name; anomalous source IPs for privileged accounts are high-signal.
+- **Event ID 4625** (Failed Logon) — Failed PtH attempts with wrong hashes appear as Type 3 NTLM failures. Multiple failures from one source = spray or hash-testing activity.
+- **Event ID 4648** (Logon with Explicit Credentials) — Generated when `sekurlsa::pth` or `Rubeus asktgt` is used to create a new logon session. The `SubjectUserName` (current user) differs from `TargetUserName` (injected user).
+- **Event ID 4624 Logon Type 9** (NewCredentials) — Generated specifically by `sekurlsa::pth`; the user's existing session is preserved but new credentials are injected. A Type 9 logon from a non-interactive session is suspicious.
+
+### Sysmon Events
+- **Event ID 1 (Process Creation)** — `mimikatz.exe`, `Rubeus.exe`, `psexec.exe`, `wmiexec.py` (via child processes) with command lines containing `sekurlsa::pth`, `asktgt`, or `-hashes` flags.
+- **Event ID 3 (Network Connection)** — Outbound connections from workstations to SMB (445), WinRM (5985), or WMI (135) on other hosts, especially from processes like `python.exe`, `wmiexec.py`, or unsigned executables.
+- **Event ID 10 (ProcessAccess)** — LSASS access required to dump hashes that enable PtH (precursor activity).
+
+### Key Indicators
+- **Impossible travel / logon without interactive precursor** — a workstation authenticates to a second host via Type 3 NTLM but there is no preceding Type 2 (Interactive) or Type 10 (RDP) logon on the source — the user was never physically logged in
+- **NTLM auth for accounts in the Protected Users group** — these accounts cannot use NTLM; any 4776 event for a Protected Users member is an anomaly (attacker has the hash but cannot use PtH — or the account was recently removed from the group)
+- **Same NTLM hash used from multiple source IPs in a short window** — indicates hash reuse/spraying across systems
+- **wmiexec / psexec patterns** — `wmiprvse.exe` spawning `cmd.exe` or PowerShell children is a WMI lateral movement indicator; `psexec` creates a service (Event 7045) with a random 6-character name
+- **Type 3 logon from Linux-style hostnames** — Impacket tools send the attacker's Linux hostname as `WorkstationName`; lowercase hostnames or hostnames like `kali`, `parrot`, `attacker` in 4624 events are red flags
+
+### Sigma Rule Concept
+```yaml
+# Sigma concept — Impossible logon: network auth without prior interactive logon
+title: Pass-the-Hash Indicator — Network Logon Without Interactive Precursor
+status: experimental
+logsource:
+    product: windows
+    service: security
+detection:
+    network_logon:
+        EventID: 4624
+        LogonType: 3
+        AuthenticationPackageName: 'NTLM'
+    # Correlate: no EventID 4624 Type 2/10 from same SubjectUserSid on source host in last 8h
+    # (Requires SIEM correlation, not pure Sigma)
+    filter_computer_accounts:
+        TargetUserName|endswith: '$'
+    condition: network_logon and not filter_computer_accounts
+falsepositives:
+    - Scheduled tasks using network credentials
+    - Service accounts performing network operations
+    - Legacy applications with hardcoded credentials
+level: medium
+
+# Separate high-confidence rule:
+title: NTLM Auth for High-Privilege Account from Unexpected Workstation
+detection:
+    selection:
+        EventID: 4776
+        TargetUserName|contains:
+            - 'administrator'
+            - 'admin'
+            - 'svc'
+    filter_known_sources:
+        Workstation: 'ADMIN-WS01'   # replace with legitimate admin workstations
+    condition: selection and not filter_known_sources
+level: high
+```
+
+### EDR Behavior Alerts
+- **Microsoft Defender for Identity (MDI)**: Native "Pass-the-Hash" alert — MDI correlates NTLM lateral movement patterns against the user's normal behavior baseline; alerts when a hash is used from a host the account has never logged into interactively
+- **CrowdStrike Falcon**: "Credential-Based Lateral Movement" / "Pass-the-Hash" — detects LSASS dump followed by NTLM authentication from the same endpoint within a time window
+- **SentinelOne**: "Lateral Movement — Pass-the-Hash" — behavioral alert correlating hash extraction (LSASS access) with subsequent remote NTLM authentication
+- **Microsoft Defender for Endpoint**: "Suspicious NTLM authentication" alert when high-privilege accounts authenticate via NTLM from unexpected sources
+
+### Defensive Countermeasures
+- **Protected Users security group** — members cannot use NTLM; PtH is completely blocked for those accounts; add all privileged accounts
+- **Credential Guard (VBS)** — isolates NTLM hashes and Kerberos TGTs in a hypervisor-protected enclave; LSASS dumps return empty even with SeDebugPrivilege
+- **Disable NTLM** (or restrict to NTLMv2 only) — Group Policy: Network security: LAN Manager authentication level → "Send NTLMv2 response only, refuse LM & NTLM"
+- **Local Administrator Password Solution (LAPS)** — unique, rotating local admin passwords per workstation prevent lateral movement using a single local admin hash
+- **Network segmentation / firewall** — block SMB (445), WMI (135), and WinRM (5985) between workstations; admin traffic should only flow from jump hosts
+- **Tiered administration model** — Tier 0 (DC) credentials never used on Tier 1 (servers) or Tier 2 (workstations); prevents hash capture on lower-tier systems from enabling higher-tier access
+
 ## Key Resources
 
 - `https://github.com/GhostPack/Rubeus` — Rubeus Kerberos toolkit

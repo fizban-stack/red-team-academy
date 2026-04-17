@@ -1340,6 +1340,90 @@ body.notes-hidden .notes-panel { display: none; }
 }
 
 /* ══════════════════════════════════════════════════════
+   STALENESS WARNING BANNER
+   ══════════════════════════════════════════════════════ */
+
+.stale-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(255, 180, 0, 0.08);
+  border: 1px solid rgba(255, 180, 0, 0.3);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 12px 0 18px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #c8a84a;
+  line-height: 1.55;
+}
+
+.stale-warning .stale-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+.stale-warning strong {
+  color: #d4a847;
+}
+
+.stale-warning .stale-dismiss {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #c8a84a;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.7;
+}
+
+.stale-warning .stale-dismiss:hover {
+  opacity: 1;
+}
+
+/* ══════════════════════════════════════════════════════
+   NOTES PANEL — export / import buttons
+   ══════════════════════════════════════════════════════ */
+
+.notes-action-btn {
+  background: var(--bg-2);
+  border: 1px solid var(--border-0);
+  border-radius: 3px;
+  color: var(--text-3);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.notes-action-btn:hover {
+  color: var(--text-1);
+  border-color: var(--border-1);
+}
+
+/* ══════════════════════════════════════════════════════
+   OPS MODE — maximize content, strip all panels
+   ══════════════════════════════════════════════════════ */
+
+body.ops-mode #sidebar   { display: none !important; }
+body.ops-mode .notes-panel { display: none !important; }
+body.ops-mode .content-panel { max-width: 960px; margin: 0 auto; padding: 24px 32px 48px; }
+
+#toggle-ops.panel-on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ══════════════════════════════════════════════════════
    RESPONSIVE
    ══════════════════════════════════════════════════════ */
 
@@ -1352,33 +1436,81 @@ body.notes-hidden .notes-panel { display: none; }
 
   #sidebar { display: none; }
 
+  /* On mobile, notes are hidden by default (notes-hidden class applied at startup) */
   .training-layout {
     flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - var(--navbar-height));
+    overflow: visible;
   }
 
-  .notes-panel,
   .content-panel {
     flex: none;
     width: 100%;
     min-width: 100%;
     max-width: 100%;
-    order: unset;
+    order: 1;
+    overflow-y: visible;
+    padding: 20px 18px 40px;
   }
 
   .notes-panel {
-    height: 260px;
+    flex: none;
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    order: 2;
+    height: 280px;
     border-left: none;
     border-top: 1px solid var(--border-1);
   }
 
-  .home-content { padding: 24px 20px 40px; }
+  /* Mobile notes toggle — show a "Notes" bottom bar when notes are hidden */
+  body.notes-hidden .notes-panel { display: none; }
 
-  .content-panel { padding: 24px 20px 40px; }
+  .home-content { padding: 20px 16px 40px; }
+
+  /* Smaller code blocks on mobile */
+  .content-panel pre {
+    font-size: 11.5px;
+    padding: 12px 14px;
+  }
+
+  /* TOC hidden on mobile */
+  .toc-panel { display: none; }
+
+  /* Heading tools — hide copy/link on mobile to reduce clutter */
+  .heading-tools { display: none; }
+
+  /* Stale warning */
+  .stale-warning { font-size: 11px; }
 }
 
 @media (max-width: 600px) {
-  .home-content .hero h1 { font-size: 28px; }
+  .home-content .hero h1 { font-size: 26px; }
   .module-grid { grid-template-columns: 1fr; }
+
+  /* Navbar — hide notes toggle since panel stacks anyway */
+  #toggle-notes { display: none; }
+
+  /* Tables — horizontal scroll */
+  .content-panel table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Lesson nav — stack vertically */
+  .lesson-nav {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .lesson-nav .prev,
+  .lesson-nav .next {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 /* ══════════════════════════════════════════════════════

@@ -117,6 +117,8 @@
       title: Abusing Azure Services
     - url: /active-directory/azure-defense-evasion/
       title: Azure Defense Evasion
+    - url: /active-directory/m365-attacks/
+      title: Microsoft 365 Attacks
 
     - url: /active-directory/shadow-credentials/
       title: Shadow Credentials
@@ -300,6 +302,8 @@
       title: Supply Chain & CI/CD Attacks
     - url: /exploitation/macos-initial-access/
       title: macOS Initial Access
+    - url: /exploitation/thick-client/
+      title: Thick Client Application Testing
 
 - num: "07"
   title: Post-Exploitation
@@ -324,6 +328,32 @@
       title: macOS Red Teaming
     - url: /post-exploitation/saas-workspace/
       title: SaaS & Workspace Hijacking
+    - url: /post-exploitation/token-impersonation/
+      title: Token Impersonation
+    - url: /post-exploitation/dpapi-credentials/
+      title: DPAPI Credential Extraction
+    - url: /post-exploitation/credential-manager/
+      title: Windows Credential Manager Attacks
+    - url: /post-exploitation/wmi-lateral/
+      title: WMI Lateral Movement
+    - url: /post-exploitation/dcom-lateral/
+      title: DCOM Lateral Movement
+    - url: /post-exploitation/winrm-lateral/
+      title: WinRM Lateral Movement
+    - url: /post-exploitation/rdp-hijacking/
+      title: RDP Session Hijacking
+    - url: /post-exploitation/dns-exfil/
+      title: DNS Data Exfiltration
+    - url: /post-exploitation/icmp-exfil/
+      title: ICMP Data Exfiltration
+    - url: /post-exploitation/cloud-exfil/
+      title: Cloud Service Exfiltration
+    - url: /post-exploitation/anti-forensics/
+      title: Anti-Forensics & Evidence Cleanup
+    - url: /post-exploitation/linux-post-exploitation/
+      title: Linux Post-Exploitation
+    - url: /post-exploitation/container-escape-post/
+      title: Container Escape (Post-Exploitation)
 
 - num: "08"
   title: C2 Frameworks
@@ -562,6 +592,12 @@
       title: Flipper Zero & Wi-Fi Dev Board
     - url: /wireless/esp32-rpi-implants/
       title: ESP32 & Raspberry Pi Implants
+    - url: /wireless/sub-ghz-attacks/
+      title: Sub-GHz RF Attacks
+    - url: /wireless/automotive-can/
+      title: Automotive CAN Bus Security
+    - url: /wireless/cellular-attacks/
+      title: Cellular & GSM Security
 
 - num: "11"
   title: IoT Hacking
@@ -720,6 +756,14 @@
       title: Phishing Campaign Methodology
     - url: /reporting/physical-pentest/
       title: Physical Penetration Testing
+    - url: /reporting/templates/red-team-report-template/
+      title: Report Template (Download)
+    - url: /reporting/templates/sow-template/
+      title: Statement of Work Template
+    - url: /reporting/templates/roe-template/
+      title: Rules of Engagement Template
+    - url: /reporting/templates/findings-severity-matrix/
+      title: Findings Severity Matrix
 
 - num: "16"
   title: Social Engineering
@@ -862,3 +906,53 @@
       title: "Ruby: Metasploit Module Dev"
     - url: /programming/ruby-network-tools/
       title: "Ruby: Network Tools"
+
+- num: "22"
+  title: Exploit Development
+  pages:
+    - url: /exploit-dev/overview/
+      title: Exploit Dev Overview
+    - url: /exploit-dev/stack-overflow/
+      title: Stack Buffer Overflow
+    - url: /exploit-dev/seh-exploitation/
+      title: SEH Exploitation (Windows)
+    - url: /exploit-dev/heap-exploitation/
+      title: Heap Exploitation (glibc)
+    - url: /exploit-dev/format-string/
+      title: Format String Vulnerabilities
+    - url: /exploit-dev/use-after-free/
+      title: Use-After-Free Exploitation
+    - url: /exploit-dev/ret2libc/
+      title: ret2libc & ROP Chains
+    - url: /exploit-dev/kernel-exploitation-windows/
+      title: Windows Kernel Exploitation
+
+- num: "23"
+  title: Purple Team
+  pages:
+    - url: /purple-team/overview/
+      title: Purple Team Overview
+    - url: /purple-team/detection-lab-setup/
+      title: Detection Lab Setup
+    - url: /purple-team/siem-queries/
+      title: SIEM Query Writing
+    - url: /purple-team/sigma-rules/
+      title: Sigma Rule Development
+    - url: /purple-team/attack-coverage-mapping/
+      title: ATT&CK Coverage Mapping
+    - url: /purple-team/tabletop-exercises/
+      title: Tabletop Exercises
+    - url: /purple-team/threat-hunting/
+      title: Threat Hunting Playbooks
+
+- num: "24"
+  title: Scenarios
+  pages:
+    - url: /scenarios/overview/
+      title: Scenario Overview
+    - url: /scenarios/apt29-financial/
+      title: APT29 vs Financial Services
+    - url: /scenarios/supply-chain-attack/
+      title: Software Supply Chain Attack
+    - url: /scenarios/insider-threat/
+      title: Malicious Insider Simulation

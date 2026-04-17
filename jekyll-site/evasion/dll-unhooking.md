@@ -300,3 +300,63 @@ int main() {
 - ired.team — `www.ired.team/offensive-security/defense-evasion/how-to-unhook-a-dll`
 - MDSec — DLL unhooking in process injection context
 - winsyscall/peloader — manual PE mapping reference
+
+## Detection
+
+### Event Log Sources
+- **Event ID 4688** (Process Creation) — Captures processes that open handles to ntdll.dll from disk (e.g., using `CreateFile` on `C:\Windows\System32\ntdll.dll`) to obtain a clean copy. Processes reading ntdll from disk at runtime (outside of normal DLL load paths) are suspicious.
+- **Event ID 4656** (Handle to Object) — With object access auditing enabled, records handle requests against file objects including ntdll.dll on disk with `GENERIC_READ` access from non-loader contexts.
+
+### Sysmon Events
+- **Event ID 10 (ProcessAccess)** — Processes accessing memory regions of ntdll.dll loaded in their own address space with `PROCESS_VM_WRITE` access flags indicate patching or restoration. Also fires when a process opens another process to compare/copy .text sections.
+- **Event ID 7 (ImageLoad)** — Detects when a second copy of ntdll.dll is loaded into a process from disk (double-loading technique). A process with two `ntdll.dll` entries in its module list (different base addresses or load paths) is a strong indicator.
+- **Event ID 23 (FileDelete)** — A temporary file copy of ntdll.dll created and immediately deleted during unhooking is an artifact worth watching in temp directories.
+
+### Key Indicators
+- A process mapping `ntdll.dll` via `CreateFileMapping` / `MapViewOfFile` shortly after process start (especially in offensive tooling timeframes)
+- `VirtualProtect` calls changing the protection of the `.text` section of `ntdll.dll` in memory (RX → RWX → RX) from a non-system process
+- A process module list containing two instances of `ntdll.dll` at different base addresses (double-load technique)
+- `NtOpenSection` calls targeting `\KnownDlls\ntdll.dll` from unexpected processes
+- Memory comparison artifacts: a process reading ntdll from disk byte-for-byte at the same time ntdll is mapped in memory (disk I/O on `ntdll.dll` from userland process without DLL load context)
+- Absence of expected EDR hook bytes (`E9` JMP) at the start of Nt* functions in a live process's memory when observed via memory scanning
+
+### Sigma Rule Concept
+```yaml
+# Sigma concept — suspicious ntdll file read indicating unhooking attempt
+title: Suspicious ntdll.dll Read Access Indicating DLL Unhooking
+status: experimental
+logsource:
+    product: windows
+    category: process_access  # Sysmon Event ID 10
+detection:
+    selection_file_read:
+        EventID: 7  # ImageLoad
+        ImageLoaded|endswith: '\ntdll.dll'
+    filter_normal_load:
+        # Exclude initial process load — only flag secondary loads
+        # (heuristic: if process already has ntdll loaded and loads it again)
+        Signed: 'true'
+    # Separate rule for VirtualProtect on ntdll .text:
+    selection_vp:
+        EventID: 10
+        TargetImage|endswith: '\ntdll.dll'
+        GrantedAccess|contains: '0x0028'  # PROCESS_VM_WRITE | PROCESS_VM_OPERATION
+    condition: selection_vp
+falsepositives:
+    - Legitimate security tooling performing memory analysis
+    - Crash dump collectors
+level: high
+```
+
+### EDR Behavior Alerts
+- **CrowdStrike Falcon**: "Suspicious Memory Access to ntdll" / "EDR Hook Tampering" — detects processes that restore hooked functions by comparing in-memory bytes to expected hook bytes
+- **SentinelOne**: "Unhooking Attempt" behavioral indicator — fires when VirtualProtect is called on a region containing ntdll export stubs
+- **Microsoft Defender for Endpoint**: "Defense Evasion via DLL Unhooking" — memory integrity scanning detects when previously-hooked function prologues are overwritten
+- General category: "Memory Tampering" / "Defensive Tool Bypass" across most major EDR platforms
+
+### Defensive Countermeasures
+- **Kernel-mode EDR components** — move hooks to kernel callbacks (PsSetCreateProcessNotifyRoutine, ObRegisterCallbacks) which cannot be unhooked from userland; userland unhooking is ineffective against kernel telemetry
+- **ETW (Event Tracing for Windows) providers** — `Microsoft-Windows-Threat-Intelligence` (EtwTi) provider logs syscall activity directly from the kernel; survives userland unhooking entirely
+- **Hypervisor-protected code integrity (HVCI)** — prevents modification of kernel and certain user-mode code pages; makes VirtualProtect-based unhooking of system DLLs fail
+- **Memory integrity scanning** — periodic EDR scans comparing in-memory ntdll .text section against known-good on-disk bytes detect successful unhooks after the fact
+- **Reduce hook surface** — deploy EDRs with kernel-mode telemetry (ETW-TI, minifilter, ObRegisterCallbacks) rather than relying solely on userland hooks that are trivially bypassed

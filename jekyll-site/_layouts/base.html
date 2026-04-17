@@ -17,6 +17,7 @@
 (function(){
   if(localStorage.getItem('sidebar-hidden')==='true') document.body.classList.add('sidebar-hidden');
   if(localStorage.getItem('notes-hidden')!=='false') document.body.classList.add('notes-hidden');
+  if(localStorage.getItem('ops-mode')==='true') document.body.classList.add('ops-mode');
 })();
 </script>
 
@@ -32,6 +33,7 @@
   </div>
   <button id="toggle-sidebar" class="nav-toggle" title="Toggle navigation panel">[nav]</button>
   <button id="toggle-notes" class="nav-toggle" title="Toggle notes panel">[notes]</button>
+  <button id="toggle-ops" class="nav-toggle" title="Ops mode — maximize content, hide panels">[ops]</button>
   <nav>
     <a href="/">home</a>
     <a href="/about/">about</a>
@@ -94,10 +96,12 @@
   // Panel toggle persistence
   var sidebarBtn = document.getElementById('toggle-sidebar');
   var notesBtn   = document.getElementById('toggle-notes');
+  var opsBtn     = document.getElementById('toggle-ops');
 
   function syncButtons() {
     if (sidebarBtn) sidebarBtn.classList.toggle('panel-off', document.body.classList.contains('sidebar-hidden'));
     if (notesBtn)   notesBtn.classList.toggle('panel-off',   document.body.classList.contains('notes-hidden'));
+    if (opsBtn)     opsBtn.classList.toggle('panel-on',      document.body.classList.contains('ops-mode'));
   }
 
   syncButtons();
@@ -118,7 +122,18 @@
     });
   }
 
-
+  if (opsBtn) {
+    opsBtn.addEventListener('click', function() {
+      var on = document.body.classList.toggle('ops-mode');
+      localStorage.setItem('ops-mode', on);
+      // ops mode forces sidebar and notes hidden
+      if (on) {
+        document.body.classList.add('sidebar-hidden');
+        document.body.classList.add('notes-hidden');
+      }
+      syncButtons();
+    });
+  }
 })();
 </script>
 

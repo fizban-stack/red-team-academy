@@ -7,11 +7,13 @@ layout: base
     <div class="notes-header">
       <span class="notes-title">// my notes</span>
       <span class="notes-saved" id="notes-saved">saved</span>
+      <button id="notes-export-btn" class="notes-action-btn" title="Export all notes as markdown">↓</button>
+      <label id="notes-import-label" class="notes-action-btn" title="Import notes from file">↑<input type="file" id="notes-import-input" accept=".md,.txt" style="display:none"></label>
     </div>
     <textarea id="notes-textarea" placeholder="Take notes here...&#10;&#10;Notes are saved locally in your browser."></textarea>
   </div>
 
-  <div class="content-panel">
+  <div class="content-panel" data-updated="{{ page.updated | escape }}">
     <div class="page-meta">
       <span>{{ page.module }}</span>
       {% for tag in page.tags %}<span class="tag">{{ tag }}</span>{% endfor %}
@@ -66,5 +68,7 @@ layout: base
 // initNotes is defined in main.js, loaded by base.html
 document.addEventListener('DOMContentLoaded', function() {
   initNotes('{{ page.page_key }}');
+  initStalenessWarning();
+  initNotesIO();
 });
 </script>

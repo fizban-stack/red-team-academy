@@ -582,6 +582,8 @@
       title: Router Exploitation
     - url: /iot/industrial/
       title: Industrial Protocols
+    - url: /iot/raspberry-pi-c2-lab/
+      title: Raspberry Pi C2 & Proxy Lab
 
 - num: "12"
   title: AI Red Team Agents

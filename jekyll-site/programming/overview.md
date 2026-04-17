@@ -173,6 +173,40 @@ cargo build --release --target x86_64-pc-windows-gnu
 
 Every import is a potential signature. Only import what you use. Prefer stdlib over third-party where the functionality is equivalent.
 
+### Length-Prefix All Messages
+
+Raw TCP reads don't give you message boundaries. Every C2 protocol needs framing:
+
+```python
+import struct
+
+def send_msg(sock, data: bytes):
+    sock.sendall(struct.pack('>I', len(data)) + data)
+
+def recv_msg(sock) -> bytes:
+    raw_len = recvall(sock, 4)
+    msg_len = struct.unpack('>I', raw_len)[0]
+    return recvall(sock, msg_len)
+
+def recvall(sock, n: int) -> bytes:
+    buf = b''
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise ConnectionResetError
+        buf += chunk
+    return buf
+```
+
+The same pattern in every language: send a 4-byte big-endian length, then the payload. Receiver reads exactly 4 bytes, unpacks the length, then reads exactly that many bytes.
+
+### Operational Security in Code
+
+- **Avoid hardcoded IPs/domains** — Use env vars or config files loaded at runtime
+- **Delete yourself** — Many implants remove their own binary after execution (`os.unlink(sys.argv[0])` in Python)
+- **Log to memory, not disk** — Write results to a memory buffer; exfil on disconnect rather than writing to disk
+- **Timestomp** — Match file modification times to surrounding files to avoid standing out in timeline analysis
+
 ---
 
 ## Resources

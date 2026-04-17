@@ -830,3 +830,33 @@
       title: Kubernetes Security Attacks
     - url: /cloud/container-escape/
       title: Container Escape Techniques
+
+- num: "21"
+  title: Programming
+  pages:
+    - url: /programming/overview/
+      title: Offensive Programming Overview
+    - url: /programming/python-cheatsheet/
+      title: "Python: Red Team Cheatsheet"
+    - url: /programming/python-offensive-tools/
+      title: "Python: Offensive Tools"
+    - url: /programming/go-cheatsheet/
+      title: "Go: Red Team Cheatsheet"
+    - url: /programming/go-offensive-tools/
+      title: "Go: Offensive Tools"
+    - url: /programming/powershell-cheatsheet/
+      title: "PowerShell: Red Team Cheatsheet"
+    - url: /programming/powershell-offensive-tools/
+      title: "PowerShell: Offensive Tools"
+    - url: /programming/rust-cheatsheet/
+      title: "Rust: Red Team Cheatsheet"
+    - url: /programming/rust-offensive-tools/
+      title: "Rust: Offensive Tools"
+    - url: /programming/ruby-cheatsheet/
+      title: "Ruby: Red Team Cheatsheet"
+    - url: /programming/ruby-offensive-tools/
+      title: "Ruby: Offensive Tools"
+    - url: /programming/ruby-metasploit-modules/
+      title: "Ruby: Metasploit Module Dev"
+    - url: /programming/ruby-network-tools/
+      title: "Ruby: Network Tools"

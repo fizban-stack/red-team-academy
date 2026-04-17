@@ -138,8 +138,56 @@ return AuditResult.auditResult();
 
 ### SSTI Sampler
 
-```
-" + payload + "
+Active scan check. Injects math probes for the most common template engines and flags responses
+that echo back the evaluated result (`49` = 7×7).
+
+```java
+// SSTI active scan check — injects math probes across template engine syntaxes
+// Detects: Jinja2, Twig, Mako, Smarty, FreeMarker, Velocity, ERB, Pebble
+List<String> probes = List.of(
+  "{{7*7}}",         // Jinja2 / Twig
+  "${7*7}",          // FreeMarker / Spring EL
+  "#{7*7}",          // Pebble / Thymeleaf
+  "<%= 7*7 %>",      // ERB (Ruby)
+  "${{7*7}}",        // Twig (alternate)
+  "*{7*7}",          // Spring EL (alternate)
+  "{{7*'7'}}",       // Jinja2 string multiply → 7777777
+  "{% 7*7 %}"       // Twig block syntax
+);
+
+String marker = "49";   // expected evaluated result for 7*7
+String markerAlt = "7777777";  // Jinja2 string multiply result
+
+for (String probe : probes) {
+  var req = requestResponse.request();
+  // Inject probe into every parameter value
+  var modifiedReq = req;
+  for (var param : req.parameters()) {
+    modifiedReq = modifiedReq.withUpdatedParameters(
+      HttpParameter.parameter(param.name(), probe, param.type())
+    );
+  }
+  var result = http.sendRequest(modifiedReq);
+  if (!result.hasResponse()) continue;
+  String body = result.response().bodyToString();
+  if (body.contains(marker) || body.contains(markerAlt)) {
+    return AuditResult.auditResult(
+      AuditIssue.auditIssue(
+        "Server-Side Template Injection (SSTI)",
+        "The response evaluated the expression `" + probe + "` and returned `" +
+          (body.contains(marker) ? marker : markerAlt) + "`. " +
+          "SSTI allows arbitrary code execution on the server.",
+        "Do not render user input inside template expressions. " +
+          "Use a sandboxed template context or treat user data as plain text.",
+        req.url(),
+        AuditIssueSeverity.HIGH,
+        AuditIssueConfidence.FIRM,
+        "", "", AuditIssueSeverity.HIGH, result
+      )
+    );
+  }
+}
+return AuditResult.auditResult();
 ```
 
 ### Missing CSP Header (Passive)

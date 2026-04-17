@@ -13,7 +13,7 @@ updated: "2026-04-13"
 
 # Ops Cheatsheets
 
-One-screen references for live operations: copy-ready commands, triage order, and evidence habits. Use **Search** (`Ctrl+K`) or the sidebar to jump. Toggle **[ops]** in the navbar for a denser layout and hide the notes panel when you only need the playbook.
+One-screen references for live operations: copy-ready commands, triage order, and evidence habits. Use **Search** (`Ctrl+K`) or the sidebar to jump. Toggle **[notes]** in the navbar to hide the notes panel when you only need the playbook.
 
 ## What’s in this module
 

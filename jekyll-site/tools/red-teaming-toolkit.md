@@ -557,14 +557,47 @@ docker compose up
 docker compose up
 ```
 
+## A-poc RedTeam-Tools — ATT&CK-Aligned Index
+
+The `A-poc/RedTeam-Tools` catalog is organized strictly by the 14 ATT&CK tactics. It's shorter (~115 tools) than infosecn1nja's (~300) but every entry maps cleanly to a tactic, which makes it ideal when you're building an engagement plan technique-by-technique. The table below surfaces entries that are **not already covered in the sections above** — use this as net-new additions rather than duplicates.
+
+| Tactic | Notable tools |
+|--------|--------------|
+| Reconnaissance | `reconftw` (automated subdomain + vuln chain), `subzy` (subdomain-takeover), `feroxbuster` (Rust forced-browsing), `nuclei` (YAML vuln templates), `smtp-user-enum`, `enum4linux` |
+| Resource Development | `remoteInjector` (DOCX remote-template injection), `Chimera` (PS AMSI-bypass obfuscation), `WordSteal` (NTLM via remote image), `OffensiveVBA`, `Alcatraz` (GUI x64 obfuscator) |
+| Initial Access | `evilqr`, `SquarePhish` (OAuth device code + QR phish), `EvilGoPhish` (Evilginx+GoPhish), `Bash Bunny`, `King Phisher`, `Social Engineer Toolkit`, `Hydra` |
+| Execution | `evil-winrm`, `UltimateAppLockerByPassList`, `PowerSploit` |
+| Persistence | `Empire`, `Impacket`, `SharPersist`, `ligolo-ng` |
+| Privilege Escalation | `Crassus` (DLL hijack + ACL finder), `BeRoot`, `linux-smart-enumeration`, `Get-GPPPassword`, `Sherlock`, `ImpulsiveDLLHijack` |
+| Defense Evasion | `AMSI Fail` (catalog of one-liner bypasses), `moonwalk` (Linux log/timestamp wipe), `Alcatraz`, `Mangle` |
+| Credential Access | `dploot` (Linux Python DPAPI), `SCOMDecrypt`, `MailSniper`, `eviltree` |
+| Discovery | `PCredz` (cred extraction from PCAP + live), `PingCastle`, `adidnsdump`, `scavenger` |
+| Lateral Movement | `WMIOps`, `PowerLessShell` (remote PS without powershell.exe), `LiquidSnake` (fileless lateral) |
+| Collection | `Snaffler` (AD share sensitive-data finder), `linWinPwn` (combined AD enum + vuln) |
+| C2 | `NimPlant` (Nim C2), `Hoaxshell` (PS reverse shell), `Living Off Trusted Sites` |
+| Exfiltration | `Dnscat2`, `Cloakify`, `PyExfil`, `GD-Thief` (Google Drive), `goshs` (multi-protocol server) |
+| Impact | `Conti Pentester Guide Leak`, `usbkill`, `Keytap` (acoustic keylogging) |
+
+### Pointers you will actually use
+
+- **Snaffler** — walks AD shares looking for `*.config` / `*.ps1` / password-pattern files. Faster than manual grep once you have a foothold.
+- **reconftw** — bash pipeline that combines subfinder/amass/nuclei/dalfox into a single kickoff — good for initial external recon day.
+- **AMSI Fail** — living list of one-line PowerShell AMSI bypasses. Not novel tech, but a quick lookup when you need something to drop in a stager right now.
+- **NimPlant** — Nim C2 worth evaluating for novel-runtime engagements (EDRs are less trained on Nim binaries than on C#/Go).
+- **ligolo-ng** — TUN-based tunneling without SOCKS. Already has its own page in Pivoting — see `pivoting/ligolo-ng.md`.
+- **dploot** — Python implementation of SharpDPAPI for engagements where shipping a Windows binary is noisier than running Python from Linux.
+
 ## Resources
 
-- Red Teaming Toolkit — `github.com/infosecn1nja/Red-Teaming-Toolkit`
+- infosecn1nja Red-Teaming-Toolkit — `github.com/infosecn1nja/Red-Teaming-Toolkit`
+- A-poc RedTeam-Tools — `github.com/A-poc/RedTeam-Tools`
 - MITRE ATT&CK Framework — `attack.mitre.org`
 - Tidal Cyber (ATT&CK-aligned threat modeling) — `app.tidalcyber.com`
 - Living Off The Land Drivers — `loldrivers.io`
 - LOLBAS — `lolbas-project.github.io`
 - GTFOBins — `gtfobins.github.io`
 - HijackLibs — `hijacklibs.net`
+- LOTS (Living Off Trusted Sites) — `lots-project.com`
+- LOOBins (macOS) — `loobins.io`
 - Related: [LOLBAS Reference](/evasion/lolbas-reference/)
 - Related: [C2 Frameworks](/c2-frameworks/)

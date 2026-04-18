@@ -243,10 +243,55 @@ psexec.py -k -no-pass Administrator@braavos.essos.local
 7. DCSync → krbtgt hash → Golden Ticket → persistent domain access
 8. Cross-forest pivot to ESSOS via bidirectional trust
 
+## Lab Variants
+
+GOAD ships several scenarios with different VM counts and focus areas. Pick the smallest lab that covers the attack paths you need to practice.
+
+| Lab | VMs | Forests / Domains | Focus |
+|-----|-----|-------------------|-------|
+| **GOAD** | 5 | 2 / 3 | Full flagship lab — multi-domain trusts, full attack chain |
+| **GOAD-Light** | 3 | 1 / 2 | Reduced resource footprint, parent/child trust focus |
+| **MINILAB** | 2 | 1 / 1 | Server 2019 DC + Windows 10 workstation — single-domain basics |
+| **NHA** (Ninja Hacker Academy) | 5 | — / 2 | Challenge lab — no documented solution path |
+| **DRACARYS** | 3 | — / 1 | Challenge lab — no documented solution path |
+| **SCCM** | 4 | 1 / 1 | MECM / SCCM site + DC for SCCM attack chain practice |
+
+Deploy with the `goad.sh` provisioner (new), which supports multiple providers:
+
+```
+# Clone repo
+git clone https://github.com/Orange-Cyberdefense/GOAD && cd GOAD
+
+# Install dependencies (VirtualBox / VMware / Proxmox / AWS / Azure)
+./goad.sh -t check
+
+# Deploy full GOAD to VirtualBox (default):
+./goad.sh -t install -l GOAD -p virtualbox
+
+# Deploy GOAD-Light to VMware:
+./goad.sh -t install -l GOAD-Light -p vmware
+
+# Deploy MINILAB to Proxmox:
+./goad.sh -t install -l MINILAB -p proxmox
+
+# Status / stop / start any lab:
+./goad.sh -t status -l GOAD -p virtualbox
+./goad.sh -t stop   -l GOAD -p virtualbox
+./goad.sh -t start  -l GOAD -p virtualbox
+
+# Destroy lab VMs:
+./goad.sh -t destroy -l GOAD -p virtualbox
+```
+
+Providers available: `virtualbox`, `vmware`, `proxmox`, `aws`, `azure`, `ludus`. The Azure/AWS providers let you practice without local resources — useful for ~24 GB RAM of VMs.
+
+**Safety note:** GOAD is intentionally catastrophic — unpatched DCs, disabled SMB signing, weak trusts. Never bridge the lab to the internet. Use host-only / internal-only network (`192.168.56.0/24` by default).
+
 ## Key Resources
 
 - [GOAD repository and full documentation](https://github.com/Orange-Cyberdefense/GOAD)
 - [GOAD author's blog with detailed attack walkthroughs](https://mayfly277.github.io)
 - [Detailed per-attack walkthroughs in GOAD docs](https://github.com/Orange-Cyberdefense/GOAD/tree/main/docs)
+- [GOAD official documentation site](https://orange-cyberdefense.github.io/GOAD/)
 
 **// GOAD-NG** — Orange Cyberdefense is working on GOAD-NG (Next Generation), a rewrite using the `goad.sh` provisioner with support for additional AD misconfiguration scenarios, Azure AD integration, and more modern attack paths. Check the GOAD GitHub for the latest version before installation.

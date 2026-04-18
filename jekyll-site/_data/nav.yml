@@ -73,6 +73,8 @@
   pages:
     - url: /active-directory/ad-enumeration/
       title: AD Enumeration
+    - url: /active-directory/ad-exploitation-cheatsheet/
+      title: AD Exploitation Cheat Sheet
     - url: /active-directory/goad/
       title: Game of Active Directory
     - url: /active-directory/nha/
@@ -85,6 +87,10 @@
       title: Pass-the-Hash / PTT
     - url: /active-directory/bloodhound/
       title: BloodHound / SharpHound
+    - url: /active-directory/rubeus/
+      title: Rubeus — Kerberos Toolkit
+    - url: /active-directory/zerologon/
+      title: ZeroLogon (CVE-2020-1472)
     - url: /active-directory/dcsync/
       title: DCSync & Golden Ticket
     - url: /active-directory/acl-abuse/
@@ -172,6 +178,8 @@
   pages:
     - url: /evasion/amsi-bypass/
       title: AMSI Bypass
+    - url: /evasion/powershell-obfuscation/
+      title: PowerShell Obfuscation
     - url: /evasion/av-edr-evasion/
       title: AV / EDR Evasion
     - url: /evasion/lolbins/
@@ -352,6 +360,8 @@
       title: Browser Credential Extraction
     - url: /post-exploitation/lsass-dumping/
       title: LSASS Dumping
+    - url: /post-exploitation/seatbelt/
+      title: Seatbelt — Host Enumeration
     - url: /post-exploitation/linux-persistence/
       title: Linux Persistence Techniques
     - url: /post-exploitation/macos-red-team/
@@ -404,6 +414,10 @@
       title: Beacon Object Files
     - url: /c2-frameworks/mythic/
       title: Mythic C2
+    - url: /c2-frameworks/empire/
+      title: Empire C2
+    - url: /c2-frameworks/c2-matrix/
+      title: The C2 Matrix (Comparison)
     - url: /c2-frameworks/malleable-c2/
       title: Malleable C2 Profiles
     - url: /c2-frameworks/redirectors/
@@ -715,6 +729,10 @@
     - url: /tools/wireless-tools/
       title: Wireless Attack Tools
 
+    - url: /tools/caldera/
+      title: MITRE Caldera (Adversary Emulation)
+    - url: /tools/atomic-red-team/
+      title: Atomic Red Team (Detection Tests)
     - url: /tools/pentest-resources/
       title: Pentesting Resources Bible
     - url: /tools/red-teaming-toolkit/

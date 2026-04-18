@@ -218,9 +218,104 @@ Listeners {
 }
 ```
 
+## Third-Party Agents
+
+Havoc exposes a **service API** that lets you register external implants alongside the built-in Demon. This is how red teamers ship custom agents in foreign runtimes (C, Rust, .NET, Python) while still using Havoc's operator UI, task queueing, and file transfer. External agents communicate with the teamserver via WebSocket and register callback / task / register handlers.
+
+> **Havoc 0.6 removed the third-party agent API.** Keep a Havoc 0.5 or `dev` branch teamserver for compatibility with the agents below.
+
+| Agent | Language | Repo | Use case |
+|-------|----------|------|----------|
+| **Talon** | C + Python shim | `HavocFramework/Talon` | Canonical minimal demo — read this first |
+| **Revenant** | C (Talon-derived) | `0xTriboulet/Revenant` | Polymorphism, string obfuscation, sleep obfuscation, x86/x64 builds |
+| **SharpAgent** | C# (.NET Framework) | `susMdT/SharpAgent` | BOF execution, inline PE, PowerShell import/run from a .NET implant |
+| **PyHmmm** | Python | `CodeXTF2/PyHmmm` | Educational Python POC — two commands (`shell`, `exit`) |
+
+### Talon — the reference implementation
+
+Talon is the "hello world" for Havoc 3rd-party agents — a C implant plus a Python bridge that speaks to the teamserver's service API. Read this before building your own.
+
+```
+# Typical layout:
+#   Talon.c      - agent source (C, 69% of the repo)
+#   Talon.py     - service-API bridge (register, callback, task, response)
+#   Makefile     - cross-compile to PE via mingw-w64
+
+# Build + run:
+git clone https://github.com/HavocFramework/Talon
+cd Talon
+make                                     # produces Talon.exe
+python3 Talon.py                         # registers the agent type with teamserver
+# Then in the Havoc client: Attack → Payload → select "Talon" → generate
+```
+
+`Talon.py` is the template for how any third-party agent registers: it connects to the WebSocket, calls `register`, then implements `callback` (incoming check-ins) and `task` (operator-issued jobs).
+
+### Revenant — hardened Talon fork
+
+```
+# Build prerequisites:
+pip install black
+# In Havoc client:
+unzip Revenant.zip
+python3 Revenant.py        # registers agent type
+
+# Build-time configuration (via Havoc payload builder):
+#   - sleep           polymorphic sleep interval
+#   - string-obf      compile-time string obfuscation
+#   - rand-cmd-ids    randomize CmdIDs per-build (single-session only)
+#   - anti-debug      timing + IsDebuggerPresent checks
+#   - arch            x86 / x64
+```
+
+Supported commands: `pwsh`, `shell`, `upload`, `download`, `exit`. Roadmap includes `.NET assembly execution`, standard shell built-ins (`cd`/`ls`/`whoami`), and entropy reduction.
+
+### SharpAgent — C# BOF/PE-capable agent
+
+```
+# Clone, open in Visual Studio, change handler in source to teamserver IP:
+# SharpAgent/Agent/Program.cs → modify handler address/port
+# Release | Any CPU → build
+
+# 13 supported commands include:
+#   exit, ls, shell, upload, download,
+#   bofexec, inline_assembly, inline_pe,
+#   powershell, powershell_import, powershell_list, powershell_free
+```
+
+OPSEC caveats baked into SharpAgent by default:
+
+- Assembly name is `HavocImplant`, no obfuscation → flagged by name/strings immediately
+- PowerShell scripts stored in **plaintext** in the implant's memory → LSASS-adjacent dumps will recover them
+- Author explicitly discourages production use — treat SharpAgent as a read-and-customize starting point
+
+### PyHmmm — minimum viable Python agent
+
+```
+git clone https://github.com/CodeXTF2/PyHmmm
+cd PyHmmm
+sudo pip install -r requirements.txt
+
+# Edit agent.py to set teamserver IP / port
+python3 handler.py     # registers the agent type
+python3 agent.py       # launches a single instance
+```
+
+Only two commands: `shell <cmd>` and `exit`. Useful to read if you want to understand the absolute minimum your own Havoc agent needs to do.
+
+### Detection / OPSEC Notes for 3rd-Party Agents
+
+- All of the above talk to Havoc over the **operator port**, not the implant ports — your infrastructure decisions for Demon still apply to the listener side, but operator traffic is a local development concern.
+- Third-party agents are typically **single-use templates** — do not ship Talon or PyHmmm unchanged. Rename, obfuscate strings, replace the sleep/callback primitive, and re-sign before any real engagement.
+- Even hardened variants like Revenant lack Demon's evasion suite (indirect syscalls, Ekko sleep obfuscation, return-address spoofing). Use third-party agents to practice development, not to replace Demon in real ops.
+
 ## Resources
 
 - Havoc — `github.com/HavocFramework/Havoc`
 - Havoc Documentation — `havocframework.com/docs`
 - C2 Matrix — `howto.bearspace.net/c2/comparison`
 - Demon agent source — `github.com/HavocFramework/Havoc/tree/main/payloads/Demon`
+- Talon (demo agent) — `github.com/HavocFramework/Talon`
+- Revenant (hardened C agent) — `github.com/0xTriboulet/Revenant`
+- SharpAgent (C# agent) — `github.com/susMdT/SharpAgent`
+- PyHmmm (Python agent) — `github.com/CodeXTF2/PyHmmm`

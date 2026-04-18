@@ -77,6 +77,8 @@
       title: Game of Active Directory
     - url: /active-directory/nha/
       title: Ninja Hacker Academy (NHA)
+    - url: /active-directory/nha-attack-path/
+      title: NHA Branching Attack Path
     - url: /active-directory/kerberoasting/
       title: Kerberoasting & AS-REP
     - url: /active-directory/pass-the-hash/
@@ -97,6 +99,10 @@
       title: ADCS Attacks
     - url: /active-directory/kerberos-delegation/
       title: Kerberos Delegation Attacks
+    - url: /active-directory/credssp-attacks/
+      title: CredSSP Credential Capture
+    - url: /active-directory/gmsa-abuse/
+      title: gMSA Abuse
     - url: /active-directory/ntds-dumping/
       title: NTDS Dumping
     - url: /active-directory/sccm-attacks/

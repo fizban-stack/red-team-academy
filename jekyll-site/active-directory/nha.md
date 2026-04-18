@@ -24,6 +24,8 @@ NHA (Ninja Hacker Academy) is an advanced deliberately-vulnerable Active Directo
 
 > NHA documentation explicitly discourages looking at recipe files for passwords. This page documents the vulnerability types and attack sequence — not the flags or plaintext credentials.
 
+**See also — [NHA Branching Attack Path](/active-directory/nha-attack-path/)** for a decision-graph view of every route to Domain Admin, with multiple options at each junction.
+
 ## Lab Architecture
 
 ```
@@ -55,9 +57,9 @@ NHA (Ninja Hacker Academy) is an advanced deliberately-vulnerable Active Directo
 | DC02 | dc-ac | ACL: `SQL$` computer has `GenericAll` on `CN=Computers` OU | [ACL Abuse](/active-directory/acl-abuse/) |
 | DC02 | dc-ac | ACL: `backup` user has `WriteOwner` on `Sensei` group + AdminSDHolder | [ACL Abuse](/active-directory/acl-abuse/) |
 | DC02 | dc-ac | gMSA: `gmsaNFS$` has `ForceChangePassword` on `backup` user | [ACL Abuse](/active-directory/acl-abuse/) |
-| SRV01 | web | IIS web application — web vulnerability for initial foothold | [Web Attacks](/web/) |
+| SRV01 | web | IIS web application — web vulnerability for initial foothold | [Web Hacking Methodology](/web/web-hacking-methodology/) |
 | SRV01 | web | CredSSP server enabled — accepts incoming CredSSP auth | [Kerberos Delegation](/active-directory/kerberos-delegation/) |
-| SRV02 | sql | MSSQL with `xp_cmdshell` potential; `frank` is sysadmin | [Post-Exploitation](/post-exploitation/) |
+| SRV02 | sql | MSSQL with `xp_cmdshell` potential; `frank` is sysadmin | [Database Attacks](/exploitation/database-attacks/) |
 | SRV02 | sql | Firewall disabled — direct access to all ports | — |
 | SRV03 | share | Scheduled task: bot.ps1 connects to web via CredSSP as `frank` every 60s | Credential Capture |
 | SRV03 | share | CredSSP client enabled — initiates CredSSP sessions to web | [Kerberos Delegation](/active-directory/kerberos-delegation/) |
@@ -111,23 +113,46 @@ NHA (Ninja Hacker Academy) is an advanced deliberately-vulnerable Active Directo
 
 ### Stage 1 — Web Foothold (SRV01)
 
-The entry point is the IIS web application at `http://192.168.58.21`. Enumerate the web app for vulnerabilities — file upload, SQLi, SSRF, command injection, or authentication bypass. Get RCE and establish a C2 implant. Defender is live, so an evasive payload is required.
+The entry point is the IIS web application at `http://192.168.58.21`. Enumerate the web app for vulnerabilities — file upload, SQLi, SSRF, SSTI, command injection, insecure deserialization, or authentication bypass. Get RCE and establish a C2 implant. Defender is live, so an evasive payload is required.
+
+**Multiple paths to foothold — try each class:**
+
+| Class | Look for | Page |
+|-------|----------|------|
+| File upload | Unrestricted extensions, `.aspx;.jpg` bypasses | [File Upload](/web/file-upload/) |
+| Command injection | URL/form params used in shell calls | [Command Injection](/web/command-injection/) |
+| SQL injection | Login forms, search fields, cookies | [SQL Injection](/web/sql-injection/) |
+| SSTI | User-rendered templates (Razor, Jinja, etc.) | [SSTI](/web/ssti/) |
+| Deserialization | ViewState, base64 cookies, ObjectInputStream | [Insecure Deserialization](/web/insecure-deserialization/) |
+| SSRF + metadata | URL fetch endpoints proxying user input | [SSRF](/web/ssrf/) |
+| IIS-specific | Short-name enum, `web.config` disclosure | [IIS Shortname](/web/iis-shortscan/) |
 
 ```
 # Enumerate the web application:
 curl http://192.168.58.21/
 gobuster dir -u http://192.168.58.21 -w /usr/share/wordlists/dirb/common.txt -x php,aspx,html
+feroxbuster -u http://192.168.58.21 -w /usr/share/seclists/Discovery/Web-Content/raft-large-words.txt
+
+# IIS short-name scan (surfaces hidden files):
+java -jar IIS-ShortName-Scanner.jar 2 20 http://192.168.58.21/
+
+# Nuclei for known CVE detection:
+nuclei -u http://192.168.58.21 -tags iis,aspnet,cve
 
 # Once you have RCE — use an evasive loader (see Evasion section):
-# Sliver, Havoc, or Cobalt Strike with Defender bypass
-
-# After foothold on web, check for CredSSP connections arriving from share (srv03):
-# srv03 runs bot.ps1 every 60 seconds: 
-#   Invoke-Command -ComputerName web.academy.ninja.lan -Credential (academy\frank) -Authentication CredSSP
-# Intercept with a rogue CredSSP listener or capture on-wire to extract frank's cleartext creds.
+# Sliver, Havoc, or Cobalt Strike with custom shellcode loader
 ```
 
-**Relevant pages:** [Web Attacks](/web/) · [Windows Defender Evasion](/evasion/windows-defender/) · [Shellcode Loaders](/evasion/shellcode-loaders/)
+**Defender-specific evasion for Stage 1:**
+
+- Do NOT drop `shell.aspx` with cmd.exe invocations — Defender AMSI flags `cmd /c whoami`
+- Use an encrypted loader that runs shellcode in-process (see [Shellcode Loaders](/evasion/shellcode-loaders/))
+- Wrap PowerShell stages in [AMSI Bypass](/evasion/amsi-bypass/) before running any .NET tooling
+- Consider [HTML Smuggling](/evasion/html-smuggling/) if you also need client-side delivery
+
+After foothold on web, the bot from `share` connects every 60 seconds — see Stage 4 for CredSSP capture.
+
+**Relevant pages:** [Web Hacking Methodology](/web/web-hacking-methodology/) · [Web Pentest Checklist](/web/web-pentest-checklist/) · [Windows Defender Evasion](/evasion/windows-defender/) · [Shellcode Loaders](/evasion/shellcode-loaders/) · [AMSI Bypass](/evasion/amsi-bypass/) · [Privilege Escalation Windows](/post-exploitation/privesc-windows/)
 
 ---
 
@@ -154,7 +179,19 @@ netexec ldap 192.168.58.20 -u 'user' -p 'pass' -d 'academy.ninja.lan' \
 # - Find computers where Domain Users are local admins
 ```
 
-**Relevant pages:** [AD Enumeration](/active-directory/ad-enumeration/) · [BloodHound](/active-directory/bloodhound/)
+**Defender-specific evasion for Stage 2:**
+
+- Run BloodHound collection from Linux (`bloodhound-python`) — avoids dropping SharpHound.exe on the web server
+- If you must collect from Windows, use [SharpHound's reflective loader](/active-directory/bloodhound/) after an [AMSI Bypass](/evasion/amsi-bypass/)
+- `netexec` from your Kali attacker box — all LDAP / SMB traffic sources from Linux, zero Defender exposure
+
+**Also worth checking early:**
+
+- **AS-REP roastable accounts** — any account with "Do not require Kerberos preauth" set leaks hashes without creds, see [AS-REP Roasting](/active-directory/asreproasting/)
+- **Null session SMB enumeration** of user lists — lesser-seen on WS2019 but worth trying
+- **LDAP anonymous bind** — sometimes exposes service info before any auth
+
+**Relevant pages:** [AD Enumeration](/active-directory/ad-enumeration/) · [BloodHound](/active-directory/bloodhound/) · [AS-REP Roasting](/active-directory/asreproasting/) · [AD LOTL](/active-directory/ad-lotl/)
 
 ---
 
@@ -177,7 +214,18 @@ hashcat -m 13100 kerberoast.txt /usr/share/wordlists/rockyou.txt -r rules/best64
 # Use rules-based cracking rather than straight wordlist attacks.
 ```
 
-**Relevant page:** [Kerberoasting & AS-REP](/active-directory/kerberoasting/)
+**Defender-specific evasion for Stage 3:**
+
+- Run `GetUserSPNs.py` (Impacket) from Linux — avoids dropping Rubeus.exe on any Windows host
+- If you must run Rubeus: reflective-load it after an [AMSI Bypass](/evasion/amsi-bypass/), and prefer AES-key requests over RC4 to reduce downgrade-detection telemetry
+- Crack offline on your attacker machine — never on a host in the lab
+
+**Post-crack — also consider:**
+
+- **Silver tickets** with the cracked hash: forge TGS for `MSSQLSvc/sql` and `HTTP/web` directly, skipping future KDC 4769 events
+- **AS-REP roast** the same users as a hash-collection fallback if Kerberoasting cracks fail
+
+**Relevant pages:** [Kerberoasting & AS-REP](/active-directory/kerberoasting/) · [AS-REP Roasting](/active-directory/asreproasting/) · [DCSync & Golden Ticket](/active-directory/dcsync/) (silver ticket forgery)
 
 ---
 
@@ -185,19 +233,36 @@ hashcat -m 13100 kerberoast.txt /usr/share/wordlists/rockyou.txt -r rules/best64
 
 srv03 runs a scheduled PowerShell bot (`bot.ps1`) every minute. The bot opens a CredSSP session to `web.academy.ninja.lan` authenticating as `academy\frank`. CredSSP delegates full cleartext credentials to the server — if you control `web`, you receive frank's cleartext password.
 
-```
-# After owning web (SRV01), monitor for incoming CredSSP sessions.
-# Attackers typically capture via:
-# 1. Rogue CredSSP server (e.g., intercept on port 5985/5986/3389)
-# 2. Mimikatz sekurlsa::logonpasswords after bot connects
-# 3. WDigest if enabled (not by default on WS2019)
+**Full technique details on the dedicated [CredSSP Attacks](/active-directory/credssp-attacks/) page** — four capture methods including LSASS extraction, rogue listener, bot.ps1 poisoning for persistence, and TGT harvesting.
 
-# On the web server (after getting SYSTEM):
-mimikatz # sekurlsa::logonpasswords
-# Wait up to 60 seconds for the bot to connect — frank's cleartext creds will appear.
+```
+# After owning web (SRV01), monitor for incoming CredSSP sessions:
+
+# Technique 1 — LSASS extraction (most common):
+# Do NOT run mimikatz.exe on disk. Use a reflective loader.
+Invoke-Mimikatz -Command "sekurlsa::logonpasswords"
+# Wait up to 60 seconds for the bot to connect — frank's cleartext creds appear in tspkg/kerberos output.
+
+# Technique 2 — Targeted LSASS dump with nanodump (EDR-lighter than procdump):
+nanodump.x64.exe --write C:\Windows\Temp\lsass.bin --valid
+# Exfil and parse offline with pypykatz.
+
+# Technique 3 — Harvest Kerberos tickets instead of cleartext:
+Invoke-Mimikatz -Command "sekurlsa::tickets /export"
+# Use the TGT directly, no cracking needed.
+
+# Technique 4 (persistence) — if you reach share, poison bot.ps1 itself.
+# See the CredSSP page for the payload template.
 ```
 
-**Relevant pages:** [Kerberos Delegation](/active-directory/kerberos-delegation/) · [Post-Exploitation](/post-exploitation/)
+**Defender-specific evasion for Stage 4:**
+
+- `mimikatz.exe` on disk is instantly flagged — always use [reflective loaders](/evasion/shellcode-loaders/)
+- Patch [AMSI](/evasion/amsi-bypass/) and [ETW](/evasion/etw-bypass/) before any PowerShell-based credential tooling
+- Consider [DLL Unhooking](/evasion/dll-unhooking/) on NTDLL before calling `MiniDumpWriteDump`
+- `nanodump` from Fortra is generally quieter than `procdump.exe` against modern Defender
+
+**Relevant pages:** [CredSSP Attacks](/active-directory/credssp-attacks/) · [Kerberos Delegation](/active-directory/kerberos-delegation/) · [LSASS Dumping](/post-exploitation/lsass-dumping/) · [Lateral Movement](/post-exploitation/lateral-movement/) · [Shellcode Loaders](/evasion/shellcode-loaders/)
 
 ---
 
@@ -219,7 +284,19 @@ SQL> EXEC xp_cmdshell 'whoami';
 netexec mssql 192.168.58.22 -u 'frank' -p 'PASSWORD' -d 'academy.ninja.lan' -x 'whoami'
 ```
 
-**Relevant page:** [Post-Exploitation](/post-exploitation/)
+**Alternative paths to SRV02 (sql):**
+
+1. **Kerberoast `sql_svc`** — the MSSQL service account's SPN is also Kerberoastable; cracking its hash gives you a silver-ticket forgery option without needing frank
+2. **SQL$ RBCD** — the SQL computer account's GenericAll on the Computers OU lets you RBCD-abuse SRV02 itself — see Stage 9
+3. **NTLM relay** — coerce SQL$ with PetitPotam / DFSCoerce and relay its auth to a target accepting NTLM — see [Coercion](/active-directory/coercion-attacks/) + [NTLM Relay](/active-directory/ntlm-relay/)
+
+**Defender-specific evasion for Stage 5:**
+
+- Run `mssqlclient.py` from Linux — zero Defender exposure
+- If enabling `xp_cmdshell`, use PowerShell download-cradles encoded with [Codecepticon](/evasion/codecepticon/) rather than plain `powershell.exe iex`
+- Consider [PowerShell Without PowerShell.exe](/evasion/powershell-without-ps/) (e.g., pwsh.dll in a trusted host) on sql to avoid script-block logging detection
+
+**Relevant pages:** [Database Attacks](/exploitation/database-attacks/) · [Lateral Movement](/post-exploitation/lateral-movement/) · [Privilege Escalation Windows](/post-exploitation/privesc-windows/)
 
 ---
 
@@ -246,7 +323,19 @@ Rubeus.exe s4u /user:frank /password:PASSWORD /domain:academy.ninja.lan \
   /ptt
 ```
 
-**Relevant page:** [Kerberos Delegation Attacks](/active-directory/kerberos-delegation/)
+**Alternative paths to SRV03 (share):**
+
+1. **SQL$ RBCD** — configure RBCD on share pointing to a computer you control, then impersonate DA to share (Stage 9 technique applied to share)
+2. **Compromise via Teacher / Sensei group creds** once you hold any local-admin-grade identity on web/sql
+3. **Coerce share's machine account** with PetitPotam and relay it elsewhere — see [Coercion](/active-directory/coercion-attacks/) + [NTLM Relay](/active-directory/ntlm-relay/)
+
+**Defender-specific evasion for Stage 6:**
+
+- Use Impacket `getST.py` from Linux instead of Rubeus — no .NET on host
+- If you must use Rubeus: reflective-load after [AMSI Bypass](/evasion/amsi-bypass/) and prefer AES256 (`/aes256:KEY`) over RC4 to avoid downgrade detections
+- Protocol-transition activity generates 4769 events on the DC — pair with [AD LOTL](/active-directory/ad-lotl/) timing discipline
+
+**Relevant pages:** [Kerberos Delegation Attacks](/active-directory/kerberos-delegation/) · [CredSSP Attacks](/active-directory/credssp-attacks/) · [AD LOTL](/active-directory/ad-lotl/)
 
 ---
 
@@ -275,7 +364,19 @@ rpcclient -U 'academy.ninja.lan/gmsaNFS$%' 192.168.58.20
 rpcclient $> setuserinfo2 backup 23 'NewP@ss123!'
 ```
 
-**Relevant pages:** [ACL / ACE Abuse](/active-directory/acl-abuse/)
+**Full technique details on the dedicated [gMSA Abuse](/active-directory/gmsa-abuse/) page** — five attack paths including DSInternals, bloodyAD from Linux, GMSAPasswordReader, direct PtH authentication as the gMSA, and post-DA DCSync of gMSA keys.
+
+**Alternative to password reset on backup:**
+
+- **Shadow Credentials** — instead of resetting backup's password (noisy, changes the password hash, can alert), write a `msDS-KeyCredentialLink` to backup and PKINIT-authenticate as backup without any password change. See [Shadow Credentials](/active-directory/shadow-credentials/).
+
+**Defender-specific evasion for Stage 7:**
+
+- Run `bloodyAD` or `gMSADumper.py` from Linux — DSInternals on Windows generates LSA-replication-style telemetry visible to defenders
+- Tunnel the LDAP query through a compromised host via SOCKS/C2 so the source IP looks internal
+- Prefer AES256 keys over derived passwords for subsequent authentication
+
+**Relevant pages:** [gMSA Abuse](/active-directory/gmsa-abuse/) · [ACL / ACE Abuse](/active-directory/acl-abuse/) · [Shadow Credentials](/active-directory/shadow-credentials/) · [Pass-the-Hash](/active-directory/pass-the-hash/)
 
 ---
 
@@ -305,7 +406,19 @@ Add-DomainObjectAcl -TargetIdentity Sensei -PrincipalIdentity backup -Rights All
 Add-DomainGroupMember -Identity Sensei -Members 'youruser' -Credential $cred
 ```
 
-**Relevant pages:** [ACL / ACE Abuse](/active-directory/acl-abuse/) · [AD Persistence](/active-directory/ad-persistence/)
+**Alternative paths from backup → DA:**
+
+1. **WriteOwner on AdminSDHolder** — backup also has WriteOwner on AdminSDHolder. Any change to AdminSDHolder's ACL propagates (via SDProp) to all protected groups (Domain Admins, Enterprise Admins, etc.) within ~60 minutes. Grant yourself DCSync rights at the domain root this way.
+2. **Shadow Credentials on any Sensei member** — if backup's WriteOwner gives you GenericAll on Sensei, use that to add `msDS-KeyCredentialLink` on an existing Sensei member (e.g., `alice`) and PKINIT as them — preserves the original password
+3. **Targeted Kerberoast via SPN set** — grant any Sensei member an SPN via GenericWrite, then Kerberoast them offline
+
+**Defender-specific evasion for Stage 8:**
+
+- Do all ACL edits from Linux with `bloodyAD` — stays off any Windows host
+- Batch edits to reduce LDAP write event count; avoid back-to-back `dacledit` + `net rpc password` sequences that trigger correlation rules
+- See [AD LOTL](/active-directory/ad-lotl/) for timing and source selection idioms
+
+**Relevant pages:** [ACL / ACE Abuse](/active-directory/acl-abuse/) · [AD Persistence](/active-directory/ad-persistence/) · [Shadow Credentials](/active-directory/shadow-credentials/) · [DCSync & Golden Ticket](/active-directory/dcsync/)
 
 ---
 
@@ -337,7 +450,20 @@ export KRB5CCNAME=Administrator.ccache
 secretsdump.py -k -no-pass TARGET.academy.ninja.lan
 ```
 
-**Relevant pages:** [Kerberos Delegation Attacks](/active-directory/kerberos-delegation/) · [ACL / ACE Abuse](/active-directory/acl-abuse/)
+**Alternative uses of SQL$'s GenericAll on Computers OU:**
+
+1. **RBCD on DC02** — target the DC itself; impersonating Administrator to the DC effectively gives you DA
+2. **RBCD on share** — a second path to SRV03 that doesn't go through frank's delegation
+3. **RBCD on any future machine added to the OU** — useful for persistence (any new workstation is takeover-ready)
+4. **Abuse to modify computer account attributes** — add SPNs, write keyCredentialLink (Shadow Credentials pattern on computers), or flip `TrustedToAuthForDelegation` for further chains
+
+**Defender-specific evasion for Stage 9:**
+
+- Run `addcomputer.py`, `rbcd.py`, and `getST.py` from Linux — zero on-host artifacts
+- Your attacker-controlled computer account (`EVILPC$`) will appear in DC logs; pick a naming convention that blends in (`WKSTN-XX$` style rather than `EVILPC$`)
+- Consider deleting the attacker computer account post-exploitation to reduce attribution
+
+**Relevant pages:** [Kerberos Delegation Attacks](/active-directory/kerberos-delegation/) · [ACL / ACE Abuse](/active-directory/acl-abuse/) · [Shadow Credentials](/active-directory/shadow-credentials/) · [Coercion Attacks](/active-directory/coercion-attacks/)
 
 ---
 
@@ -365,7 +491,19 @@ getST.py \
   -dc-ip 192.168.58.20
 ```
 
-**Relevant page:** [Domain Trusts](/active-directory/domain-trusts/)
+**Three ways to pivot across the trust:**
+
+1. **Inter-realm TGT forge** — dump the inter-realm trust key with `secretsdump` from DA on ACADEMY, then forge an inter-realm TGT granting Administrator rights on the foreign domain
+2. **Cross-realm TGS request** — with valid ACADEMY creds, request a service ticket for a SPN in ninja.hack directly; the trust key handles the cross-realm referral
+3. **Direct credential use** — if a user in ACADEMY has the same name/password in NINJA (or a cross-domain account like `olivia.davis`), PtH/cred use directly across
+
+**Defender-specific evasion for Stage 10:**
+
+- Dump trust keys from Linux via `secretsdump.py -just-dc-user 'domain.local$'` — no Windows host touched
+- When forging tickets, use `ticketer.py` from Linux, then `export KRB5CCNAME=`
+- Prefer AES keys; RC4 trust tickets are a classic blue-team hunt
+
+**Relevant pages:** [Domain Trusts](/active-directory/domain-trusts/) · [DCSync & Golden Ticket](/active-directory/dcsync/) · [Pass-the-Hash](/active-directory/pass-the-hash/)
 
 ---
 
@@ -436,7 +574,22 @@ certipy auth \
 secretsdump.py 'ninja.hack/administrator@192.168.58.10' -hashes :NT_HASH
 ```
 
-**Relevant pages:** [ACL / ACE Abuse](/active-directory/acl-abuse/) · [ADCS Attacks](/active-directory/adcs-attacks/)
+**Alternative to password reset on rachel.philips:**
+
+- **Shadow Credentials on rachel** — instead of `net rpc password`, write `msDS-KeyCredentialLink` to rachel and PKINIT as her. Password never changes — same downstream Sanin access, stealthier. See [Shadow Credentials](/active-directory/shadow-credentials/).
+
+**Alternative to SignatureValidation template abuse:**
+
+- If the template is additionally **ESC6-vulnerable** (EDITF_ATTRIBUTESUBJECTALTNAME2 on the CA) or **ESC3-abusable** (enrollment agent chain), you may not even need to modify the template. Check all ESC classes with `certipy find -vulnerable -stdout` before writing
+- **ESC8 via coerced relay** — coerce DC01's machine account (`dc-vil$`) with PetitPotam/DFSCoerce and relay its NTLM auth to the ADCS web enrollment endpoint. See [Coercion](/active-directory/coercion-attacks/) + [NTLM Relay](/active-directory/ntlm-relay/)
+
+**Defender-specific evasion for Stage 11:**
+
+- Run all certipy operations from Linux — Windows certificate enrollment tooling is heavily monitored
+- `dacledit.py`, `bloodyAD` LDAP writes all from Linux
+- Prefer AES256 keys in final PKINIT authentication
+
+**Relevant pages:** [ACL / ACE Abuse](/active-directory/acl-abuse/) · [ADCS Attacks](/active-directory/adcs-attacks/) · [Shadow Credentials](/active-directory/shadow-credentials/) · [Coercion Attacks](/active-directory/coercion-attacks/) · [NTLM Relay](/active-directory/ntlm-relay/)
 
 ---
 
@@ -449,6 +602,28 @@ If you can get a user into the `Hokage` group (e.g., by owning `alice.johnson` v
 bloodyAD -u 'hokage_member' -p 'pass' -d ninja.hack --host 192.168.58.10 \
   add groupMember 'Domain Admins' 'youruser'
 ```
+
+---
+
+## Novel / Lesser-Used Techniques to Try
+
+The canonical path above is well-worn. These variations show up less often in walkthroughs and may surprise automated detection rules:
+
+1. **Poison `bot.ps1` on share for credential harvesting persistence** — see [CredSSP Attacks, Technique 3](/active-directory/credssp-attacks/). A backdoor inside an already-scheduled task is routinely missed in post-incident review.
+
+2. **Shadow Credentials instead of password reset** — every place nha.md calls `net rpc password`, try `msDS-KeyCredentialLink` + PKINIT instead. Zero password change = invisible to password-reset alerts. See [Shadow Credentials](/active-directory/shadow-credentials/).
+
+3. **Coerce + relay for cross-machine pivots** — PetitPotam/DFSCoerce against DC02 or DC01 machine accounts, relay to LDAPS for RBCD, or to ADCS web enrollment for ESC8. Useful when creds are scarce. See [Coercion Attacks](/active-directory/coercion-attacks/) + [NTLM Relay](/active-directory/ntlm-relay/).
+
+4. **Silver tickets from Kerberoasted service hashes** — skip live authentication entirely; forge TGS for `MSSQLSvc/sql` and `HTTP/web` directly after cracking sql_svc or frank. No KDC 4769 events. See [DCSync & Golden Ticket](/active-directory/dcsync/).
+
+5. **WriteOwner on AdminSDHolder for wildcard DA ACL** — backup's WriteOwner hits `AdminSDHolder` too. Change AdminSDHolder's ACL → SDProp propagates to every protected group within the hour → permanent DCSync rights. See [AD Persistence](/active-directory/ad-persistence/).
+
+6. **TGT harvest instead of cleartext** — during the CredSSP bot window, dump frank's TGT with `sekurlsa::tickets /export`. You get Kerberos auth without ever seeing the password, and you sidestep any cleartext-specific EDR rules.
+
+7. **Cross-realm TGS request** — from ACADEMY DA, skip the trust-key dump entirely and request a cross-realm TGS for a NINJA service directly. Simpler than forging, and the referral chain is less scrutinized.
+
+8. **Anonymous LDAP / SMB enum before any web exploitation** — NHA's DCs may permit some anonymous LDAP queries; checking first is free and can leak user lists for AS-REP and Kerberoasting. See [AD Enumeration](/active-directory/ad-enumeration/).
 
 ---
 
@@ -490,10 +665,24 @@ bloodyAD -u 'hokage_member' -p 'pass' -d ninja.hack --host 192.168.58.10 \
 
 All machines run Windows Defender. Standard unobfuscated Meterpreter, Empire, or Covenant payloads will be detected immediately. Before attacking:
 
+**Payload & C2:**
 - Use an evasive C2 (Havoc, Sliver, Cobalt Strike) with custom loaders — see [Shellcode Loaders](/evasion/shellcode-loaders/)
-- Patch AMSI in-process before running .NET tooling (Rubeus, SharpHound) — see [Windows Defender](/evasion/windows-defender/)
-- Prefer LOLBAS and proxy execution where possible — see [LOTL Advanced](/evasion/lotl-advanced/)
+- Encrypt payload in transit and on disk — see [Payload Encryption](/evasion/payload-encryption/)
+- Consider [PE Obfuscation](/evasion/pe-obfuscation/) and [Binary Padding](/evasion/binary-padding/) for staged implants
+
+**In-process bypasses (before .NET / PowerShell tooling):**
+- Patch AMSI in-process before Rubeus, SharpHound, etc. — see [AMSI Bypass](/evasion/amsi-bypass/)
+- Patch ETW to blind script-block logging — see [ETW Bypass](/evasion/etw-bypass/)
+- Unhook NTDLL if EDR hooks are in play — see [DLL Unhooking](/evasion/dll-unhooking/)
+- Use [Indirect Syscalls](/evasion/indirect-syscalls/) for LSASS access instead of WinAPI
+
+**Attacker-side preference:**
+- Prefer LOLBAS and proxy execution where possible — see [LOTL Advanced](/evasion/lotl-advanced/) and [LOLBAS Reference](/evasion/lolbas-reference/)
 - Run BloodHound collection from Linux (bloodhound-python) to avoid dropping SharpHound.exe
+- Run Impacket (`getST.py`, `GetUserSPNs.py`, `addcomputer.py`) and bloodyAD from Linux — zero on-host artifacts
+- Run certipy from Linux for every ADCS operation
+
+**Per-stage evasion is inline with each stage above.** See [Windows Defender](/evasion/windows-defender/) for the full evasion reference page and [AV/EDR Evasion](/evasion/av-edr-evasion/) for broader defense bypass guidance.
 
 ## Key Resources
 

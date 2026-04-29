@@ -704,6 +704,28 @@
       title: LLM Application Exploit Chains
     - url: /ai-agents/ml-supply-chain/
       title: ML Supply Chain Attacks
+    - url: /ai-agents/mitre-atlas/
+      title: MITRE ATLAS Framework
+    - url: /ai-agents/llm-jailbreaks-2025/
+      title: Modern Jailbreak Techniques (2025)
+    - url: /ai-agents/automated-red-team-tools/
+      title: Automated AI Red Team Tools
+    - url: /ai-agents/rag-attacks/
+      title: RAG & Vector DB Attacks
+    - url: /ai-agents/multi-agent-attacks/
+      title: Multi-Agent System Attacks
+    - url: /ai-agents/reasoning-model-attacks/
+      title: Reasoning Model Attacks
+    - url: /ai-agents/autonomous-pentest-agents/
+      title: Autonomous Pentesting Agents
+    - url: /ai-agents/llm-dos/
+      title: LLM Denial of Service
+    - url: /ai-agents/multimodal-injection/
+      title: Multimodal Prompt Injection
+    - url: /ai-agents/computer-use-attacks/
+      title: Computer Use Agent Attacks
+    - url: /ai-agents/ai-ctf-challenges/
+      title: AI Security CTF Challenges
 
 - num: "13"
   title: Red Team Tools

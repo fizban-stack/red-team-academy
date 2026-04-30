@@ -1170,6 +1170,22 @@
       title: EDR Detection Adversarial Matrix
 
 - num: "32"
+  title: Reverse Engineering
+  pages:
+    - url: /reverse-engineering/overview/
+      title: RE Workflow & Tool Selection
+    - url: /reverse-engineering/windows-internals/
+      title: Windows Internals for RE
+    - url: /reverse-engineering/pe-format/
+      title: PE Format Deep Dive
+    - url: /reverse-engineering/malware-patterns/
+      title: Malware Behavioral Patterns
+    - url: /reverse-engineering/x64dbg-workflow/
+      title: Dynamic RE with x64dbg
+    - url: /reverse-engineering/ghidra-static-re/
+      title: Static RE with Ghidra
+
+- num: "33"
   title: Interactive Tools
   pages:
     - url: /tools/mitre-heatmap/

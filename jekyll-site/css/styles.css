@@ -998,6 +998,49 @@ strong, b {
   color: var(--text-3);
 }
 
+/* ══════════════════════════════════════════════════════
+   TABLES
+   ══════════════════════════════════════════════════════ */
+
+.content-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 24px;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  table-layout: auto;
+}
+
+.content-panel table th {
+  background: var(--bg-3);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  text-align: left;
+  border: 1px solid var(--border-1);
+  border-bottom: 2px solid var(--accent-muted);
+  white-space: nowrap;
+}
+
+.content-panel table td {
+  padding: 7px 14px;
+  color: var(--text-1);
+  border: 1px solid var(--border-0);
+  vertical-align: top;
+  line-height: 1.55;
+}
+
+.content-panel table tr:nth-child(even) td {
+  background: var(--bg-2);
+}
+
+.content-panel table tr:hover td {
+  background: var(--bg-4);
+}
+
 /* Inline code */
 .content-panel code {
   font-family: var(--font-mono);

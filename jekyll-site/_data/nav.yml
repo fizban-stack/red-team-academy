@@ -342,6 +342,8 @@
       title: "Custom Packer & Crypter Dev"
     - url: /exploitation/custom-c2-protocol/
       title: "Custom C2 Protocol Design"
+    - url: /exploitation/dependency-confusion/
+      title: Dependency Confusion & Package Poisoning
 
 - num: "07"
   title: Post-Exploitation
@@ -610,6 +612,18 @@
       title: postMessage Attacks
     - url: /web/grpc-attacks/
       title: gRPC & Protobuf Attacks
+    - url: /web/api-privilege-escalation/
+      title: API Privilege Escalation (BFLA & Shadow APIs)
+    - url: /web/oauth-device-code/
+      title: OAuth Device Code Phishing
+    - url: /web/browser-extension-attacks/
+      title: Browser Extension Supply Chain Attacks
+    - url: /web/crypto-attacks/
+      title: Cryptographic Attacks (JWT, Padding Oracle, ECDSA)
+    - url: /web/passkey-bypass/
+      title: Passkey & FIDO2 Ecosystem Bypass
+    - url: /web/browser-security-attacks/
+      title: Browser Security Attacks (CSP, Service Workers, DOM)
 
 - num: "10"
   title: Wireless Attacks
@@ -726,6 +740,8 @@
       title: Computer Use Agent Attacks
     - url: /ai-agents/ai-ctf-challenges/
       title: AI Security CTF Challenges
+    - url: /ai-agents/genai-offensive-workflow/
+      title: GenAI for Offensive Security — Practitioner Workflow
 
 - num: "13"
   title: Red Team Tools
@@ -854,6 +870,8 @@
       title: Rules of Engagement Template
     - url: /reporting/templates/findings-severity-matrix/
       title: Findings Severity Matrix
+    - url: /reporting/red-team-metrics/
+      title: Red Team Metrics & ROI
 
 - num: "16"
   title: Social Engineering
@@ -1046,6 +1064,12 @@
       title: Software Supply Chain Attack
     - url: /scenarios/insider-threat/
       title: Malicious Insider Simulation
+    - url: /scenarios/saas-red-team/
+      title: SaaS Application Red Team
+    - url: /scenarios/zero-trust-bypass/
+      title: Zero Trust Architecture Bypass
+    - url: /scenarios/how-i-got-caught/
+      title: How I Got Caught — Detection Scenarios
 
 - num: "25"
   title: OT/ICS Security
@@ -1146,6 +1170,8 @@
       title: BlackCat/ALPHV
     - url: /threat-actors/sandworm/
       title: Sandworm (GRU)
+    - url: /threat-actors/ti-for-red-teams/
+      title: Threat Intelligence for Red Teams
 
 - num: "30"
   title: Learning Paths
@@ -1168,6 +1194,8 @@
   pages:
     - url: /reference/detection-matrix/
       title: EDR Detection Adversarial Matrix
+    - url: /reference/protocol-reference/
+      title: Protocol Quick Reference (Kerberos, NTLM, OAuth, TLS)
 
 - num: "32"
   title: Reverse Engineering

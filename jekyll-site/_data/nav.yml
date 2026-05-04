@@ -1226,3 +1226,35 @@
       title: Red Team Ops Journal
     - url: /tools/quiz/
       title: Certification Prep Quiz
+
+- num: "34"
+  title: MITRE ATT&CK Tactics
+  pages:
+    - url: /mitre/ta0043-reconnaissance/
+      title: "TA0043 — Reconnaissance"
+    - url: /mitre/ta0042-resource-development/
+      title: "TA0042 — Resource Development"
+    - url: /mitre/ta0001-initial-access/
+      title: "TA0001 — Initial Access"
+    - url: /mitre/ta0002-execution/
+      title: "TA0002 — Execution"
+    - url: /mitre/ta0003-persistence/
+      title: "TA0003 — Persistence"
+    - url: /mitre/ta0004-privilege-escalation/
+      title: "TA0004 — Privilege Escalation"
+    - url: /mitre/ta0005-defense-evasion/
+      title: "TA0005 — Defense Evasion"
+    - url: /mitre/ta0006-credential-access/
+      title: "TA0006 — Credential Access"
+    - url: /mitre/ta0007-discovery/
+      title: "TA0007 — Discovery"
+    - url: /mitre/ta0008-lateral-movement/
+      title: "TA0008 — Lateral Movement"
+    - url: /mitre/ta0009-collection/
+      title: "TA0009 — Collection"
+    - url: /mitre/ta0011-command-and-control/
+      title: "TA0011 — Command &amp; Control"
+    - url: /mitre/ta0010-exfiltration/
+      title: "TA0010 — Exfiltration"
+    - url: /mitre/ta0040-impact/
+      title: "TA0040 — Impact"

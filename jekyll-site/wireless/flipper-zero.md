@@ -12,6 +12,14 @@ tags:
   - bad-usb
   - deauth
   - evil-portal
+  - ble-spam
+  - bluetooth
+  - brute-force
+  - momentum-firmware
+  - gpio
+  - uart
+  - mfkey32
+  - ntag
 page_key: "wireless-flipper-zero"
 render_with_liquid: false
 ---
@@ -56,13 +64,25 @@ Unleashed firmware — DarkFlippers/Unleashed-Firmware
   Retains stock stability
   Install: flash .dfu or .tgz via qFlipper or web updater
 
-RogueMaster firmware — RogueMaster/flipperzero-firmware-wPlugins
-  Superset of Unleashed; includes experimental apps
-  Integrated Marauder control from Flipper UI
-  Larger install — less stable than Unleashed
+Momentum firmware — Next-Flip/Momentum-Firmware  [successor to Xtreme]
+  Spiritual successor to Xtreme firmware (development ceased Nov 2024)
+  Bundled BLE Spam, expanded FAP catalog, deep UI customization, asset packs
+  More polished than RogueMaster; actively maintained by former Xtreme team
+  Site: momentum-fw.dev | Install: place release .zip on SD /update/ → run
 
-Recommendation: Unleashed for stable extended RF range;
-RogueMaster for integrated Wi-Fi attack menu
+RogueMaster firmware — RogueMaster/flipperzero-firmware-wPlugins
+  Kitchen-sink build: merges Unleashed + community plugins + animations
+  Includes integrated Marauder control, Sub-GHz bruteforcer, BLE Spam
+  Largest install — least stable; good for testing community FAPs
+  Install: flash via qFlipper or SD /update/ method
+
+Xtreme firmware — Flipper-XFW/Xtreme-Firmware  [ARCHIVED — no longer maintained]
+  Development ceased November 2024; superseded by Momentum
+  Historical note only — prefer Momentum for equivalent feature set
+
+Recommendation: Unleashed for stable extended RF;
+Momentum for curated FAP catalog + BLE Spam attacks;
+RogueMaster for maximum community plugin coverage
 ```
 
 ## Wi-Fi Dev Board — Marauder Firmware
@@ -139,6 +159,13 @@ sniffbeacon
 evilportal -a "CorpGuest"    # spawn AP with SSID "CorpGuest"
 # Victims connect; portal page served from SD card /MARAUDER/portals/
 # Default portal: generic login form; customize HTML files on SD card
+
+# Wardrive — GPS-tagged AP survey (requires GPS module on dev board)
+wardrive          # scan APs with GPS coordinates
+wardrive -s       # scan stations (client devices) instead
+stopscan          # stop wardrive
+# Output: WigleWifi-1.4 CSV saved to SD card as wardrive_0.csv
+# Upload directly to wigle.net for mapping; compatible with hcxtools/airodump-ng
 
 # Packet monitor — live frame counter by type
 stopscan
@@ -351,16 +378,275 @@ Write to writable key:
   iButton → Saved → select → Write
 ```
 
+## Bluetooth LE Spam Attacks
+
+Flipper Zero can flood nearby devices with Bluetooth LE advertisements impersonating pairing requests and action modals. The attack causes popup fatigue, can crash/reboot unpatched iOS devices, and distracts targets during physical engagements. Available via the `BLE Spam` FAP (Willy-JL / Spooks4576 / ECTO-1A), bundled in Momentum and RogueMaster; Apple-only variant `apple_ble_spam_ofw` available for stock firmware.
+
+```
+Run path: Apps → Bluetooth → BLE Spam → select attack → Start
+
+Attack variants:
+  Apple Action Modal
+    Sends "Setup New Device" / "Transfer Number" / "AppleTV Pairing" popups
+    Interrupts iOS foreground apps; popup requires manual dismissal
+    Range: ~50 m effective
+
+  Apple Device Popup
+    Impersonates AirPods, AirTag, BeatsX, AirPods Pro proximity pairing
+    Triggers large "Connect" modal on screen; victim must dismiss manually
+
+  iOS 17 Lockup / Crash (LockByte attack)
+    Repeated malformed LockByte BLE advertisements
+    Can force reboot on unpatched iOS 17.x devices in proximity
+    Fixed in iOS 17.2+ — useful for identifying unpatched devices in scope
+
+  Android Device Pair (Google Fast Pair)
+    Impersonates Bose NC 700, JBL Live 300TWS, JBL Flip 6, Pixel Buds
+    Triggers "New device found" banner on Android
+    Range: ~50 m; dismissible but persistent if attack loops
+
+  Windows Device Found (Microsoft Swift Pair)
+    Triggers Windows "New Bluetooth device found" toast notification
+    Close-range only: <1–2 m for the beacon to register reliably
+
+  Every Method Combined (Kitchen Sink)
+    Randomises across all variants above in rapid succession
+    Maximum disruption; lowest per-device persistence
+
+Stopping: press Back button to exit BLE Spam app
+```
+
+```
+Detection:
+  iOS devices log Bluetooth advertisement events in syslog (accessible via
+  Apple Configurator / Xcode Console) — pattern: repeated BLEAdv frames
+  from randomized MACs. Enterprise BLE monitoring (e.g., Cisco DNA Spaces)
+  flags rapid BLE peripheral churn as anomalous.
+  Windows Bluetooth Event Log (Event ID 7000 series) records pairing attempts.
+```
+
+## Sub-GHz Brute Force
+
+For fixed-code remote systems (garage doors, gate openers, older alarm keyfobs) without rolling-code protection, Flipper can iterate the full keyspace. Two tools exist with different workflows.
+
+```
+Tool 1 — Sub-GHz Bruteforcer FAP (on-device)
+  Available in: Unleashed, Momentum, RogueMaster
+  Path: Apps → Sub-GHz → Sub-GHz Bruteforcer
+    → select protocol (e.g., CAME, Nice FLO, Ansonic, Princeton)
+    → adjust timing: hold Up to increase inter-key delay (default ~10 ms)
+    → adjust repeats: press Right on the protocol entry
+    → OK to start; Flipper iterates codes sequentially at the target frequency
+
+  Supported fixed-code protocols (selection):
+    CAME (12-bit, 433.92 MHz) — very common EU gate openers
+    Nice FLO / BFT (12-bit, 433.92 MHz)
+    Ansonic (12-bit, 433.92 MHz)
+    Princeton (24-bit, 315/433 MHz)
+    Chamberlain (9/10-bit, 300–315 MHz) — older US garage doors
+    Bosch 12 DIP / 20 DIP — alarm panel remotes
+    Tormatic, Marantec, Dickert, Cardin, Rademacher, Hormann
+  Rolling-code systems (KeeLoq, Security+ 2.0): NOT brute-forceable — skip
+
+Tool 2 — flipperzero-bruteforce (Python, PC-side)
+  Generates split .sub files offline; play them from Flipper Sub-GHz → Saved
+  Install:
+    git clone https://github.com/tobiabocchi/flipperzero-bruteforce
+    cd flipperzero-bruteforce && pip install -r requirements.txt
+    python3 brute.py <protocol> <frequency>
+
+  Binary-search workflow (faster than full linear scan):
+    1. Generate files:  python3 brute.py CAME_12bit 433920000
+    2. Copy output folder to SD:/subghz/
+    3. Play the largest file (e.g., split_4096/) — watch for target reaction
+    4. Narrow to the half that triggered; play split_2048/ from that range
+    5. Descend: split_1024/ → 512/ → 128/ until exact code confirmed
+    6. Single .sub file with the matching code can be saved and replayed
+
+Timing estimates (CAME 12-bit = 4096 codes):
+  Full linear scan: ~2–5 minutes at default timing
+  Binary-search (6 rounds): ~30–90 seconds total
+  Princeton 24-bit: hours at full scan — binary-search is essential
+```
+
+## GPIO — UART Bridge
+
+Flipper Zero can act as a USB-to-UART adapter using its GPIO header, providing serial console access to embedded devices without a separate FTDI/CP2102 adapter. Built into stock OFW — no custom firmware needed.
+
+```
+App path: GPIO → USB-UART Bridge  (main menu, not under Apps)
+
+Default pin assignments (3.3 V logic — do not connect 5 V UART directly):
+  Pin 13  → UART TX  (Flipper TX → target device RX)
+  Pin 14  → UART RX  (Flipper RX → target device TX)
+  Pin 8 / 11 / 18  → GND
+
+  Alternate pins selectable in the bridge UI: Pin 15 (TX) / Pin 16 (RX)
+  Wiring rule: always cross TX↔RX between Flipper and target
+
+Supported baud rates:
+  300, 600, 1200, 2400, 4800, 9600 (default), 19200, 38400, 57600, 115200, 230400
+  Reliable limit: 115200 — rates above this have known data-loss issues
+  (firmware issue #2304 — keep to ≤115200 for hardware-hacking work)
+
+Usage workflow:
+  1. Wire Flipper GPIO to target UART pads (TX→RX, RX→TX, GND→GND)
+  2. Connect Flipper to attack laptop via USB
+  3. Flipper: GPIO → USB-UART Bridge → set baud rate → Start
+  4. Laptop: screen /dev/ttyACM0 115200  (Linux/macOS)
+            or PuTTY → Serial → COMx → 115200 (Windows)
+  5. Power on target device — serial console output appears in terminal
+
+Common UART attack scenarios:
+  Router / IoT console: root shell on boot (especially if U-Boot drops to shell)
+  Embedded Linux: interrupt U-Boot countdown → set bootargs → boot to recovery
+  Password bypass: busybox shell via single-user mode kernel param
+  Firmware extraction: redirect dd output over serial to laptop
+
+GPIO pins also support SPI and I2C via FAPs (Logic Analyzer FAP sniffs SPI/I2C buses;
+useful for capturing firmware or credentials transiting flash chips or sensor buses).
+For full UART/JTAG/SPI methodology, see: iot/hardware-hacking
+```
+
+## Advanced NFC — MFKey32 and NTAG Emulation
+
+### MFKey32 — On-Device MIFARE Classic Key Recovery
+
+MFKey32 recovers unknown sector keys by replaying authentication nonces collected from a legitimate reader. Built into stock OFW — no PC or `mfoc` required for the cracking step.
+
+```
+When to use MFKey32 vs mfoc:
+  MFKey32: you have access to the live reader but card dump is partial
+           (attacker presents Flipper to the reader, logs nonces)
+  mfoc:    you have the physical card with at least one known default key,
+           no reader access needed (nested authentication attack on card)
+
+MFKey32 workflow:
+  1. NFC → Read card
+     If encrypted sectors exist: "Unknown keys — partial dump saved"
+     Note which sectors have unknown keys
+
+  2. NFC → Detect Reader  (labeled "Extract MF Keys" on OFW 1.0.0+)
+     Present Flipper to the legitimate reader ~5–10 times
+     Flipper emulates the target card UID and logs auth nonces from reader
+
+  3. Apps → NFC → MFKey → OK to start cracking
+     On-device runtime: seconds to ~30 min (depends on nonce count)
+     Recovered keys auto-merge into user dictionary (mf_classic_dict_user.nfc)
+
+  4. NFC → Saved → target card → Read  (retry with enriched dictionary)
+     Previously locked sectors now decrypt; save complete dump
+
+  5. NFC → Saved → full dump → Emulate
+     Flipper presents as the fully cloned card
+```
+
+### NTAG Emulation
+
+```
+Supported NTAG types: NTAG210, NTAG212, NTAG213 (180 B), NTAG215 (540 B), NTAG216 (924 B)
+NTAG215 is the Amiibo format — 540-byte user memory
+
+Workflow — clone an existing NTAG:
+  1. NFC → Read → hold Flipper near NTAG tag
+  2. Save dump as .nfc to SD:/nfc/
+  3. NFC → Saved → select → Emulate
+     Flipper presents the cloned UID + NDEF contents
+
+Workflow — create blank NTAG for write:
+  1. NFC → Add Manually → select NTAG type
+  2. Emulate the blank tag
+  3. Use NFC Tools (Android) to write NDEF payload into the emulated tag
+     (URL, WiFi credentials, vCard — useful for proximity phishing)
+
+Practical uses:
+  Clone access tags that use NTAG for door entry
+  Create poisoned NFC tags for physical phishing (URL → phishing site, WiFi auto-connect)
+  Emulate Amiibo figures for testing NFC reader implementations
+
+Limitations:
+  Password-protected NTAGs: emulation reproduces PWD state; cracking requires offline tooling
+  NFC counter: hardware read counter may not increment correctly across emulation cycles —
+    systems using the counter for authentication may detect emulation
+  Amiibo emulation on Nintendo Switch: rejected as of Switch firmware ~0.94.1+;
+    use real NTAG215 + Tagmo for reliable Amiibo cloning
+  UID writability on physical clones: real NTAG UIDs are factory-locked;
+    use NFC Magic app + "Magic NTAG" (writable UID) card for physical clone
+```
+
+## Flipper App (FAP) Ecosystem
+
+The Flipper Application Package (FAP) system allows community apps to run natively on the device. Key offensive apps beyond built-ins:
+
+```
+Discovery: lab.flipper.net/apps  |  flipc.org  |  github.com/djsime1/awesome-flipperzero
+
+Notable FAPs for red team use:
+
+  NFC Magic (AloneLiberty)
+    Writes to magic MIFARE cards (Gen1A / Gen2 / Gen4) including sector 0
+    Enables cloning UID-locked access cards to a physical card clone
+    Path: Apps → NFC → NFC Magic
+
+  BLE Spam (Willy-JL / Spooks4576 / ECTO-1A)
+    Cross-platform Bluetooth pairing popup flood (see BLE Spam section)
+    Path: Apps → Bluetooth → BLE Spam
+
+  Sub-GHz Bruteforcer (derskythe / xMasterX)
+    Fixed-code RF brute force with protocol presets (see Sub-GHz Brute Force)
+    Path: Apps → Sub-GHz → Sub-GHz Bruteforcer
+
+  PicoPass / iClass (bettse)
+    Reads and emulates HID iClass / PicoPass cards (13.56 MHz)
+    Fills the gap left by Flipper's built-in NFC (iClass is not MIFARE)
+    Path: Apps → NFC → PicoPass
+
+  FindMy Flipper (airy10 / MrMatter)
+    Broadcasts Apple Find My / Samsung SmartTag BLE beacons
+    Use cases: persistent location beaconing on target assets, tracker spoofing
+    Path: Apps → Bluetooth → FindMy Flipper
+
+  GPS NMEA (ezod)
+    Reads NMEA GPS sentences from a UART-connected GPS module
+    Pairs with Marauder wardrive for GPS-tagged captures
+    Path: Apps → GPIO → GPS NMEA
+
+  Evil Portal (bigbrodude6119 / leedave / Willy-JL)
+    Captive portal phishing via Wi-Fi Dev Board (standalone, not Marauder)
+    Serves custom HTML from SD:/apps_data/evil_portal/
+    Path: Apps → GPIO → Evil Portal
+
+  U2F (built-in / community)
+    Emulates a FIDO U2F hardware authenticator
+    Physical engagement use: insert Flipper into unlocked workstation,
+    use as U2F token to register attacker-controlled credential on target site
+
+  NFC Maker
+    Generates NDEF tags (URL, WiFi credential share, vCard, plain text)
+    Write to blank NTAG/MIFARE Ultralight for proximity phishing drops
+
+Install method:
+  lab.flipper.net/apps → click Install → requires Flipper connected via USB + qFlipper running
+  Manual: copy .fap file to SD:/apps/<category>/ and it appears in the menu
+```
+
 ## Operational Notes
 
 ```
 Detection surface:
   Sub-GHz replay: RF energy is detectable by spectrum analyzers; brief burst
+  Sub-GHz brute force: extended RF burst at fixed frequency — SDRs and RF IDS
+    (e.g., HackRF + SpectrumSpy) can fingerprint the sequential code pattern
   Deauth attacks: logged by enterprise Wi-Fi controllers (Cisco, Aruba)
     — shows as repeated deauth frames from a spoofed BSSID in RF logs
   Evil portal: visible as a new SSID in Wi-Fi surveys
   RFID read: passive read is undetectable; emulation logs card event on reader
   Bad USB: Windows Event Log 4688 (process creation), PowerShell event logs
+  BLE Spam: enterprise BLE monitoring (Cisco DNA Spaces, Zebra MotionWorks)
+    flags rapid MAC churn; iOS/Android generate BT event logs; iOS 17.2+
+    and patched Android silently drop malformed advertisements without crashing
+  GPIO UART Bridge: appears as USB serial device (VID:PID 0483:5740 STM32)
+    — visible in Windows Device Manager and Linux dmesg as /dev/ttyACM0
 
 Engagement use cases:
   Physical access simulation: RFID clone → test door access controls
@@ -380,9 +666,21 @@ Legal / authorized use only:
 
 - Flipper Zero firmware — `github.com/flipperdevices/flipperzero-firmware`
 - Unleashed firmware — `github.com/DarkFlippers/unleashed-firmware`
+- Momentum firmware (successor to Xtreme) — `github.com/Next-Flip/Momentum-Firmware`
 - RogueMaster firmware — `github.com/RogueMaster/flipperzero-firmware-wPlugins`
+- Xtreme firmware (archived) — `github.com/Flipper-XFW/Xtreme-Firmware`
 - Marauder firmware — `github.com/justcallmekoko/ESP32Marauder`
-- Marauder wiki — `github.com/justcallmekoko/ESP32Marauder/wiki`
+- Marauder wiki (CLI commands, wardrive) — `github.com/justcallmekoko/ESP32Marauder/wiki`
 - Flipper Bad USB payloads — `github.com/UberGuidoZ/Flipper`
-- Flipper RFID research — `github.com/RfidResearchGroup/proxmark3` (for advanced analysis)
+- BLE Spam FAP — `github.com/Willy-JL/Flipper-Zero-Bluetooth-Spam-App` (see Momentum/RogueMaster bundles)
+- apple_ble_spam_ofw (stock firmware) — `github.com/noproto/apple_ble_spam_ofw`
+- flipperzero-bruteforce (PC-side Sub-GHz generator) — `github.com/tobiabocchi/flipperzero-bruteforce`
+- Sub-GHz Bruteforcer FAP — `github.com/DarkFlippers/flipperzero-subbrute`
+- FlipperMfkey (MFKey32) — `github.com/noproto/FlipperMfkey`
+- NFC Magic FAP — `lab.flipper.net/apps` (search "NFC Magic")
+- FindMy Flipper — `github.com/MatthewKuKanich/FindMyFlipper`
+- Flipper RFID research — `github.com/RfidResearchGroup/proxmark3` (advanced RFID analysis)
+- Awesome Flipper Zero — `github.com/djsime1/awesome-flipperzero`
+- Flipper app catalog — `lab.flipper.net/apps`
+- Flipper GPIO documentation — `docs.flipper.net/zero/gpio-and-modules`
 - Wi-Fi Dev Board web flasher — `mango.sesh.ae`

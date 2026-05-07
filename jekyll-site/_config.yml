@@ -1,7 +1,7 @@
 title: Red Team Academy
 description: Personal offensive security training platform
 baseurl: ""
-url: ""
+url: "https://fizban-stack.github.io"
 permalink: pretty
 
 # Build settings

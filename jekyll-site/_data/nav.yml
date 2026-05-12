@@ -1258,3 +1258,15 @@
       title: "TA0010 — Exfiltration"
     - url: /mitre/ta0040-impact/
       title: "TA0040 — Impact"
+
+- num: "35"
+  title: Living Off the Land
+  pages:
+    - url: /living-off-the-land/
+      title: LOTL Overview & OS Guides
+    - url: /living-off-the-land/windows-lotl/
+      title: Windows — LOLBins & Red Team Use Cases
+    - url: /living-off-the-land/linux-lotl/
+      title: Linux — GTFOBins & Privilege Escalation
+    - url: /living-off-the-land/macos-lotl/
+      title: macOS — AppleScript, TCC & Built-in Tools

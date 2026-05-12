@@ -45,6 +45,9 @@ Burp Suite, FFUF, Feroxbuster, Nuclei, Katana, Nikto, Caido](/tools/web-tools)
 [09 // WIRELESS
 Wireless Attack Tools
 Aircrack-ng, Hcxtools, Hostapd-wpe, Bettercap, Kismet, Flipper Zero tooling](/tools/wireless-tools)
+[10 // ANDROID
+Android Red Team Tools
+ADB, Frida, Objection, drozer, apktool, jadx, MobSF, APKLeaks, reFlutter, Burp Android setup](/tools/android-tools)
 
 ## // Quick Reference — Tool Selection Matrix
 
@@ -62,6 +65,10 @@ Aircrack-ng, Hcxtools, Hostapd-wpe, Bettercap, Kismet, Flipper Zero tooling](/to
 | Payload Evasion | Donut + Garble | ScareCrow / Freeze | MEDIUM |
 | Web Fuzzing | FFUF | Feroxbuster / Gobuster | MEDIUM |
 | Password Cracking | Hashcat (GPU) | John (CPU / rules) | LOW |
+| Android APK Analysis | MobSF + jadx | APKLeaks + Androguard | LOW |
+| Android SSL Bypass | Objection (Frida) | apktool NSC patch | MEDIUM |
+| Android Exploitation | drozer | adb am start | LOW |
+| Android Traffic Intercept | Burp + Frida | reFlutter (Flutter) | MEDIUM |
 
 ## // Installation Notes
 

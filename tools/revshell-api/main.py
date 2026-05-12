@@ -12,8 +12,16 @@ from generators import REGISTRY, SUPPORTED_LANGUAGES
 from generators.base import ShellOptions
 from generators.c2profile import SUPPORTED_PLATFORMS, generate_profile
 from generators.encode import SUPPORTED_TECHNIQUES, encode_command
+from generators.harvest import SUPPORTED_TECHNIQUES as HARVEST_TECHNIQUES, generate_harvest
+from generators.redirector import generate_redirector
 
 _LHOST_RE = re.compile(r"^[a-zA-Z0-9.\-:\[\]]+$")  # brackets for IPv6
+
+
+def _validate_lhost(v: str) -> str:
+    if not _LHOST_RE.match(v):
+        raise ValueError("lhost must contain only alphanumeric characters, dots, hyphens, colons, or brackets")
+    return v
 
 ARCH_VALUES = Literal["x86", "x64", "arm", "arm64", "mips", "any"]
 
@@ -45,9 +53,7 @@ class ShellRequest(BaseModel):
     @field_validator("lhost")
     @classmethod
     def validate_lhost(cls, v: str) -> str:
-        if not _LHOST_RE.match(v):
-            raise ValueError("lhost must contain only alphanumeric characters, dots, hyphens, colons, or brackets")
-        return v
+        return _validate_lhost(v)
 
     @field_validator("language")
     @classmethod
@@ -76,6 +82,50 @@ class ShellRequest(BaseModel):
                 f"Unsupported C2 platform '{v}'. Supported: {', '.join(SUPPORTED_PLATFORMS)}"
             )
         return v
+
+
+class RedirectorRequest(BaseModel):
+    platform: str = Field(..., description=f"C2 platform to mimic: {', '.join(SUPPORTED_PLATFORMS)}")
+    lhost: str = Field(..., min_length=1, description="C2 server host")
+    lport: int = Field(..., ge=1, le=65535, description="C2 server port")
+    decoy: str = Field(..., min_length=1, description="Decoy URL for non-matching traffic")
+
+    @field_validator("lhost")
+    @classmethod
+    def validate_lhost(cls, v: str) -> str:
+        return _validate_lhost(v)
+
+    @field_validator("platform")
+    @classmethod
+    def validate_platform(cls, v: str) -> str:
+        if v not in SUPPORTED_PLATFORMS:
+            raise ValueError(f"Unsupported platform '{v}'. Supported: {', '.join(SUPPORTED_PLATFORMS)}")
+        return v
+
+
+class RedirectorResponse(BaseModel):
+    platform: str
+    apache_htaccess: str
+    nginx_config: str
+
+
+class HarvestRequest(BaseModel):
+    technique: str = Field(..., description=f"Harvest technique: {', '.join(HARVEST_TECHNIQUES)}")
+    outfile: str = Field(default="C:\\Windows\\Temp\\lsass.dmp", description="Output path for the dump file")
+    obfuscate: bool = Field(default=True, description="Apply PS obfuscation")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in HARVEST_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(HARVEST_TECHNIQUES)}")
+        return v
+
+
+class HarvestResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
 
 
 class C2ProfileResponse(BaseModel):
@@ -199,6 +249,53 @@ def c2profile_get(
         havoc_profile=profile.havoc_profile,
         cobalt_strike_profile=profile.cobalt_strike_profile,
     )
+
+
+@app.get("/redirector", response_model=RedirectorResponse)
+def redirector_get(
+    platform: Annotated[str, Query(description=f"C2 platform: {', '.join(SUPPORTED_PLATFORMS)}")],
+    lhost: Annotated[str, Query(min_length=1, description="C2 server host")],
+    lport: Annotated[int, Query(ge=1, le=65535, description="C2 server port")],
+    decoy: Annotated[str, Query(min_length=1, description="Decoy URL for non-matching traffic")],
+):
+    if not _LHOST_RE.match(lhost):
+        raise HTTPException(status_code=422, detail="Invalid lhost.")
+    if platform not in SUPPORTED_PLATFORMS:
+        raise HTTPException(status_code=422, detail=f"Unsupported platform '{platform}'. Supported: {', '.join(SUPPORTED_PLATFORMS)}")
+    result = generate_redirector(platform, lhost, lport, decoy)
+    return RedirectorResponse(
+        platform=result.platform,
+        apache_htaccess=result.apache_htaccess,
+        nginx_config=result.nginx_config,
+    )
+
+
+@app.post("/redirector", response_model=RedirectorResponse)
+def redirector_post(req: RedirectorRequest):
+    result = generate_redirector(req.platform, req.lhost, req.lport, req.decoy)
+    return RedirectorResponse(
+        platform=result.platform,
+        apache_htaccess=result.apache_htaccess,
+        nginx_config=result.nginx_config,
+    )
+
+
+@app.get("/harvest", response_model=HarvestResponse)
+def harvest_get(
+    technique: Annotated[str, Query(description=f"Harvest technique: {', '.join(HARVEST_TECHNIQUES)}")],
+    outfile: Annotated[str, Query(description="Output path for dump file")] = "C:\\Windows\\Temp\\lsass.dmp",
+    obfuscate: Annotated[bool, Query(description="Apply PS obfuscation")] = True,
+):
+    if technique not in HARVEST_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(HARVEST_TECHNIQUES)}")
+    result = generate_harvest(technique, outfile, obfuscate)
+    return HarvestResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.post("/harvest", response_model=HarvestResponse)
+def harvest_post(req: HarvestRequest):
+    result = generate_harvest(req.technique, req.outfile, req.obfuscate)
+    return HarvestResponse(command=result.command, technique=result.technique, notes=result.notes)
 
 
 if __name__ == "__main__":

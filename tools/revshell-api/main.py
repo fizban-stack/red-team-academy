@@ -7,16 +7,17 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
-_LHOST_RE = re.compile(r"^[a-zA-Z0-9.\-:]+$")
-
 from generators import REGISTRY, SUPPORTED_LANGUAGES
+from generators.base import ShellOptions
+
+_LHOST_RE = re.compile(r"^[a-zA-Z0-9.\-:\[\]]+$")  # brackets for IPv6
 
 ARCH_VALUES = Literal["x86", "x64", "arm", "arm64", "mips", "any"]
 
 app = FastAPI(
     title="RevShell API",
     description="Reverse shell command generator for authorized red team exercises.",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -32,13 +33,15 @@ class ShellRequest(BaseModel):
     lport: int = Field(..., ge=1, le=65535, description="Listener port (1-65535)")
     language: str = Field(..., description="Shell language")
     arch: ARCH_VALUES = Field(default="any", description="Target architecture")
-    obfuscate: bool = Field(default=True, description="Randomize variable names and variants")
+    obfuscate: bool = Field(default=True, description="Apply variable randomisation and deep obfuscation")
+    retry: bool = Field(default=False, description="Wrap payload in reconnect loop (30s interval)")
+    egress_port: int | None = Field(default=None, ge=1, le=65535, description="Egress port for download cradles (defaults to lport)")
 
     @field_validator("lhost")
     @classmethod
     def validate_lhost(cls, v: str) -> str:
         if not _LHOST_RE.match(v):
-            raise ValueError("lhost must contain only alphanumeric characters, dots, hyphens, or colons")
+            raise ValueError("lhost must contain only alphanumeric characters, dots, hyphens, colons, or brackets")
         return v
 
     @field_validator("language")
@@ -59,12 +62,22 @@ class ShellResponse(BaseModel):
     lhost: str
     lport: int
     variant: str
+    listener: str | None = None
+    tty_upgrade: str | None = None
+    msf_compat: str | None = None
 
 
 def _build_shell(req: ShellRequest) -> ShellResponse:
-    generator_cls = REGISTRY[req.language]
-    generator = generator_cls()
-    result = generator.generate(req.lhost, req.lport, req.arch, req.obfuscate)
+    opts = ShellOptions(
+        lhost=req.lhost,
+        lport=req.lport,
+        arch=req.arch,
+        obfuscate=req.obfuscate,
+        retry=req.retry,
+        egress_port=req.egress_port,
+    )
+    generator = REGISTRY[req.language]()
+    result = generator.generate(opts)
     return ShellResponse(
         command=result.command,
         language=result.language,
@@ -72,12 +85,15 @@ def _build_shell(req: ShellRequest) -> ShellResponse:
         lhost=req.lhost,
         lport=req.lport,
         variant=result.variant,
+        listener=result.listener,
+        tty_upgrade=result.tty_upgrade,
+        msf_compat=result.msf_compat,
     )
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 @app.get("/languages")
@@ -91,7 +107,9 @@ def generate_get(
     lport: Annotated[int, Query(ge=1, le=65535, description="Listener port")],
     language: Annotated[str, Query(description="Shell language")],
     arch: Annotated[ARCH_VALUES, Query(description="Target architecture")] = "any",
-    obfuscate: Annotated[bool, Query(description="Randomize names/variants")] = True,
+    obfuscate: Annotated[bool, Query(description="Apply obfuscation")] = True,
+    retry: Annotated[bool, Query(description="Wrap in reconnect loop")] = False,
+    egress_port: Annotated[int | None, Query(ge=1, le=65535, description="Egress port for cradles")] = None,
 ):
     normalized = language.lower()
     if normalized not in REGISTRY:
@@ -99,7 +117,10 @@ def generate_get(
             status_code=422,
             detail=f"Unsupported language '{language}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}",
         )
-    req = ShellRequest(lhost=lhost, lport=lport, language=normalized, arch=arch, obfuscate=obfuscate)
+    req = ShellRequest(
+        lhost=lhost, lport=lport, language=normalized, arch=arch,
+        obfuscate=obfuscate, retry=retry, egress_port=egress_port,
+    )
     return _build_shell(req)
 
 

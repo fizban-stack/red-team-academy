@@ -1,25 +1,39 @@
+from .awk import AwkGenerator
 from .bash import BashGenerator
-from .python_shell import PythonGenerator
+from .cradle import CradleGenerator
+from .csharp import CSharpGenerator
+from .golang import GolangGenerator
+from .lolbins import LOLBinsGenerator
+from .lua import LuaGenerator
+from .netcat import NetcatGenerator
+from .nodejs import NodeJSGenerator
+from .openssl import OpenSSLGenerator
 from .perl import PerlGenerator
 from .php import PHPGenerator
-from .ruby import RubyGenerator
-from .netcat import NetcatGenerator
 from .powershell import PowerShellGenerator
-from .awk import AwkGenerator
-from .lua import LuaGenerator
+from .python_shell import PythonGenerator
+from .ruby import RubyGenerator
+from .socat import SocatGenerator
 
 REGISTRY: dict[str, type] = {
+    "awk": AwkGenerator,
     "bash": BashGenerator,
-    "python3": PythonGenerator,
+    "cradle": CradleGenerator,
+    "csharp": CSharpGenerator,
+    "golang": GolangGenerator,
+    "lolbins": LOLBinsGenerator,
+    "lua": LuaGenerator,
+    "nc": NetcatGenerator,
+    "netcat": NetcatGenerator,
+    "nodejs": NodeJSGenerator,
+    "openssl": OpenSSLGenerator,
     "perl": PerlGenerator,
     "php": PHPGenerator,
-    "ruby": RubyGenerator,
-    "netcat": NetcatGenerator,
-    "nc": NetcatGenerator,
     "powershell": PowerShellGenerator,
     "ps": PowerShellGenerator,
-    "awk": AwkGenerator,
-    "lua": LuaGenerator,
+    "python3": PythonGenerator,
+    "ruby": RubyGenerator,
+    "socat": SocatGenerator,
 }
 
 SUPPORTED_LANGUAGES = sorted(REGISTRY.keys())

@@ -13,9 +13,11 @@ from generators.base import ShellOptions
 from generators.c2profile import SUPPORTED_PLATFORMS, generate_profile
 from generators.encode import SUPPORTED_TECHNIQUES, encode_command
 from generators.adattack import SUPPORTED_TECHNIQUES as ADATTACK_TECHNIQUES, generate_adattack
+from generators.evasion import SUPPORTED_TECHNIQUES as EVASION_TECHNIQUES, generate_evasion
 from generators.harvest import SUPPORTED_TECHNIQUES as HARVEST_TECHNIQUES, generate_harvest
 from generators.lateral import SUPPORTED_TECHNIQUES as LATERAL_TECHNIQUES, generate_lateral
 from generators.persist import SUPPORTED_TECHNIQUES as PERSIST_TECHNIQUES, generate_persist
+from generators.privesc import SUPPORTED_TECHNIQUES as PRIVESC_TECHNIQUES, generate_privesc
 from generators.redirector import generate_redirector
 
 _LHOST_RE = re.compile(r"^[a-zA-Z0-9.\-:\[\]]+$")  # brackets for IPv6
@@ -193,6 +195,45 @@ class ADAttackRequest(BaseModel):
 
 
 class ADAttackResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
+
+
+class PrivescRequest(BaseModel):
+    technique: str = Field(..., description=f"PrivEsc technique: {', '.join(PRIVESC_TECHNIQUES)}")
+    payload: str = Field(default="C:\\Windows\\Temp\\payload.exe", description="Payload path or command to run after escalation")
+    name: str = Field(default="WindowsUpdate", description="Service / task name used by applicable techniques")
+    obfuscate: bool = Field(default=True, description="Apply PS obfuscation")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in PRIVESC_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(PRIVESC_TECHNIQUES)}")
+        return v
+
+
+class PrivescResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
+
+
+class EvasionRequest(BaseModel):
+    technique: str = Field(..., description=f"Evasion technique: {', '.join(EVASION_TECHNIQUES)}")
+    payload: str = Field(default="powershell.exe", description="Command / script to execute or encode")
+    obfuscate: bool = Field(default=True, description="Apply PS obfuscation")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in EVASION_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(EVASION_TECHNIQUES)}")
+        return v
+
+
+class EvasionResponse(BaseModel):
     command: str
     technique: str
     notes: str
@@ -430,6 +471,43 @@ def adattack_get(
 def adattack_post(req: ADAttackRequest):
     result = generate_adattack(req.technique, req.domain, req.dc_host, req.username, req.password, req.hash_nt, req.outfile, req.obfuscate)
     return ADAttackResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.get("/privesc", response_model=PrivescResponse)
+def privesc_get(
+    technique: Annotated[str, Query(description=f"PrivEsc technique: {', '.join(PRIVESC_TECHNIQUES)}")],
+    payload: Annotated[str, Query(description="Payload path or command after escalation")] = "C:\\Windows\\Temp\\payload.exe",
+    name: Annotated[str, Query(description="Service / task name")] = "WindowsUpdate",
+    obfuscate: Annotated[bool, Query(description="Apply PS obfuscation")] = True,
+):
+    if technique not in PRIVESC_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(PRIVESC_TECHNIQUES)}")
+    result = generate_privesc(technique, payload, name, obfuscate)
+    return PrivescResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.post("/privesc", response_model=PrivescResponse)
+def privesc_post(req: PrivescRequest):
+    result = generate_privesc(req.technique, req.payload, req.name, req.obfuscate)
+    return PrivescResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.get("/evasion", response_model=EvasionResponse)
+def evasion_get(
+    technique: Annotated[str, Query(description=f"Evasion technique: {', '.join(EVASION_TECHNIQUES)}")],
+    payload: Annotated[str, Query(description="Command / script to execute or encode")] = "powershell.exe",
+    obfuscate: Annotated[bool, Query(description="Apply PS obfuscation")] = True,
+):
+    if technique not in EVASION_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(EVASION_TECHNIQUES)}")
+    result = generate_evasion(technique, payload, obfuscate)
+    return EvasionResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.post("/evasion", response_model=EvasionResponse)
+def evasion_post(req: EvasionRequest):
+    result = generate_evasion(req.technique, req.payload, req.obfuscate)
+    return EvasionResponse(command=result.command, technique=result.technique, notes=result.notes)
 
 
 if __name__ == "__main__":

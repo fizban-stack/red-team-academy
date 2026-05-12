@@ -12,7 +12,10 @@ from generators import REGISTRY, SUPPORTED_LANGUAGES
 from generators.base import ShellOptions
 from generators.c2profile import SUPPORTED_PLATFORMS, generate_profile
 from generators.encode import SUPPORTED_TECHNIQUES, encode_command
+from generators.adattack import SUPPORTED_TECHNIQUES as ADATTACK_TECHNIQUES, generate_adattack
 from generators.harvest import SUPPORTED_TECHNIQUES as HARVEST_TECHNIQUES, generate_harvest
+from generators.lateral import SUPPORTED_TECHNIQUES as LATERAL_TECHNIQUES, generate_lateral
+from generators.persist import SUPPORTED_TECHNIQUES as PERSIST_TECHNIQUES, generate_persist
 from generators.redirector import generate_redirector
 
 _LHOST_RE = re.compile(r"^[a-zA-Z0-9.\-:\[\]]+$")  # brackets for IPv6
@@ -123,6 +126,73 @@ class HarvestRequest(BaseModel):
 
 
 class HarvestResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
+
+
+class PersistRequest(BaseModel):
+    technique: str = Field(..., description=f"Persistence technique: {', '.join(PERSIST_TECHNIQUES)}")
+    payload: str = Field(default="C:\\Windows\\Temp\\payload.exe", description="Path to the payload on the target")
+    name: str = Field(default="WindowsUpdater", description="Registry value / task / service name")
+    obfuscate: bool = Field(default=True, description="Apply PS obfuscation")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in PERSIST_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(PERSIST_TECHNIQUES)}")
+        return v
+
+
+class PersistResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
+
+
+class LateralRequest(BaseModel):
+    technique: str = Field(..., description=f"Lateral movement technique: {', '.join(LATERAL_TECHNIQUES)}")
+    target: str = Field(default="TARGET_HOST", description="Target hostname or IP")
+    command: str = Field(default="whoami", description="Command to execute on the target")
+    username: str = Field(default="DOMAIN\\USER", description="Username (DOMAIN\\user format)")
+    password: str = Field(default="PASS", description="Plaintext password")
+    hash_nt: str = Field(default="", description="NT hash for pass-the-hash techniques (32-char hex)")
+    obfuscate: bool = Field(default=True, description="Apply PS obfuscation")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in LATERAL_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(LATERAL_TECHNIQUES)}")
+        return v
+
+
+class LateralResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
+
+
+class ADAttackRequest(BaseModel):
+    technique: str = Field(..., description=f"AD attack technique: {', '.join(ADATTACK_TECHNIQUES)}")
+    domain: str = Field(default="DOMAIN.LOCAL", description="Target AD domain FQDN")
+    dc_host: str = Field(default="DC01", description="Domain controller hostname")
+    username: str = Field(default="USER", description="Username")
+    password: str = Field(default="PASS", description="Plaintext password")
+    hash_nt: str = Field(default="", description="NT hash (32-char hex)")
+    outfile: str = Field(default="C:\\Windows\\Temp\\ad_out.txt", description="Output file path on target")
+    obfuscate: bool = Field(default=True, description="Apply PS obfuscation")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in ADATTACK_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(ADATTACK_TECHNIQUES)}")
+        return v
+
+
+class ADAttackResponse(BaseModel):
     command: str
     technique: str
     notes: str
@@ -296,6 +366,70 @@ def harvest_get(
 def harvest_post(req: HarvestRequest):
     result = generate_harvest(req.technique, req.outfile, req.obfuscate)
     return HarvestResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.get("/persist", response_model=PersistResponse)
+def persist_get(
+    technique: Annotated[str, Query(description=f"Persistence technique: {', '.join(PERSIST_TECHNIQUES)}")],
+    payload: Annotated[str, Query(description="Payload path on target")] = "C:\\Windows\\Temp\\payload.exe",
+    name: Annotated[str, Query(description="Registry value / task / service name")] = "WindowsUpdater",
+    obfuscate: Annotated[bool, Query(description="Apply PS obfuscation")] = True,
+):
+    if technique not in PERSIST_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(PERSIST_TECHNIQUES)}")
+    result = generate_persist(technique, payload, name, obfuscate)
+    return PersistResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.post("/persist", response_model=PersistResponse)
+def persist_post(req: PersistRequest):
+    result = generate_persist(req.technique, req.payload, req.name, req.obfuscate)
+    return PersistResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.get("/lateral", response_model=LateralResponse)
+def lateral_get(
+    technique: Annotated[str, Query(description=f"Lateral movement technique: {', '.join(LATERAL_TECHNIQUES)}")],
+    target: Annotated[str, Query(description="Target hostname or IP")] = "TARGET_HOST",
+    command: Annotated[str, Query(description="Command to execute on target")] = "whoami",
+    username: Annotated[str, Query(description="Username")] = "DOMAIN\\USER",
+    password: Annotated[str, Query(description="Plaintext password")] = "PASS",
+    hash_nt: Annotated[str, Query(description="NT hash for PTH techniques")] = "",
+    obfuscate: Annotated[bool, Query(description="Apply PS obfuscation")] = True,
+):
+    if technique not in LATERAL_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(LATERAL_TECHNIQUES)}")
+    result = generate_lateral(technique, target, command, username, password, hash_nt, obfuscate)
+    return LateralResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.post("/lateral", response_model=LateralResponse)
+def lateral_post(req: LateralRequest):
+    result = generate_lateral(req.technique, req.target, req.command, req.username, req.password, req.hash_nt, req.obfuscate)
+    return LateralResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.get("/adattack", response_model=ADAttackResponse)
+def adattack_get(
+    technique: Annotated[str, Query(description=f"AD attack technique: {', '.join(ADATTACK_TECHNIQUES)}")],
+    domain: Annotated[str, Query(description="Target AD domain FQDN")] = "DOMAIN.LOCAL",
+    dc_host: Annotated[str, Query(description="Domain controller hostname")] = "DC01",
+    username: Annotated[str, Query(description="Username")] = "USER",
+    password: Annotated[str, Query(description="Plaintext password")] = "PASS",
+    hash_nt: Annotated[str, Query(description="NT hash (32-char hex)")] = "",
+    outfile: Annotated[str, Query(description="Output file path on target")] = "C:\\Windows\\Temp\\ad_out.txt",
+    obfuscate: Annotated[bool, Query(description="Apply PS obfuscation")] = True,
+):
+    if technique not in ADATTACK_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(ADATTACK_TECHNIQUES)}")
+    result = generate_adattack(technique, domain, dc_host, username, password, hash_nt, outfile, obfuscate)
+    return ADAttackResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+@app.post("/adattack", response_model=ADAttackResponse)
+def adattack_post(req: ADAttackRequest):
+    result = generate_adattack(req.technique, req.domain, req.dc_host, req.username, req.password, req.hash_nt, req.outfile, req.obfuscate)
+    return ADAttackResponse(command=result.command, technique=result.technique, notes=result.notes)
 
 
 if __name__ == "__main__":

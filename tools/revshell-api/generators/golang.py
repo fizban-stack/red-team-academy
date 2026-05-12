@@ -1,5 +1,5 @@
 import base64
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler, build_listener_setup
 
 
 class GolangGenerator(ShellGenerator):
@@ -30,6 +30,7 @@ class GolangGenerator(ShellGenerator):
             listener=listener,
             tty_upgrade=TTY_UPGRADE,
             msf_compat=msf_handler("payload/cmd/unix/reverse", opts.lhost, opts.lport),
+            listener_setup=build_listener_setup(opts.lhost, opts.lport),
         )
 
     def _build_source(self, opts: ShellOptions, names: RandomNamePool | None) -> str:

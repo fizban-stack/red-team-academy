@@ -1,5 +1,5 @@
 import random
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler, LISTENER_FMT
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler, LISTENER_FMT, build_listener_setup
 
 _VARIANTS = ["tcpsocket", "socket_exec"]
 
@@ -19,6 +19,7 @@ class RubyGenerator(ShellGenerator):
             listener=LISTENER_FMT.format(lport=opts.lport),
             tty_upgrade=TTY_UPGRADE,
             msf_compat=msf_handler("payload/cmd/unix/reverse_ruby", opts.lhost, opts.lport),
+            listener_setup=build_listener_setup(opts.lhost, opts.lport),
         )
 
     def _tcpsocket(self, opts: ShellOptions, names: RandomNamePool | None) -> str:

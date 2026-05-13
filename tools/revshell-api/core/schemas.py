@@ -16,6 +16,7 @@ from generators.encode import SUPPORTED_TECHNIQUES as ENCODE_TECHNIQUES
 from generators.adattack import SUPPORTED_TECHNIQUES as ADATTACK_TECHNIQUES
 from generators.anti_forensics import SUPPORTED_TECHNIQUES as ANTI_FORENSICS_TECHNIQUES
 from generators.evasion import SUPPORTED_TECHNIQUES as EVASION_TECHNIQUES
+from generators.evasion_stack import SUPPORTED_EDRS
 from generators.sandbox_evasion import SUPPORTED_TECHNIQUES as SANDBOX_EVASION_TECHNIQUES
 from generators.harvest import SUPPORTED_TECHNIQUES as HARVEST_TECHNIQUES
 from generators.initial_access import SUPPORTED_TECHNIQUES as INITIAL_ACCESS_TECHNIQUES
@@ -549,3 +550,54 @@ class ChainResponse(BaseModel):
     lport: int
     steps: list[ChainStep]
     total_steps: int
+
+
+# ── /stack — EDR-aware evasion stack orchestrator ─────────────────────────────
+
+class StackRequest(BaseModel):
+    edr: str = Field(..., description=f"Target EDR vendor: {', '.join(SUPPORTED_EDRS)}")
+    lhost: str = Field(..., min_length=1)
+    lport: int = Field(..., ge=1, le=65535)
+    language: str = Field(default="powershell", description="Shell language for the payload step")
+    obfuscate: bool = Field(default=True)
+    include_anti_forensics: bool = Field(default=True)
+    include_sandbox_evasion: bool = Field(default=True)
+    seed: int | None = Field(default=None, description="Deterministic seed for reproducible output")
+
+    @field_validator("edr")
+    @classmethod
+    def _ve(cls, v: str) -> str:
+        if v not in SUPPORTED_EDRS:
+            raise ValueError(f"Unsupported EDR '{v}'. Supported: {', '.join(SUPPORTED_EDRS)}")
+        return v
+
+    @field_validator("lhost")
+    @classmethod
+    def _vl(cls, v: str) -> str:
+        return validate_lhost(v)
+
+    @field_validator("language")
+    @classmethod
+    def _vlang(cls, v: str) -> str:
+        normalized = v.lower()
+        if normalized not in REGISTRY:
+            raise ValueError(f"Unsupported language '{v}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}")
+        return normalized
+
+
+class StackEntryResponse(BaseModel):
+    step: int
+    module: str
+    technique: str
+    command: str
+    rationale: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+
+
+class StackResponse(BaseModel):
+    edr: str
+    listener: str
+    chain: list[StackEntryResponse]
+    total_steps: int
+    summary: str

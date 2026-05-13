@@ -1,5 +1,53 @@
 # Changelog
 
+## v4.3.0 — 2026-05-13
+
+### Elite tradecraft (12 → 43 evasion techniques)
+
+12 new advanced techniques added to `/evasion`:
+
+- **`rop_sleep`** — ROP-chain sleep mask via NtContinue. Defeats memory scanners and callstack-based sleep detection.
+- **`set_windows_hook_loader`** — SetWindowsHookEx DLL injection. Available since Windows 3.0 and many EDRs still trip over it.
+- **`com_rot_injection`** — COM Running Object Table abuse. Subtle persistence + lateral via Office automation hooks.
+- **`environment_keying`** — Payload key derived from BIOS serial + manufacturer + user domain. Sandboxes decrypt to garbage.
+- **`in_memory_pe_loader`** — Reflective PE loader stub (Assembly.Load + manual mapping references).
+- **`dll_sideload`** — Proxy-DLL template for sideloading via signed binaries (OneDrive, dbghelp, etc.). hijacklibs.net referenced.
+- **`apc_injection`** — Classic NtQueueApcThread injection template.
+- **`early_bird_apc`** — APC queued before main thread runs; bypasses userland hooks loaded post-init.
+- **`heaven_gate`** — WoW64 → 64-bit native syscall pivot. Bypasses EDRs that only hook 64-bit NTDLL.
+- **`process_ghosting`** — File deleted before section is mapped (Elastic, 2021).
+- **`process_doppelganging`** — TxF-based hollowing; on-disk file unchanged, in-memory section is the payload (Black Hat EU 2017).
+- **`process_herpaderping`** — Write malicious PE → map → overwrite with benign PE → CreateProcess (jxy-s, 2020).
+
+### New endpoint: `/stack` — EDR-aware orchestrator
+
+Given `{edr, lhost, lport, language}`, returns an ordered evasion playbook tuned
+to the named vendor. Each step ships with a rationale.
+
+5 EDR profiles:
+- `defender` — patchless AMSI/ETW, WLDP downgrade, NTDLL unhook, PPID spoof
+- `crowdstrike` — indirect syscalls (clean callstacks), Early-Bird APC, ROP sleep, ETW patchless
+- `sentinelone` — patchless AMSI, NTDLL unhook, ROP sleep, module stomping
+- `carbonblack` — DLL sideloading, classic AMSI/ETW bypass, PPID spoof
+- `generic` — vendor-agnostic best effort
+
+Flags: `include_anti_forensics`, `include_sandbox_evasion`, `seed`. Order is
+load-bearing: sandbox gates → evasion bypasses → payload → cleanup. Output is
+deterministic per `(edr, options)`.
+
+### Tests
+
+- 225 revshell-api tests (was 173 → +52)
+- New: `test_evasion_elite.py` (13 tests covering each new technique + metadata)
+- New: `test_stack.py` (15 tests covering builder, every EDR profile, ordering invariants, flags, seed determinism, lhost validation)
+
+### Docs
+
+- README documents `/stack` with example request, response, and the full
+  per-EDR profile table.
+
+---
+
 ## v4.2.0 — 2026-05-13
 
 ### Evasion catalog growth (12 → 31 techniques)

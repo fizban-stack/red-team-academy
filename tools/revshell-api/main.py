@@ -23,6 +23,7 @@ from routers import (
     linux_postex as linux_router,
     reporting as reporting_router,
     shell as shell_router,
+    stack as stack_router,
     webshell as webshell_router,
     windows_postex as windows_router,
 )
@@ -82,6 +83,7 @@ app.include_router(cloud_router.router)
 app.include_router(webshell_router.router)
 app.include_router(initial_access_router.router)
 app.include_router(evasion_extended_router.router)
+app.include_router(stack_router.router)
 app.include_router(chain_router.router)
 app.include_router(reporting_router.router)
 

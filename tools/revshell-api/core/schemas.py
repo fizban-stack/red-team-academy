@@ -17,6 +17,7 @@ from generators.adattack import SUPPORTED_TECHNIQUES as ADATTACK_TECHNIQUES
 from generators.anti_forensics import SUPPORTED_TECHNIQUES as ANTI_FORENSICS_TECHNIQUES
 from generators.evasion import SUPPORTED_TECHNIQUES as EVASION_TECHNIQUES
 from generators.evasion_stack import SUPPORTED_EDRS
+from generators.c2_channels import SUPPORTED_CHANNELS as C2_CHANNELS
 from generators.sandbox_evasion import SUPPORTED_TECHNIQUES as SANDBOX_EVASION_TECHNIQUES
 from generators.harvest import SUPPORTED_TECHNIQUES as HARVEST_TECHNIQUES
 from generators.initial_access import SUPPORTED_TECHNIQUES as INITIAL_ACCESS_TECHNIQUES
@@ -664,3 +665,84 @@ class RecommendResponse(BaseModel):
     constraints_summary: str
     recommendations: list[RecommendationItem]
     total: int
+
+
+# ── /c2_channel ───────────────────────────────────────────────────────────────
+
+class C2ChannelRequest(BaseModel):
+    channel: str = Field(..., description=f"C2 transport channel: {', '.join(C2_CHANNELS)}")
+    lhost: str = Field(..., min_length=1, description="Operator listener IP or hostname")
+    lport: int = Field(default=443, ge=1, le=65535, description="Operator listener port")
+    options: dict = Field(default_factory=dict, description="Channel-specific options (doh_provider, cdn_host, bucket, etc.)")
+
+    @field_validator("lhost")
+    @classmethod
+    def _v(cls, v: str) -> str:
+        return validate_lhost(v)
+
+    @field_validator("channel")
+    @classmethod
+    def _vc(cls, v: str) -> str:
+        if v not in C2_CHANNELS:
+            raise ValueError(f"Unsupported channel '{v}'. Supported: {', '.join(C2_CHANNELS)}")
+        return v
+
+
+class C2ChannelResponse(BaseModel):
+    channel: str
+    implant_config: str
+    listener_setup: str
+    notes: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+    detections: list[str] = []
+
+
+# ── /stack/diff ───────────────────────────────────────────────────────────────
+
+class StackDiffRequest(BaseModel):
+    edr_a: str = Field(..., description=f"First EDR to compare: {', '.join(SUPPORTED_EDRS)}")
+    edr_b: str = Field(..., description=f"Second EDR to compare: {', '.join(SUPPORTED_EDRS)}")
+    lhost: str = Field(default="192.168.1.100")
+    lport: int = Field(default=4444, ge=1, le=65535)
+    language: str = Field(default="powershell")
+    obfuscate: bool = Field(default=True)
+
+    @field_validator("edr_a", "edr_b")
+    @classmethod
+    def _ve(cls, v: str) -> str:
+        if v not in SUPPORTED_EDRS:
+            raise ValueError(f"Unsupported EDR '{v}'. Supported: {', '.join(SUPPORTED_EDRS)}")
+        return v
+
+    @field_validator("lhost")
+    @classmethod
+    def _vl(cls, v: str) -> str:
+        return validate_lhost(v)
+
+    @field_validator("language")
+    @classmethod
+    def _vlang(cls, v: str) -> str:
+        normalized = v.lower()
+        if normalized not in REGISTRY:
+            raise ValueError(f"Unsupported language '{v}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}")
+        return normalized
+
+
+class DiffTechniqueItem(BaseModel):
+    technique: str
+    module: str
+    rationale_a: str | None = None
+    rationale_b: str | None = None
+
+
+class StackDiffResponse(BaseModel):
+    edr_a: str
+    edr_b: str
+    shared: list[DiffTechniqueItem]
+    only_a: list[DiffTechniqueItem]
+    only_b: list[DiffTechniqueItem]
+    summary: str
+    shared_count: int
+    only_a_count: int
+    only_b_count: int

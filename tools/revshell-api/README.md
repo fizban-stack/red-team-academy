@@ -307,6 +307,58 @@ e.g. for CrowdStrike with callstack inspection, `indirect_syscalls`,
 
 Scoring is deterministic, so this endpoint is safe to call during planning.
 
+## Modern C2 channels — `/c2_channel`
+
+Generate implant configuration and listener setup for alternative C2 transports:
+
+```bash
+# List available channels
+curl http://localhost:8080/c2_channel
+
+# DNS-over-HTTPS C2 profile
+curl -X POST http://localhost:8080/c2_channel \
+  -H "Content-Type: application/json" \
+  -d '{"channel":"doh_c2","lhost":"10.0.0.5","lport":53,"options":{"doh_provider":"cloudflare","c2_domain":"beacon.example.com"}}'
+
+# WebSocket C2 profile
+curl -X POST http://localhost:8080/c2_channel \
+  -H "Content-Type: application/json" \
+  -d '{"channel":"websocket_c2","lhost":"10.0.0.5","lport":443}'
+
+# Quick GET variant
+curl "http://localhost:8080/c2_channel/named_pipe_c2?lhost=10.0.0.5&lport=445"
+```
+
+Supported channels: `doh_c2`, `domain_fronting`, `named_pipe_c2`, `icmp_tunnel`,
+`websocket_c2`, `cloud_blend_discord`, `cloud_blend_s3`, `cloud_blend_github`.
+
+Each response includes `implant_config`, `listener_setup`, `notes`, MITRE `techniques`,
+`risk`, and blue-team `detections`.
+
+---
+
+## EDR stack comparison — `/stack/diff`
+
+Compare two EDR evasion stacks side-by-side to understand overlap and gaps:
+
+```bash
+curl -X POST http://localhost:8080/stack/diff \
+  -H "Content-Type: application/json" \
+  -d '{"edr_a":"defender","edr_b":"crowdstrike","lhost":"10.0.0.5","lport":4444}'
+```
+
+Returns three lists:
+- `shared` — techniques present in both stacks (your common evasion baseline)
+- `only_a` — techniques unique to `edr_a`
+- `only_b` — techniques unique to `edr_b`
+
+Each entry includes the technique name, module category (`sandbox_evasion`,
+`evasion`, `shell`, `anti_forensics`), and the rationale from each stack.
+
+Deterministic — same `(edr_a, edr_b)` pair always returns the same result.
+
+---
+
 ## Sigma rule export — `/ioc_export`
 
 At engagement teardown, hand the blue team the exact detections that would have
@@ -357,17 +409,23 @@ revshell-api/
 │   ├── ratelimit.py     slowapi integration (degrades if missing)
 │   └── schemas.py       all pydantic request/response models
 ├── routers/
-│   ├── shell.py         /generate, /languages, /batch/generate
-│   ├── c2.py            /c2profile, /redirector
-│   ├── windows_postex.py    /harvest, /persist, /lateral, /adattack, /privesc, /evasion
-│   ├── linux_postex.py      /linux/persist, /linux/harvest, /linux/privesc
-│   ├── cloud.py             /cloud
-│   ├── webshell.py          /webshell
-│   ├── initial_access.py    /initial_access
-│   ├── chain.py             /chain (typed discriminated steps)
-│   └── reporting.py         /report
+│   ├── shell.py              /generate, /languages, /batch/generate
+│   ├── c2.py                 /c2profile, /redirector
+│   ├── c2_channels.py        /c2_channel (8 modern C2 transports)
+│   ├── windows_postex.py     /harvest, /persist, /lateral, /adattack, /privesc, /evasion
+│   ├── linux_postex.py       /linux/persist, /linux/harvest, /linux/privesc
+│   ├── cloud.py              /cloud
+│   ├── webshell.py           /webshell
+│   ├── initial_access.py     /initial_access
+│   ├── evasion_extended.py   /anti_forensics, /sandbox_evasion
+│   ├── stack.py              /stack (EDR-aware evasion stack)
+│   ├── diff.py               /stack/diff (stack comparator)
+│   ├── recommend.py          /recommend (constraint-driven selector)
+│   ├── ioc.py                /ioc_export (Sigma rule export)
+│   ├── chain.py              /chain (typed discriminated steps)
+│   └── reporting.py          /report
 ├── generators/          payload-builder modules — one per technique family
-└── tests/               99 pytest tests covering API, auth, audit, all generators
+└── tests/               418 pytest tests covering API, auth, audit, all generators
 ```
 
 ---
@@ -385,4 +443,4 @@ python -m pytest --tb=short -v   # verbose
 
 ## Versioning
 
-This is **v4.1.0**. See `../CHANGELOG.md` for the full change list relative to v4.0.0.
+This is **v4.5.0**. See `CHANGELOG.md` for the full change list.

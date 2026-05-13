@@ -16,8 +16,10 @@ from core.ratelimit import HAS_LIMITER, RateLimitExceeded, SlowAPIMiddleware, li
 from core.settings import SETTINGS
 from routers import (
     c2 as c2_router,
+    c2_channels as c2_channels_router,
     chain as chain_router,
     cloud as cloud_router,
+    diff as diff_router,
     evasion_extended as evasion_extended_router,
     initial_access as initial_access_router,
     ioc as ioc_router,
@@ -55,7 +57,7 @@ app = FastAPI(
         "Audit: set `AUDIT_LOG=/path/to/audit.jsonl` to record every generation event.\n"
         "Engagement tagging: send `X-Engagement-ID: <id>` header to tag log entries."
     ),
-    version="4.4.0",
+    version="4.5.0",
     lifespan=lifespan,
 )
 
@@ -79,6 +81,7 @@ if HAS_LIMITER and SlowAPIMiddleware is not None:
 
 app.include_router(shell_router.router)
 app.include_router(c2_router.router)
+app.include_router(c2_channels_router.router)
 app.include_router(windows_router.router)
 app.include_router(linux_router.router)
 app.include_router(cloud_router.router)
@@ -86,6 +89,7 @@ app.include_router(webshell_router.router)
 app.include_router(initial_access_router.router)
 app.include_router(evasion_extended_router.router)
 app.include_router(stack_router.router)
+app.include_router(diff_router.router)
 app.include_router(recommend_router.router)
 app.include_router(ioc_router.router)
 app.include_router(chain_router.router)
@@ -96,7 +100,7 @@ app.include_router(reporting_router.router)
 def health():
     return {
         "status": "ok",
-        "version": "4.4.0",
+        "version": "4.5.0",
         "auth_enabled": bool(SETTINGS.api_token),
         "audit_log_enabled": audit_enabled(),
         "rate_limit_enabled": HAS_LIMITER,

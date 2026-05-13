@@ -236,3 +236,104 @@ def test_chain_anti_forensics_step():
     assert body["total_steps"] == 2
     assert body["steps"][0]["module"] == "anti_forensics"
     assert body["steps"][1]["module"] == "sandbox_evasion"
+
+
+# ── /c2_channel smoke tests ───────────────────────────────────────────────────
+
+def test_c2_channel_list():
+    r = client.get("/c2_channel")
+    assert r.status_code == 200
+    body = r.json()
+    assert "channels" in body
+    assert "doh_c2" in body["channels"]
+    assert "websocket_c2" in body["channels"]
+
+
+def test_c2_channel_post_doh():
+    r = client.post("/c2_channel", json={
+        "channel": "doh_c2", "lhost": "10.0.0.5", "lport": 53,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["channel"] == "doh_c2"
+    assert body["implant_config"]
+    assert body["listener_setup"]
+    assert body["detections"]
+
+
+def test_c2_channel_post_websocket():
+    r = client.post("/c2_channel", json={
+        "channel": "websocket_c2", "lhost": "10.0.0.5", "lport": 443,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "wss://" in body["implant_config"]
+
+
+def test_c2_channel_post_invalid_channel():
+    r = client.post("/c2_channel", json={
+        "channel": "not_real", "lhost": "10.0.0.5", "lport": 443,
+    })
+    assert r.status_code == 422
+
+
+def test_c2_channel_get_named_pipe():
+    r = client.get("/c2_channel/named_pipe_c2", params={"lhost": "10.0.0.5", "lport": 445})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["channel"] == "named_pipe_c2"
+    assert "pipe" in body["implant_config"].lower()
+
+
+def test_c2_channel_get_invalid_lhost():
+    r = client.get("/c2_channel/doh_c2", params={"lhost": "10.0.0.1;rm -rf /", "lport": 53})
+    assert r.status_code == 422
+
+
+# ── /stack/diff smoke tests ───────────────────────────────────────────────────
+
+def test_stack_diff_post_basic():
+    r = client.post("/stack/diff", json={
+        "edr_a": "defender", "edr_b": "crowdstrike",
+        "lhost": "10.0.0.5", "lport": 4444,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["edr_a"] == "defender"
+    assert body["edr_b"] == "crowdstrike"
+    assert isinstance(body["shared"], list)
+    assert isinstance(body["only_a"], list)
+    assert isinstance(body["only_b"], list)
+    assert body["summary"]
+
+
+def test_stack_diff_counts_consistent():
+    r = client.post("/stack/diff", json={
+        "edr_a": "sentinelone", "edr_b": "carbonblack",
+        "lhost": "10.0.0.5", "lport": 4444,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["shared_count"] == len(body["shared"])
+    assert body["only_a_count"] == len(body["only_a"])
+    assert body["only_b_count"] == len(body["only_b"])
+
+
+def test_stack_diff_invalid_edr():
+    r = client.post("/stack/diff", json={
+        "edr_a": "not_real", "edr_b": "defender",
+        "lhost": "10.0.0.5", "lport": 4444,
+    })
+    assert r.status_code == 422
+
+
+def test_stack_diff_same_edr_all_shared():
+    r = client.post("/stack/diff", json={
+        "edr_a": "crowdstrike", "edr_b": "crowdstrike",
+        "lhost": "10.0.0.5", "lport": 4444,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["only_a_count"] == 0
+    assert body["only_b_count"] == 0
+    assert body["shared_count"] > 0

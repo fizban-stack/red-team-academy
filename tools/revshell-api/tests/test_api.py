@@ -171,6 +171,45 @@ def test_initial_access_onenote():
     assert r.status_code == 200, r.text
 
 
+# ── ISC-29: GET /initial_access?technique=clickfix returns 200 ───────────────
+
+def test_initial_access_clickfix():
+    r = client.get("/initial_access", params={
+        "technique": "clickfix",
+        "lhost": "10.0.0.5", "lport": 4444,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "payload" in body
+    assert "clipboard" in body["payload"].lower() or "powershell" in body["payload"].lower()
+
+
+# ── ISC-30: GET /initial_access?technique=chm_dropper returns 200 ────────────
+
+def test_initial_access_chm_dropper():
+    r = client.get("/initial_access", params={
+        "technique": "chm_dropper",
+        "lhost": "10.0.0.5", "lport": 4444,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "payload" in body
+    assert any(kw in body["payload"] for kw in ("hh.exe", "ShortCut", "OBJECT", "adb880a6"))
+
+
+# ── ISC-31: GET /initial_access?technique=xll_addin returns 200 ──────────────
+
+def test_initial_access_xll_addin():
+    r = client.get("/initial_access", params={
+        "technique": "xll_addin",
+        "lhost": "10.0.0.5", "lport": 4444,
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "payload" in body
+    assert "xlAutoOpen" in body["payload"] or "XLL" in body["payload"]
+
+
 # ── Extended evasion ──────────────────────────────────────────────────────────
 
 def test_anti_forensics_get_clear_event_logs():

@@ -826,6 +826,14 @@
       title: "Rust: Offensive Tool Development"
     - url: /tool-dev/csharp-offensive/
       title: "C#: Offensive .NET Development"
+    - url: /tool-dev/nim-offensive/
+      title: "Nim: Offensive Tool Development"
+    - url: /tool-dev/custom-c2-design/
+      title: "Custom C2 Framework Design"
+    - url: /tool-dev/shellcode-from-scratch/
+      title: "Writing Shellcode from Scratch"
+    - url: /tool-dev/opsec-tool-dev/
+      title: "OPSEC-Aware Tool Development"
     - url: /tool-dev/quick-projects/
       title: "Quick Coding Projects"
     - url: /tool-dev/emojichef/

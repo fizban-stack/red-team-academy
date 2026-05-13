@@ -128,8 +128,10 @@ Platforms: `teams, slack, okta, o365, github, generic`.
 | GET/POST | `/lateral` | WMI, PsExec, WinRM, DCOM, schtasks, PtH, evil-winrm, xfreerdp. |
 | GET/POST | `/adattack` | Kerberoast, ASREProast, DCSync, golden/silver/ACL tickets, GPP, zerologon check. |
 | GET/POST | `/privesc` | UAC bypasses, unquoted paths, service perms, potatoes, DLL hijack. |
-| GET/POST | `/evasion` | 43 techniques — AMSI/ETW (reflection + CLR patch + **hardware-breakpoint patchless** + provider unregister + WLDP downgrade), CLM bypass, Defender exclusion/disable, 10 LOLBAS (mshta, regsvr32, certutil, msbuild, installutil, cmstp, msxsl, wmic_xsl, syncappv, pubprn), PS downgrade, direct/indirect syscalls, NTDLL unhook, Ekko sleep, PPID spoof, process hollowing/stomping/thread-hijack, **ROP sleep**, **SetWindowsHookEx loader**, **COM ROT injection**, **environment keying**, **in-memory PE loader**, **DLL sideloading**, **APC + Early-Bird APC injection**, **Heaven's Gate WoW64 pivot**, **Process Ghosting / Doppelganging / Herpaderping**. |
-| POST | `/stack` | **EDR-aware evasion orchestrator** — given `{edr, lhost, lport, language}` returns an ordered playbook tuned to the named vendor (defender, crowdstrike, sentinelone, carbonblack, generic). Each step ships with a rationale. |
+| GET/POST | `/evasion` | **49 techniques** — patchless AMSI/ETW, direct/indirect syscalls, NTDLL unhook, ROP+Ekko sleep, PPID spoof, hollowing/stomping/thread-hijack, COM ROT, environment keying, in-memory PE loader, DLL sideload, APC + Early-Bird APC, Heaven's Gate, Process Ghosting/Doppelganging/Herpaderping, **PEB unlinking**, **phantom DLL hollow**, **threadless injection**, **stack spoofing**, **manual map + header erasure**, **function-level encryption**. |
+| POST | `/stack` | **EDR-aware evasion orchestrator** — single `edr` or multi `edrs: [...]`. Returns a deduped chain with `counters: [...]` per step. |
+| POST | `/recommend` | **Constraint-driven recommender** — `{has_admin, target_os, blocks_amsi, has_userland_hooks, has_memory_scanner, has_callstack_inspection, target_edrs, families, max_techniques}` returns ranked technique list. |
+| GET | `/ioc_export` | **Sigma rule export** for purple teams. Reads the audit log, emits one Sigma rule per `(module, technique)` seen. Optional `?engagement_id=`. |
 | GET/POST | `/anti_forensics` | Post-engagement artifact cleanup — event log wipe, USN journal, Prefetch, Recent files, Recycle Bin, Jump Lists, ShellBags, Amcache, PS history, file time-stomping, ADS payload hiding, self-deletion stub. |
 | GET/POST | `/sandbox_evasion` | Environment gates — VM detection (CPUID / WMI / artifacts), uptime + RAM + screen-resolution + recent-files + domain-joined sandbox checks, geofencing, time-delay, anti-debug (IsDebuggerPresent + CheckRemoteDebuggerPresent + PEB NtGlobalFlag). |
 
@@ -266,6 +268,62 @@ Flags:
 
 Order is load-bearing: sandbox gates first, evasion bypasses next, payload, then
 cleanup. The stack is fully deterministic for a given `(edr, options)` tuple.
+
+## Multi-EDR stack
+
+Most Fortune 500 environments run more than one EDR. Pass an array:
+
+```bash
+curl -X POST http://localhost:8080/stack \
+  -H "Content-Type: application/json" \
+  -d '{
+    "edrs": ["defender", "crowdstrike", "sentinelone"],
+    "lhost": "10.0.0.5", "lport": 4444
+  }'
+```
+
+The builder takes the union of all three profiles, dedupes techniques, and
+labels each step with `counters: [...]` showing which vendors that step
+bypasses. Order remains load-bearing.
+
+## Technique recommender — `/recommend`
+
+Describe your situation, get a ranked list of techniques that fit:
+
+```bash
+curl -X POST http://localhost:8080/recommend \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target_edrs": ["crowdstrike"],
+    "has_callstack_inspection": true,
+    "has_userland_hooks": true,
+    "max_techniques": 5
+  }'
+```
+
+Returns the top-N techniques scored by how well they satisfy the constraints —
+e.g. for CrowdStrike with callstack inspection, `indirect_syscalls`,
+`stack_spoof`, and `early_bird_apc` rank highly.
+
+Scoring is deterministic, so this endpoint is safe to call during planning.
+
+## Sigma rule export — `/ioc_export`
+
+At engagement teardown, hand the blue team the exact detections that would have
+caught your tradecraft:
+
+```bash
+curl "http://localhost:8080/ioc_export?engagement_id=ACME-2026-Q2" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -o acme-2026-q2.sigma.yml
+```
+
+Reads the audit log (set `AUDIT_LOG=` to enable), groups by `(module, technique)`,
+and emits one Sigma rule per entry. Each rule includes MITRE ATT&CK tags and
+the detection patterns from the technique's metadata. Defender for Endpoint /
+Sentinel / Splunk Sigma converters consume the output directly.
+
+Requires `AUDIT_LOG` configured at server start. Returns 404 otherwise.
 
 ---
 

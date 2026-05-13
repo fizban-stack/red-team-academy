@@ -7,7 +7,7 @@ evasion playbook tuned to that vendor and return it with rationale per step.
 import dataclasses
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from core.auth import require_token
 from core.schemas import (
@@ -28,15 +28,20 @@ def stack_post(
     x_engagement_id: Annotated[str | None, Header(alias="X-Engagement-ID")] = None,
 ):
     """
-    Build an EDR-tuned evasion stack.
+    Build an evasion stack tuned for one or more EDRs.
 
-    Order is load-bearing: sandbox gates run first (skip the payload entirely if
-    the host looks like a sandbox), then evasion bypasses tamper with detection
-    surfaces, then the payload fires, then anti-forensics cleanup runs at the
-    end.
+    - `edr` (string): single EDR — legacy form, still supported.
+    - `edrs` (list): multiple EDRs — union of profiles, deduped, with each step
+      labelled `counters: [...]` showing which vendors it bypasses.
+
+    Order is load-bearing: sandbox gates first, evasion bypasses next, payload,
+    then cleanup.
     """
-    # Build the actual shell payload via the shared shell builder so seed +
-    # encode + obfuscate flags work identically to /generate.
+    try:
+        edrs = req.resolved_edrs()
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     shell_req = ShellRequest(
         lhost=req.lhost, lport=req.lport, language=req.language,
         obfuscate=req.obfuscate, seed=req.seed,
@@ -44,7 +49,7 @@ def stack_post(
     shell_resp = _build_shell(shell_req)
 
     result = build_stack(
-        edr=req.edr,
+        edrs=edrs,
         lhost=req.lhost,
         lport=req.lport,
         language=req.language,
@@ -55,7 +60,7 @@ def stack_post(
     )
 
     audit(
-        request, "stack", req.edr, req.model_dump(),
+        request, "stack", ",".join(edrs), req.model_dump(),
         "\n---\n".join(entry.command for entry in result.chain),
         x_engagement_id,
     )

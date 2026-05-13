@@ -555,7 +555,8 @@ class ChainResponse(BaseModel):
 # ── /stack — EDR-aware evasion stack orchestrator ─────────────────────────────
 
 class StackRequest(BaseModel):
-    edr: str = Field(..., description=f"Target EDR vendor: {', '.join(SUPPORTED_EDRS)}")
+    edr: str | None = Field(default=None, description=f"Target EDR vendor (legacy single field): {', '.join(SUPPORTED_EDRS)}")
+    edrs: list[str] | None = Field(default=None, description="Multiple target EDRs — stack counters all of them (union, deduped)")
     lhost: str = Field(..., min_length=1)
     lport: int = Field(..., ge=1, le=65535)
     language: str = Field(default="powershell", description="Shell language for the payload step")
@@ -566,9 +567,23 @@ class StackRequest(BaseModel):
 
     @field_validator("edr")
     @classmethod
-    def _ve(cls, v: str) -> str:
+    def _ve(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
         if v not in SUPPORTED_EDRS:
             raise ValueError(f"Unsupported EDR '{v}'. Supported: {', '.join(SUPPORTED_EDRS)}")
+        return v
+
+    @field_validator("edrs")
+    @classmethod
+    def _ves(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        if not v:
+            raise ValueError("edrs cannot be an empty list — supply at least one EDR or use the `edr` field")
+        for e in v:
+            if e not in SUPPORTED_EDRS:
+                raise ValueError(f"Unsupported EDR '{e}'. Supported: {', '.join(SUPPORTED_EDRS)}")
         return v
 
     @field_validator("lhost")
@@ -584,6 +599,14 @@ class StackRequest(BaseModel):
             raise ValueError(f"Unsupported language '{v}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}")
         return normalized
 
+    def resolved_edrs(self) -> list[str]:
+        """Normalize edr + edrs into a single list (edrs wins if both set)."""
+        if self.edrs:
+            return self.edrs
+        if self.edr:
+            return [self.edr]
+        raise ValueError("Either `edr` or `edrs` must be provided.")
+
 
 class StackEntryResponse(BaseModel):
     step: int
@@ -592,6 +615,7 @@ class StackEntryResponse(BaseModel):
     command: str
     rationale: str
     techniques: list[str] = []
+    counters: list[str] = []
     risk: str = "HIGH"
 
 
@@ -601,3 +625,42 @@ class StackResponse(BaseModel):
     chain: list[StackEntryResponse]
     total_steps: int
     summary: str
+
+
+# ── /recommend — constraint-driven technique selector ──────────────────────────
+
+class RecommendRequest(BaseModel):
+    has_admin: bool = Field(default=True, description="Operator has local admin / SYSTEM on the target")
+    target_os: str = Field(default="any", description="OS tag: windows10 / windows11 / windows-server / any")
+    blocks_amsi: bool = Field(default=False, description="Target environment blocks unsigned PowerShell via AMSI")
+    blocks_etw: bool = Field(default=False, description="Target environment relies on ETW for behavioral telemetry")
+    has_userland_hooks: bool = Field(default=False, description="EDR has userland inline hooks on NTAPI")
+    has_memory_scanner: bool = Field(default=False, description="EDR runs a memory scanner during process lifetime")
+    has_callstack_inspection: bool = Field(default=False, description="EDR walks callstack on syscall entry")
+    target_edrs: list[str] | None = Field(default=None, description=f"Target EDRs from: {', '.join(SUPPORTED_EDRS)}")
+    families: list[str] | None = Field(default=None, description="Restrict to families: evasion / injection / hardening")
+    max_techniques: int = Field(default=10, ge=1, le=50)
+
+    @field_validator("target_edrs")
+    @classmethod
+    def _vte(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        for e in v:
+            if e not in SUPPORTED_EDRS:
+                raise ValueError(f"Unsupported EDR '{e}'. Supported: {', '.join(SUPPORTED_EDRS)}")
+        return v
+
+
+class RecommendationItem(BaseModel):
+    technique: str
+    rationale: str
+    family: str
+    risk: str
+    counters: list[str] = []
+
+
+class RecommendResponse(BaseModel):
+    constraints_summary: str
+    recommendations: list[RecommendationItem]
+    total: int

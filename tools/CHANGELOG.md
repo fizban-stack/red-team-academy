@@ -1,5 +1,77 @@
 # Changelog
 
+## v4.4.0 — 2026-05-13
+
+### Frontier tradecraft (43 → 49 evasion techniques)
+
+6 new advanced techniques in `/evasion`:
+
+- **`peb_unlink`** — hide module from PEB->Ldr loader lists. Defeats EDR memory scanners that iterate the loader chain.
+- **`phantom_dll_hollow`** — map fresh signed DLL → overwrite .text. Memory region reports as image-backed by a signed file.
+- **`threadless_injection`** — hijack function-pointer dispatch instead of creating a thread (CCob 2023).
+- **`stack_spoof`** — fabricate clean call frames before sensitive syscalls (SilentMoonwalk). Bypasses callstack-walking EDRs.
+- **`manual_map_header_erase`** — reflective load + zero PE headers post-load. Hides from string-search scans.
+- **`function_level_encryption`** — decrypt → execute → re-encrypt per function. Only the currently-running function is ever plaintext.
+
+### Multi-EDR `/stack`
+
+`StackRequest` now accepts `edrs: list[str]` alongside the legacy `edr` field.
+The builder:
+
+- Takes the union of all matching profiles
+- Dedupes techniques (first-appearance ordering preserved within section)
+- Records `counters: [edr, ...]` on each step
+- Maintains the load-bearing order: sandbox → evasion → shell → anti-forensics
+
+Three-EDR stack for Defender + CrowdStrike + SentinelOne produces 19 deduped steps.
+
+### New endpoint: `/recommend`
+
+Constraint-driven technique recommender. Operator describes the situation:
+
+```json
+{
+  "target_edrs": ["crowdstrike"],
+  "has_callstack_inspection": true,
+  "has_userland_hooks": true,
+  "blocks_amsi": true,
+  "max_techniques": 10
+}
+```
+
+Returns a ranked list with rationale per recommendation. Filters out
+techniques that `breaks_under` the target EDRs, scores remaining techniques
+on capability match + EDR coverage + family preference. Deterministic for a
+fixed constraint set.
+
+29 techniques are curated in the recommender catalog with full constraint
+metadata (`bypasses_amsi`, `bypasses_userland_hooks`, `works_against`,
+`breaks_under`, etc.).
+
+### New endpoint: `/ioc_export`
+
+Purple-team / training gift. Reads the audit log, groups by
+`(module, technique)`, emits one Sigma rule per pair with:
+
+- MITRE ATT&CK technique tags
+- Detection patterns from the technique's own `detections` field
+- Severity level mapped from the technique's risk
+- `Content-Disposition: attachment; filename=revshell-academy.sigma.yml`
+
+Optional `?engagement_id=` filter. Sigma converters consume the output directly
+for Splunk, Sentinel, Defender, Elastic. Requires `AUDIT_LOG` configured.
+
+### Tests
+
+- 272 revshell-api tests (was 225 → +47)
+- New: `test_tradecraft.py` (8 tests), `test_stack_multi.py` (12 tests), `test_recommend.py` (11 tests), `test_ioc_export.py` (5 tests)
+
+### Docs
+
+- README documents `/recommend`, `/ioc_export`, multi-EDR `/stack` with worked examples.
+
+---
+
 ## v4.3.0 — 2026-05-13
 
 ### Elite tradecraft (12 → 43 evasion techniques)

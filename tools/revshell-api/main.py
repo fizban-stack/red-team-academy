@@ -20,7 +20,9 @@ from routers import (
     cloud as cloud_router,
     evasion_extended as evasion_extended_router,
     initial_access as initial_access_router,
+    ioc as ioc_router,
     linux_postex as linux_router,
+    recommend as recommend_router,
     reporting as reporting_router,
     shell as shell_router,
     stack as stack_router,
@@ -53,7 +55,7 @@ app = FastAPI(
         "Audit: set `AUDIT_LOG=/path/to/audit.jsonl` to record every generation event.\n"
         "Engagement tagging: send `X-Engagement-ID: <id>` header to tag log entries."
     ),
-    version="4.1.0",
+    version="4.4.0",
     lifespan=lifespan,
 )
 
@@ -84,6 +86,8 @@ app.include_router(webshell_router.router)
 app.include_router(initial_access_router.router)
 app.include_router(evasion_extended_router.router)
 app.include_router(stack_router.router)
+app.include_router(recommend_router.router)
+app.include_router(ioc_router.router)
 app.include_router(chain_router.router)
 app.include_router(reporting_router.router)
 
@@ -92,7 +96,7 @@ app.include_router(reporting_router.router)
 def health():
     return {
         "status": "ok",
-        "version": "4.1.0",
+        "version": "4.4.0",
         "auth_enabled": bool(SETTINGS.api_token),
         "audit_log_enabled": audit_enabled(),
         "rate_limit_enabled": HAS_LIMITER,

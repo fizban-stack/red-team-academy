@@ -36,7 +36,7 @@ def client(monkeypatch):
 
 @pytest.mark.parametrize("edr", SUPPORTED_EDRS)
 def test_build_stack_per_edr(edr):
-    r = build_stack(edr=edr, lhost="10.0.0.5", lport=4444,
+    r = build_stack(edrs=edr, lhost="10.0.0.5", lport=4444,
                     shell_command="# placeholder shell")
     assert r.edr == edr
     assert r.total_steps > 0
@@ -48,29 +48,29 @@ def test_build_stack_per_edr(edr):
 
 def test_build_stack_rejects_unknown_edr():
     with pytest.raises(ValueError):
-        build_stack(edr="acme-magic-edr", lhost="10.0.0.5", lport=4444)
+        build_stack(edrs="acme-magic-edr", lhost="10.0.0.5", lport=4444)
 
 
 def test_build_stack_deterministic_order():
-    a = build_stack(edr="defender", lhost="10.0.0.5", lport=4444, shell_command="X")
-    b = build_stack(edr="defender", lhost="10.0.0.5", lport=4444, shell_command="X")
+    a = build_stack(edrs="defender", lhost="10.0.0.5", lport=4444, shell_command="X")
+    b = build_stack(edrs="defender", lhost="10.0.0.5", lport=4444, shell_command="X")
     assert [e.technique for e in a.chain] == [e.technique for e in b.chain]
 
 
 def test_build_stack_skips_anti_forensics_when_disabled():
-    r = build_stack(edr="generic", lhost="10.0.0.5", lport=4444,
+    r = build_stack(edrs="generic", lhost="10.0.0.5", lport=4444,
                     include_anti_forensics=False, shell_command="X")
     assert not any(e.module == "anti_forensics" for e in r.chain)
 
 
 def test_build_stack_skips_sandbox_evasion_when_disabled():
-    r = build_stack(edr="generic", lhost="10.0.0.5", lport=4444,
+    r = build_stack(edrs="generic", lhost="10.0.0.5", lport=4444,
                     include_sandbox_evasion=False, shell_command="X")
     assert not any(e.module == "sandbox_evasion" for e in r.chain)
 
 
 def test_build_stack_orders_sandbox_first_payload_middle_cleanup_last():
-    r = build_stack(edr="defender", lhost="10.0.0.5", lport=4444, shell_command="X")
+    r = build_stack(edrs="defender", lhost="10.0.0.5", lport=4444, shell_command="X")
     modules = [e.module for e in r.chain]
     shell_idx = modules.index("shell")
     # Every sandbox check should come before the shell.
@@ -84,7 +84,7 @@ def test_build_stack_orders_sandbox_first_payload_middle_cleanup_last():
 
 
 def test_each_entry_has_nonempty_rationale():
-    r = build_stack(edr="crowdstrike", lhost="10.0.0.5", lport=4444, shell_command="X")
+    r = build_stack(edrs="crowdstrike", lhost="10.0.0.5", lport=4444, shell_command="X")
     for e in r.chain:
         assert e.rationale, f"step {e.step} ({e.technique}) has empty rationale"
 

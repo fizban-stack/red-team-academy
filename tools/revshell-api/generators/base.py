@@ -50,6 +50,7 @@ class ShellOptions:
     obfuscate: bool
     retry: bool = False
     egress_port: int | None = None
+    seed: int | None = None
 
     @property
     def delivery_port(self) -> int:
@@ -76,6 +77,10 @@ class ShellResult:
 
 
 class RandomNamePool:
+    """
+    Stateful name pool that uses module-level `random.choice` so the global random
+    seed (when set via `seed_random`) governs name selection.
+    """
     def __init__(self, length_range: tuple[int, int] = (4, 8)):
         self._used: set[str] = set()
         self._length_range = length_range
@@ -103,12 +108,31 @@ def msf_handler(payload: str, lhost: str, lport: int) -> str:
     )
 
 
+def seed_random(seed: int | None) -> None:
+    """
+    Seed the module-level `random` PRNG. When None, restore unseeded behavior
+    so subsequent calls use the system entropy source. Used for reproducible
+    payload generation (?seed=N in the API) — essential for tests, docs,
+    training labs, and debugging non-deterministic obfuscation.
+    """
+    if seed is None:
+        random.seed()
+    else:
+        random.seed(seed)
+
+
 class ShellGenerator(ABC):
     language: str = ""
 
     def generate(self, opts: ShellOptions) -> ShellResult:
-        names = RandomNamePool() if opts.obfuscate else None
-        return self._generate(opts, names)
+        seed_random(opts.seed)
+        try:
+            names = RandomNamePool() if opts.obfuscate else None
+            return self._generate(opts, names)
+        finally:
+            # Always restore unseeded entropy at end of request so subsequent
+            # unrelated calls aren't accidentally deterministic.
+            seed_random(None)
 
     @abstractmethod
     def _generate(self, opts: ShellOptions, names: RandomNamePool | None) -> ShellResult:

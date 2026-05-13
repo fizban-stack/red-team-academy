@@ -4,7 +4,7 @@ Returns ready-to-run commands for escalating from standard user or service accou
 to SYSTEM / local admin on a compromised Windows host.
 For use in authorized red team exercises only.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .obfuscate import ps_tick_marks
 
@@ -29,6 +29,61 @@ class PrivescResult:
     command: str
     technique: str
     notes: str
+    techniques: list[str] = field(default_factory=list)
+    risk: str = "HIGH"
+    detections: list[str] = field(default_factory=list)
+
+
+_PRIVESC_MITRE = {
+    "uac_bypass_fodhelper": ("T1548.002", "HIGH", [
+        "Sysmon Event 13 on HKCU\\Software\\Classes\\ms-settings registry",
+        "fodhelper.exe spawning non-default child process",
+    ]),
+    "uac_bypass_eventvwr": ("T1548.002", "HIGH", [
+        "eventvwr.exe child process is not mmc.exe",
+        "Registry write to HKCU\\Software\\Classes\\mscfile",
+    ]),
+    "uac_bypass_diskcleanup": ("T1548.002", "HIGH", [
+        "SilentCleanup task running as elevated user with non-default args",
+        "Registry hijack on \\Environment under SilentCleanup task",
+    ]),
+    "unquoted_service_path": ("T1574.009", "HIGH", [
+        "EDR file write under C:\\ root or Program Files prefix",
+        "Service binary path lacks quotes (configuration audit)",
+    ]),
+    "weak_service_perms": ("T1574.011", "HIGH", [
+        "sc.exe config altering binPath outside normal ops window",
+        "Service binary replaced by non-installer process",
+    ]),
+    "always_install_elevated": ("T1548.002", "HIGH", [
+        "msiexec.exe /quiet running with elevated token from std user",
+        "HKLM/HKCU AlwaysInstallElevated=1 configuration drift",
+    ]),
+    "printspoofer": ("T1134.001", "CRITICAL", [
+        "PrintSpoofer.exe / SpoolSample.exe process creation",
+        "SeImpersonatePrivilege use from SYSTEM-impersonated thread",
+    ]),
+    "godpotato": ("T1134.001", "CRITICAL", [
+        "GodPotato.exe process creation",
+        "DCOM activation followed by token impersonation",
+    ]),
+    "juicypotato": ("T1134.001", "CRITICAL", [
+        "JuicyPotato.exe process creation (legacy systems)",
+        "Anonymous pipe + RPC server bind from non-system service",
+    ]),
+    "token_impersonation": ("T1134.001", "HIGH", [
+        "Sysmon Event 12 — process token handle duplication",
+        "Use of OpenProcessToken / DuplicateTokenEx by non-system process",
+    ]),
+    "winpeas": ("T1082", "MEDIUM", [
+        "winPEAS.exe / .ps1 download and execution",
+        "Enumeration-heavy reads of registry/filesystem in short window",
+    ]),
+    "dll_hijack_path": ("T1574.001", "HIGH", [
+        "Sysmon Event 7 — image load from writable user-controlled path",
+        "Process loading DLL from %TEMP% or download folder",
+    ]),
+}
 
 
 # ── Techniques ────────────────────────────────────────────────────────────────
@@ -312,4 +367,11 @@ def generate_privesc(
 ) -> PrivescResult:
     if technique not in _DISPATCH:
         raise ValueError(f"Unknown technique '{technique}'. Supported: {', '.join(SUPPORTED_TECHNIQUES)}")
-    return _DISPATCH[technique](payload, name, obfuscate)
+    result = _DISPATCH[technique](payload, name, obfuscate)
+    mitre = _PRIVESC_MITRE.get(technique)
+    if mitre:
+        tid, risk, detections = mitre
+        result.techniques = [tid]
+        result.risk = risk
+        result.detections = detections
+    return result

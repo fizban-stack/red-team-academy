@@ -23,11 +23,7 @@ class PowerShellGenerator(ShellGenerator):
     language = "powershell"
 
     def _generate(self, opts: ShellOptions, names: RandomNamePool | None) -> ShellResult:
-        variant = random.choice(_VARIANTS)
-        if names:
-            variant = random.choice(_VARIANTS)
-        else:
-            variant = "tcpclient"
+        variant = random.choice(_VARIANTS) if names else "tcpclient"
 
         raw = self._build_variant(variant, opts, names)
 

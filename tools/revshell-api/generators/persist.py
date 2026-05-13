@@ -5,7 +5,7 @@ For use in authorized red team exercises only.
 """
 import random
 import string
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .obfuscate import ps_tick_marks
 
@@ -32,6 +32,62 @@ class PersistResult:
     command: str
     technique: str
     notes: str
+    techniques: list[str] = field(default_factory=list)
+    risk: str = "HIGH"
+    detections: list[str] = field(default_factory=list)
+
+
+# MITRE technique → ATT&CK mapping for Windows persistence.
+_PERSIST_MITRE = {
+    "run_key": ("T1547.001", "HIGH", [
+        "Event 4657 — Registry value modified under HKCU\\...\\Run",
+        "Sysmon Event 13 (RegistryValueSet) on Run key",
+    ]),
+    "run_key_hklm": ("T1547.001", "HIGH", [
+        "Event 4657 on HKLM\\...\\Run (requires admin to create)",
+        "Sysmon Event 13 RegistryValueSet by non-admin process",
+    ]),
+    "schtask_onlogon": ("T1053.005", "HIGH", [
+        "Event 4698 (scheduled task created) with /SC ONLOGON trigger",
+        "schtasks.exe spawning unusual children",
+    ]),
+    "schtask_onboot": ("T1053.005", "HIGH", [
+        "Event 4698 with /SC ONSTART trigger and /RU SYSTEM",
+        "Task XML written under \\Windows\\System32\\Tasks",
+    ]),
+    "schtask_minute": ("T1053.005", "MEDIUM", [
+        "Event 4698 with /SC MINUTE — uncommon for legitimate software",
+        "Rapid repeated task invocation in Security log",
+    ]),
+    "startup_lnk": ("T1547.009", "MEDIUM", [
+        "Sysmon Event 11 — .lnk file created under Startup folder",
+        "Explorer.exe spawning unusual processes at logon",
+    ]),
+    "wmi_subscription": ("T1546.003", "HIGH", [
+        "Sysmon Event 19/20/21 — WMI EventFilter / Consumer / Binding",
+        "CommandLineEventConsumer with payload paths",
+    ]),
+    "service_create": ("T1543.003", "HIGH", [
+        "Event 7045 (service install) by non-installer process",
+        "Event 4697 (security audit, service install)",
+    ]),
+    "registry_debugger": ("T1546.012", "CRITICAL", [
+        "Event 4657 on Image File Execution Options key",
+        "Sticky Keys (sethc.exe) or Utilman.exe targeted",
+    ]),
+    "com_hijack": ("T1546.015", "HIGH", [
+        "Sysmon Event 13 — RegistryValueSet on HKCU\\Software\\Classes\\CLSID",
+        "DLL load from non-standard path by Explorer or audio service",
+    ]),
+    "bits_job": ("T1197", "HIGH", [
+        "Microsoft-Windows-Bits-Client/Operational event log entries",
+        "bitsadmin /SetNotifyCmdLine with attacker-controlled executable",
+    ]),
+    "screensaver": ("T1546.002", "MEDIUM", [
+        "Event 4657 on HKCU\\Control Panel\\Desktop\\SCRNSAVE.EXE",
+        "User's screensaver value pointing to non-system executable",
+    ]),
+}
 
 
 def _rand_name(length: int = 8) -> str:
@@ -287,4 +343,11 @@ def generate_persist(
 ) -> PersistResult:
     if technique not in _DISPATCH:
         raise ValueError(f"Unknown technique '{technique}'. Supported: {', '.join(SUPPORTED_TECHNIQUES)}")
-    return _DISPATCH[technique](payload, name, obfuscate)
+    result = _DISPATCH[technique](payload, name, obfuscate)
+    mitre = _PERSIST_MITRE.get(technique)
+    if mitre:
+        tid, risk, detections = mitre
+        result.techniques = [tid]
+        result.risk = risk
+        result.detections = detections
+    return result

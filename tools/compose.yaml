@@ -1,0 +1,30 @@
+services:
+  revshell-api:
+    build:
+      context: ./revshell-api
+    image: revshell-api:4.1.0
+    container_name: revshell-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"  # bind to localhost by default — change to "8080:8080" to expose externally
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - API_TOKEN=${API_TOKEN:-}
+      - AUDIT_LOG=${AUDIT_LOG:-/app/data/audit.jsonl}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost,http://localhost:8080}
+      - RATE_LIMIT_DEFAULT=${RATE_LIMIT_DEFAULT:-120/minute}
+      - RATE_LIMIT_GENERATE=${RATE_LIMIT_GENERATE:-60/minute}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+
+  # Build the spray image so it's ready, but don't start it — it's a CLI.
+  # Run it on demand: docker compose run --rm spray --target o365 --userlist ...
+  spray:
+    build:
+      context: ./spray
+    image: spray:1.1.0
+    profiles: ["tools"]
+    volumes:
+      - ./data:/app/data

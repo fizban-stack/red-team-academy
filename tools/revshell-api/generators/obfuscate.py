@@ -44,19 +44,34 @@ def bash_octal_encode(path: str) -> str:
 # ── PowerShell ────────────────────────────────────────────────────────────────
 
 def ps_tick_marks(s: str, keywords: list[str] | None = None) -> str:
-    """Insert PowerShell backtick (`) escape chars into keywords to break signatures."""
+    """
+    Insert PowerShell backtick (`) escape chars into keywords to break signatures.
+
+    Every occurrence of every keyword is independently obfuscated with a different
+    interior tick position, so repeated `System` / `Net` / `Sockets` references are
+    each broken up uniquely. Backticks inside PowerShell identifiers are no-ops at
+    parse time, so the semantics are unchanged.
+    """
     if keywords is None:
         keywords = ["System", "Net", "Sockets", "TCPClient", "Stream", "Encoding",
                     "String", "Byte", "Object", "ScriptBlock", "Invoke", "Expression",
-                    "Management", "Automation"]
-    result = s
-    for kw in keywords:
-        if kw in result and len(kw) > 3:
-            # Insert tick after a random interior character
-            pos = random.randint(1, len(kw) - 2)
-            ticked = kw[:pos] + "`" + kw[pos:]
-            result = result.replace(kw, ticked, 1)
-    return result
+                    "Management", "Automation", "Runspace", "Pipeline", "Runtime",
+                    "Marshal", "Reflection", "Assembly", "Convert", "Encoding"]
+    result_parts: list[str] = []
+    i = 0
+    while i < len(s):
+        matched = False
+        for kw in keywords:
+            if len(kw) > 3 and s.startswith(kw, i):
+                pos = random.randint(1, len(kw) - 2)
+                result_parts.append(kw[:pos] + "`" + kw[pos:])
+                i += len(kw)
+                matched = True
+                break
+        if not matched:
+            result_parts.append(s[i])
+            i += 1
+    return "".join(result_parts)
 
 
 def ps_char_array(s: str) -> str:

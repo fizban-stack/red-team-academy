@@ -3,7 +3,15 @@ import requests
 
 from . import DEFAULT_TIMEOUT as _TIMEOUT
 
-def attempt(username: str, password: str, base_url: str) -> dict:
+
+def attempt(
+    username: str,
+    password: str,
+    base_url: str,
+    proxies: dict | None = None,
+    headers: dict | None = None,
+    verify: bool = True,
+) -> dict:
     """
     Returns dict with keys: success (bool), locked (bool), notes (str).
     base_url should be like https://mail.company.com (no trailing slash).
@@ -20,7 +28,8 @@ def attempt(username: str, password: str, base_url: str) -> dict:
     }
     try:
         r = requests.post(
-            url, data=data, allow_redirects=False, timeout=_TIMEOUT, verify=False
+            url, data=data, allow_redirects=False, timeout=_TIMEOUT,
+            verify=verify, proxies=proxies, headers=headers,
         )
     except Exception as e:
         return {"success": False, "locked": False, "notes": f"request error: {e}"}

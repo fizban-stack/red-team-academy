@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 SUPPORTED_VARIANTS = ("php", "php_eval", "aspx", "aspx_cs", "jsp", "cgi_perl")
 
 _ACCESS_PARAM = "cmd"  # query/POST parameter to send commands
-_AUTH_TOKEN = "X-Auth"  # optional header for auth token variants
+_AUTH_HEADER = "X-Token"  # auth header name used by obfuscated variants
+_AUTH_HEADER_PHP = f"HTTP_{_AUTH_HEADER.upper().replace('-', '_')}"  # PHP $_SERVER form
 
 
 @dataclass

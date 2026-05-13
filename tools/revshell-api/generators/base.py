@@ -1,7 +1,7 @@
 import random
 import string
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 _RESERVED = {
     "sh", "bash", "zsh", "nc", "ip", "ls", "cd", "rm", "cp", "mv",
@@ -70,6 +70,9 @@ class ShellResult:
     tty_upgrade: str | None = None
     msf_compat: str | None = None
     listener_setup: "ListenerSetup | None" = None
+    techniques: list[str] = field(default_factory=list)
+    risk: str = "MEDIUM"
+    detections: list[str] = field(default_factory=list)
 
 
 class RandomNamePool:

@@ -6,6 +6,7 @@ from .golang import GolangGenerator
 from .lolbins import LOLBinsGenerator
 from .lua import LuaGenerator
 from .netcat import NetcatGenerator
+from .nim_shell import NimGenerator
 from .nodejs import NodeJSGenerator
 from .openssl import OpenSSLGenerator
 from .perl import PerlGenerator
@@ -13,6 +14,7 @@ from .php import PHPGenerator
 from .powershell import PowerShellGenerator
 from .python_shell import PythonGenerator
 from .ruby import RubyGenerator
+from .rust_shell import RustGenerator
 from .socat import SocatGenerator
 
 REGISTRY: dict[str, type] = {
@@ -25,6 +27,7 @@ REGISTRY: dict[str, type] = {
     "lua": LuaGenerator,
     "nc": NetcatGenerator,
     "netcat": NetcatGenerator,
+    "nim": NimGenerator,
     "nodejs": NodeJSGenerator,
     "openssl": OpenSSLGenerator,
     "perl": PerlGenerator,
@@ -33,6 +36,7 @@ REGISTRY: dict[str, type] = {
     "ps": PowerShellGenerator,
     "python3": PythonGenerator,
     "ruby": RubyGenerator,
+    "rust": RustGenerator,
     "socat": SocatGenerator,
 }
 

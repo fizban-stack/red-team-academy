@@ -11,14 +11,20 @@ from pydantic import BaseModel, Field, field_validator
 from generators import REGISTRY, SUPPORTED_LANGUAGES
 from generators.base import ShellOptions
 from generators.c2profile import SUPPORTED_PLATFORMS, generate_profile
+from generators.cloud import SUPPORTED_TECHNIQUES as CLOUD_TECHNIQUES, generate_cloud
 from generators.encode import SUPPORTED_TECHNIQUES, encode_command
 from generators.adattack import SUPPORTED_TECHNIQUES as ADATTACK_TECHNIQUES, generate_adattack
 from generators.evasion import SUPPORTED_TECHNIQUES as EVASION_TECHNIQUES, generate_evasion
 from generators.harvest import SUPPORTED_TECHNIQUES as HARVEST_TECHNIQUES, generate_harvest
+from generators.initial_access import SUPPORTED_TECHNIQUES as INITIAL_ACCESS_TECHNIQUES, generate_initial_access
 from generators.lateral import SUPPORTED_TECHNIQUES as LATERAL_TECHNIQUES, generate_lateral
+from generators.linux_harvest import SUPPORTED_TECHNIQUES as LINUX_HARVEST_TECHNIQUES, generate_linux_harvest
+from generators.linux_persist import SUPPORTED_TECHNIQUES as LINUX_PERSIST_TECHNIQUES, generate_linux_persist
+from generators.linux_privesc import SUPPORTED_TECHNIQUES as LINUX_PRIVESC_TECHNIQUES, generate_linux_privesc
 from generators.persist import SUPPORTED_TECHNIQUES as PERSIST_TECHNIQUES, generate_persist
 from generators.privesc import SUPPORTED_TECHNIQUES as PRIVESC_TECHNIQUES, generate_privesc
 from generators.redirector import generate_redirector
+from generators.webshell import SUPPORTED_VARIANTS as WEBSHELL_VARIANTS, generate_webshell
 
 _LHOST_RE = re.compile(r"^[a-zA-Z0-9.\-:\[\]]+$")  # brackets for IPv6
 
@@ -32,8 +38,8 @@ ARCH_VALUES = Literal["x86", "x64", "arm", "arm64", "mips", "any"]
 
 app = FastAPI(
     title="RevShell API",
-    description="Reverse shell command generator for authorized red team exercises.",
-    version="3.0.0",
+    description="Reverse shell and red team command generator for authorized red team exercises.",
+    version="4.0.0",
 )
 
 app.add_middleware(
@@ -43,6 +49,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ── Request / Response Models ──────────────────────────────────────────────────
 
 class ShellRequest(BaseModel):
     lhost: str = Field(..., min_length=1, description="Listener host IP or hostname (IPv4/IPv6/FQDN)")
@@ -118,6 +126,8 @@ class HarvestRequest(BaseModel):
     technique: str = Field(..., description=f"Harvest technique: {', '.join(HARVEST_TECHNIQUES)}")
     outfile: str = Field(default="C:\\Windows\\Temp\\lsass.dmp", description="Output path for the dump file")
     obfuscate: bool = Field(default=True, description="Apply PS obfuscation")
+    lhost: str = Field(default="192.168.1.100", description="Staging server IP for tool downloads")
+    lport: int = Field(default=8080, ge=1, le=65535, description="Staging server port")
 
     @field_validator("technique")
     @classmethod
@@ -131,6 +141,9 @@ class HarvestResponse(BaseModel):
     command: str
     technique: str
     notes: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+    detections: list[str] = []
 
 
 class PersistRequest(BaseModel):
@@ -185,6 +198,8 @@ class ADAttackRequest(BaseModel):
     hash_nt: str = Field(default="", description="NT hash (32-char hex)")
     outfile: str = Field(default="C:\\Windows\\Temp\\ad_out.txt", description="Output file path on target")
     obfuscate: bool = Field(default=True, description="Apply PS obfuscation")
+    lhost: str = Field(default="192.168.1.100", description="Staging server IP serving tools (PowerView, Rubeus, etc.)")
+    lport: int = Field(default=8080, ge=1, le=65535, description="Staging server port")
 
     @field_validator("technique")
     @classmethod
@@ -198,6 +213,9 @@ class ADAttackResponse(BaseModel):
     command: str
     technique: str
     notes: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+    detections: list[str] = []
 
 
 class PrivescRequest(BaseModel):
@@ -258,7 +276,200 @@ class ShellResponse(BaseModel):
     listener_setup: dict | None = None
     encode_key: str | None = None
     c2_profile: C2ProfileResponse | None = None
+    techniques: list[str] = []
+    risk: str = "MEDIUM"
+    detections: list[str] = []
 
+
+class WebShellRequest(BaseModel):
+    """Generate a server-side web shell (PHP/ASPX/JSP/CGI) for upload to a compromised web server."""
+    variant: str = Field(..., description=f"Web shell variant: {', '.join(WEBSHELL_VARIANTS)}")
+    obfuscate: bool = Field(default=True, description="Apply obfuscation to shell code")
+    token: str = Field(default="S3cr3tT0k3n", min_length=6, description="Authentication token embedded in the shell")
+
+    @field_validator("variant")
+    @classmethod
+    def validate_variant(cls, v: str) -> str:
+        if v not in WEBSHELL_VARIANTS:
+            raise ValueError(f"Unsupported variant '{v}'. Supported: {', '.join(WEBSHELL_VARIANTS)}")
+        return v
+
+
+class WebShellResponse(BaseModel):
+    shell: str
+    variant: str
+    upload_hint: str
+    access_example: str
+    techniques: list[str] = []
+    risk: str = "CRITICAL"
+    detections: list[str] = []
+
+
+class LinuxPersistRequest(BaseModel):
+    """Generate Linux/macOS persistence commands."""
+    technique: str = Field(..., description=f"Persistence technique: {', '.join(LINUX_PERSIST_TECHNIQUES)}")
+    payload: str = Field(default="/tmp/payload.sh", description="Path to payload or command to persist")
+    name: str = Field(default="sysupdate", description="Service/cron/key name identifier")
+    lhost: str = Field(default="192.168.1.100", description="Attacker host (used by some techniques)")
+    lport: int = Field(default=4444, ge=1, le=65535, description="Attacker port")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in LINUX_PERSIST_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(LINUX_PERSIST_TECHNIQUES)}")
+        return v
+
+
+class LinuxPersistResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+    detections: list[str] = []
+
+
+class LinuxHarvestRequest(BaseModel):
+    """Generate Linux credential harvesting commands."""
+    technique: str = Field(..., description=f"Harvest technique: {', '.join(LINUX_HARVEST_TECHNIQUES)}")
+    outfile: str = Field(default="/tmp/loot.txt", description="Output file path for collected data")
+    lhost: str = Field(default="192.168.1.100", description="Attacker exfiltration host")
+    lport: int = Field(default=8080, ge=1, le=65535, description="Attacker exfiltration port")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in LINUX_HARVEST_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(LINUX_HARVEST_TECHNIQUES)}")
+        return v
+
+
+class LinuxHarvestResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+    detections: list[str] = []
+
+
+class LinuxPrivescRequest(BaseModel):
+    """Generate Linux privilege escalation commands."""
+    technique: str = Field(..., description=f"PrivEsc technique: {', '.join(LINUX_PRIVESC_TECHNIQUES)}")
+    payload: str = Field(default="/tmp/payload.sh", description="Payload to execute after escalation")
+    name: str = Field(default="sysupdate", description="Binary/service name for path hijacking techniques")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in LINUX_PRIVESC_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(LINUX_PRIVESC_TECHNIQUES)}")
+        return v
+
+
+class LinuxPrivescResponse(BaseModel):
+    command: str
+    technique: str
+    notes: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+    detections: list[str] = []
+
+
+class CloudRequest(BaseModel):
+    """Generate cloud environment attack commands (AWS/Azure/GCP/Kubernetes)."""
+    technique: str = Field(..., description=f"Cloud technique: {', '.join(CLOUD_TECHNIQUES)}")
+    outfile: str = Field(default="/tmp/cloud_loot.json", description="Output file for harvested data")
+    lhost: str = Field(default="192.168.1.100", description="Attacker host for exfiltration")
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in CLOUD_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(CLOUD_TECHNIQUES)}")
+        return v
+
+
+class CloudResponse(BaseModel):
+    command: str
+    technique: str
+    platform: str
+    notes: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+    detections: list[str] = []
+
+
+class InitialAccessRequest(BaseModel):
+    """Generate initial access payloads (VBA macros, HTML smuggling, HTA, LNK shortcuts)."""
+    technique: str = Field(..., description=f"Initial access technique: {', '.join(INITIAL_ACCESS_TECHNIQUES)}")
+    lhost: str = Field(..., min_length=1, description="Attacker listener host")
+    lport: int = Field(..., ge=1, le=65535, description="Attacker listener port")
+    obfuscate: bool = Field(default=True, description="Apply obfuscation to payload")
+
+    @field_validator("lhost")
+    @classmethod
+    def validate_lhost(cls, v: str) -> str:
+        return _validate_lhost(v)
+
+    @field_validator("technique")
+    @classmethod
+    def validate_technique(cls, v: str) -> str:
+        if v not in INITIAL_ACCESS_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(INITIAL_ACCESS_TECHNIQUES)}")
+        return v
+
+
+class InitialAccessResponse(BaseModel):
+    payload: str
+    technique: str
+    delivery_hint: str
+    notes: str
+    techniques: list[str] = []
+    risk: str = "HIGH"
+    detections: list[str] = []
+
+
+class BatchGenerateRequest(BaseModel):
+    """Generate multiple shell payloads in one call."""
+    requests: list[ShellRequest] = Field(..., min_length=1, max_length=20, description="List of shell generation requests (max 20)")
+
+
+class ChainRequest(BaseModel):
+    """Build an ordered execution chain across multiple technique modules."""
+    lhost: str = Field(..., min_length=1, description="Attacker listener/staging host")
+    lport: int = Field(..., ge=1, le=65535, description="Attacker listener port")
+    steps: list[dict] = Field(
+        ...,
+        min_length=1,
+        max_length=10,
+        description=(
+            "Ordered list of chain steps. Each step: "
+            "{module: str, technique: str, ...extra_params}. "
+            "Modules: generate, harvest, persist, adattack, linux_persist, cloud, initial_access."
+        ),
+    )
+
+
+class ChainStep(BaseModel):
+    step: int
+    module: str
+    technique: str
+    command: str
+    notes: str = ""
+    techniques: list[str] = []
+    risk: str = "MEDIUM"
+
+
+class ChainResponse(BaseModel):
+    lhost: str
+    lport: int
+    steps: list[ChainStep]
+    total_steps: int
+
+
+# ── Helper Functions ───────────────────────────────────────────────────────────
 
 def _build_shell(req: ShellRequest) -> ShellResponse:
     opts = ShellOptions(
@@ -300,12 +511,17 @@ def _build_shell(req: ShellRequest) -> ShellResponse:
         listener_setup=listener_setup,
         encode_key=encode_key,
         c2_profile=c2_resp,
+        techniques=result.techniques,
+        risk=result.risk,
+        detections=result.detections,
     )
 
 
+# ── Core Endpoints ─────────────────────────────────────────────────────────────
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "3.0.0"}
+    return {"status": "ok", "version": "4.0.0"}
 
 
 @app.get("/languages")
@@ -342,6 +558,122 @@ def generate_get(
 @app.post("/generate", response_model=ShellResponse)
 def generate_post(req: ShellRequest):
     return _build_shell(req)
+
+
+@app.post("/batch/generate", response_model=list[ShellResponse])
+def batch_generate(req: BatchGenerateRequest):
+    """Generate multiple shell payloads in a single call. Max 20 requests per batch."""
+    return [_build_shell(r) for r in req.requests]
+
+
+@app.post("/chain", response_model=ChainResponse)
+def chain_build(req: ChainRequest):
+    """
+    Build an ordered attack chain across multiple technique modules.
+    Each step specifies a module and technique to generate, producing a sequenced playbook.
+    """
+    if not _LHOST_RE.match(req.lhost):
+        raise HTTPException(status_code=422, detail="Invalid lhost.")
+
+    results: list[ChainStep] = []
+    for i, step in enumerate(req.steps, 1):
+        module = step.get("module", "")
+        technique = step.get("technique", "")
+        if not module or not technique:
+            raise HTTPException(status_code=422, detail=f"Step {i}: 'module' and 'technique' are required.")
+
+        try:
+            if module == "generate":
+                lang = step.get("language", "bash")
+                if lang not in REGISTRY:
+                    raise ValueError(f"Unsupported language: {lang}")
+                shell_req = ShellRequest(
+                    lhost=req.lhost, lport=req.lport, language=lang,
+                    obfuscate=step.get("obfuscate", True),
+                )
+                resp = _build_shell(shell_req)
+                results.append(ChainStep(
+                    step=i, module=module, technique=resp.variant,
+                    command=resp.command, notes=f"{lang} reverse shell",
+                    techniques=resp.techniques, risk=resp.risk,
+                ))
+
+            elif module == "harvest":
+                r = generate_harvest(
+                    technique, step.get("outfile", "C:\\Windows\\Temp\\lsass.dmp"),
+                    step.get("obfuscate", True), req.lhost, req.lport,
+                )
+                results.append(ChainStep(
+                    step=i, module=module, technique=r.technique,
+                    command=r.command, notes=r.notes,
+                    techniques=r.techniques, risk=r.risk,
+                ))
+
+            elif module == "persist":
+                r = generate_persist(
+                    technique, step.get("payload", "C:\\Windows\\Temp\\payload.exe"),
+                    step.get("name", "WindowsUpdater"), step.get("obfuscate", True),
+                )
+                results.append(ChainStep(
+                    step=i, module=module, technique=r.technique,
+                    command=r.command, notes=r.notes,
+                ))
+
+            elif module == "adattack":
+                r = generate_adattack(
+                    technique, step.get("domain", "DOMAIN.LOCAL"),
+                    step.get("dc_host", "DC01"), step.get("username", "USER"),
+                    step.get("password", "PASS"), step.get("hash_nt", ""),
+                    step.get("outfile", "C:\\Windows\\Temp\\ad_out.txt"),
+                    step.get("obfuscate", True), req.lhost, req.lport,
+                )
+                results.append(ChainStep(
+                    step=i, module=module, technique=r.technique,
+                    command=r.command, notes=r.notes,
+                    techniques=r.techniques, risk=r.risk,
+                ))
+
+            elif module == "linux_persist":
+                r = generate_linux_persist(
+                    technique, step.get("payload", "/tmp/payload.sh"),
+                    step.get("name", "sysupdate"), req.lhost, req.lport,
+                )
+                results.append(ChainStep(
+                    step=i, module=module, technique=r.technique,
+                    command=r.command, notes=r.notes,
+                    techniques=r.techniques, risk=r.risk,
+                ))
+
+            elif module == "cloud":
+                r = generate_cloud(
+                    technique, step.get("outfile", "/tmp/cloud_loot.json"), req.lhost,
+                )
+                results.append(ChainStep(
+                    step=i, module=module, technique=r.technique,
+                    command=r.command, notes=r.notes,
+                    techniques=r.techniques, risk=r.risk,
+                ))
+
+            elif module == "initial_access":
+                r = generate_initial_access(
+                    technique, req.lhost, req.lport, step.get("obfuscate", True),
+                )
+                results.append(ChainStep(
+                    step=i, module=module, technique=r.technique,
+                    command=r.payload, notes=r.notes,
+                    techniques=r.techniques, risk=r.risk,
+                ))
+
+            else:
+                raise HTTPException(status_code=422, detail=f"Step {i}: unknown module '{module}'.")
+
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=f"Step {i}: {e}")
+
+    return ChainResponse(
+        lhost=req.lhost, lport=req.lport,
+        steps=results, total_steps=len(results),
+    )
 
 
 @app.get("/c2profile", response_model=C2ProfileResponse)
@@ -391,22 +723,32 @@ def redirector_post(req: RedirectorRequest):
     )
 
 
+# ── Windows Post-Exploitation ──────────────────────────────────────────────────
+
 @app.get("/harvest", response_model=HarvestResponse)
 def harvest_get(
     technique: Annotated[str, Query(description=f"Harvest technique: {', '.join(HARVEST_TECHNIQUES)}")],
     outfile: Annotated[str, Query(description="Output path for dump file")] = "C:\\Windows\\Temp\\lsass.dmp",
     obfuscate: Annotated[bool, Query(description="Apply PS obfuscation")] = True,
+    lhost: Annotated[str, Query(description="Staging server IP")] = "192.168.1.100",
+    lport: Annotated[int, Query(ge=1, le=65535, description="Staging server port")] = 8080,
 ):
     if technique not in HARVEST_TECHNIQUES:
         raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(HARVEST_TECHNIQUES)}")
-    result = generate_harvest(technique, outfile, obfuscate)
-    return HarvestResponse(command=result.command, technique=result.technique, notes=result.notes)
+    result = generate_harvest(technique, outfile, obfuscate, lhost, lport)
+    return HarvestResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
 
 
 @app.post("/harvest", response_model=HarvestResponse)
 def harvest_post(req: HarvestRequest):
-    result = generate_harvest(req.technique, req.outfile, req.obfuscate)
-    return HarvestResponse(command=result.command, technique=result.technique, notes=result.notes)
+    result = generate_harvest(req.technique, req.outfile, req.obfuscate, req.lhost, req.lport)
+    return HarvestResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
 
 
 @app.get("/persist", response_model=PersistResponse)
@@ -460,17 +802,28 @@ def adattack_get(
     hash_nt: Annotated[str, Query(description="NT hash (32-char hex)")] = "",
     outfile: Annotated[str, Query(description="Output file path on target")] = "C:\\Windows\\Temp\\ad_out.txt",
     obfuscate: Annotated[bool, Query(description="Apply PS obfuscation")] = True,
+    lhost: Annotated[str, Query(description="Staging server IP")] = "192.168.1.100",
+    lport: Annotated[int, Query(ge=1, le=65535, description="Staging server port")] = 8080,
 ):
     if technique not in ADATTACK_TECHNIQUES:
         raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(ADATTACK_TECHNIQUES)}")
-    result = generate_adattack(technique, domain, dc_host, username, password, hash_nt, outfile, obfuscate)
-    return ADAttackResponse(command=result.command, technique=result.technique, notes=result.notes)
+    result = generate_adattack(technique, domain, dc_host, username, password, hash_nt, outfile, obfuscate, lhost, lport)
+    return ADAttackResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
 
 
 @app.post("/adattack", response_model=ADAttackResponse)
 def adattack_post(req: ADAttackRequest):
-    result = generate_adattack(req.technique, req.domain, req.dc_host, req.username, req.password, req.hash_nt, req.outfile, req.obfuscate)
-    return ADAttackResponse(command=result.command, technique=result.technique, notes=result.notes)
+    result = generate_adattack(
+        req.technique, req.domain, req.dc_host, req.username, req.password,
+        req.hash_nt, req.outfile, req.obfuscate, req.lhost, req.lport,
+    )
+    return ADAttackResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
 
 
 @app.get("/privesc", response_model=PrivescResponse)
@@ -508,6 +861,177 @@ def evasion_get(
 def evasion_post(req: EvasionRequest):
     result = generate_evasion(req.technique, req.payload, req.obfuscate)
     return EvasionResponse(command=result.command, technique=result.technique, notes=result.notes)
+
+
+# ── Web Shells ─────────────────────────────────────────────────────────────────
+
+@app.post("/webshell", response_model=WebShellResponse)
+def webshell_post(req: WebShellRequest):
+    """Generate a web shell for upload to a compromised web server (PHP/ASPX/JSP/CGI)."""
+    result = generate_webshell(req.variant, req.obfuscate, req.token)
+    return WebShellResponse(
+        shell=result.shell, variant=result.variant,
+        upload_hint=result.upload_hint, access_example=result.access_example,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+@app.get("/webshell", response_model=WebShellResponse)
+def webshell_get(
+    variant: Annotated[str, Query(description=f"Web shell variant: {', '.join(WEBSHELL_VARIANTS)}")],
+    obfuscate: Annotated[bool, Query(description="Apply obfuscation")] = True,
+    token: Annotated[str, Query(min_length=6, description="Auth token embedded in shell")] = "S3cr3tT0k3n",
+):
+    """Generate a web shell (GET variant)."""
+    if variant not in WEBSHELL_VARIANTS:
+        raise HTTPException(status_code=422, detail=f"Unsupported variant '{variant}'. Supported: {', '.join(WEBSHELL_VARIANTS)}")
+    result = generate_webshell(variant, obfuscate, token)
+    return WebShellResponse(
+        shell=result.shell, variant=result.variant,
+        upload_hint=result.upload_hint, access_example=result.access_example,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+# ── Linux Endpoints ────────────────────────────────────────────────────────────
+
+@app.post("/linux/persist", response_model=LinuxPersistResponse)
+def linux_persist_post(req: LinuxPersistRequest):
+    """Generate Linux/macOS persistence commands."""
+    result = generate_linux_persist(req.technique, req.payload, req.name, req.lhost, req.lport)
+    return LinuxPersistResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+@app.get("/linux/persist", response_model=LinuxPersistResponse)
+def linux_persist_get(
+    technique: Annotated[str, Query(description=f"Persistence technique: {', '.join(LINUX_PERSIST_TECHNIQUES)}")],
+    payload: Annotated[str, Query(description="Payload path or command")] = "/tmp/payload.sh",
+    name: Annotated[str, Query(description="Identifier name")] = "sysupdate",
+    lhost: Annotated[str, Query(description="Attacker host")] = "192.168.1.100",
+    lport: Annotated[int, Query(ge=1, le=65535, description="Attacker port")] = 4444,
+):
+    if technique not in LINUX_PERSIST_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(LINUX_PERSIST_TECHNIQUES)}")
+    result = generate_linux_persist(technique, payload, name, lhost, lport)
+    return LinuxPersistResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+@app.post("/linux/harvest", response_model=LinuxHarvestResponse)
+def linux_harvest_post(req: LinuxHarvestRequest):
+    """Generate Linux credential harvesting commands."""
+    result = generate_linux_harvest(req.technique, req.outfile, req.lhost, req.lport)
+    return LinuxHarvestResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+@app.get("/linux/harvest", response_model=LinuxHarvestResponse)
+def linux_harvest_get(
+    technique: Annotated[str, Query(description=f"Harvest technique: {', '.join(LINUX_HARVEST_TECHNIQUES)}")],
+    outfile: Annotated[str, Query(description="Output file")] = "/tmp/loot.txt",
+    lhost: Annotated[str, Query(description="Attacker host")] = "192.168.1.100",
+    lport: Annotated[int, Query(ge=1, le=65535, description="Attacker port")] = 8080,
+):
+    if technique not in LINUX_HARVEST_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(LINUX_HARVEST_TECHNIQUES)}")
+    result = generate_linux_harvest(technique, outfile, lhost, lport)
+    return LinuxHarvestResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+@app.post("/linux/privesc", response_model=LinuxPrivescResponse)
+def linux_privesc_post(req: LinuxPrivescRequest):
+    """Generate Linux privilege escalation commands."""
+    result = generate_linux_privesc(req.technique, req.payload, req.name)
+    return LinuxPrivescResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+@app.get("/linux/privesc", response_model=LinuxPrivescResponse)
+def linux_privesc_get(
+    technique: Annotated[str, Query(description=f"PrivEsc technique: {', '.join(LINUX_PRIVESC_TECHNIQUES)}")],
+    payload: Annotated[str, Query(description="Payload to execute")] = "/tmp/payload.sh",
+    name: Annotated[str, Query(description="Binary/service name")] = "sysupdate",
+):
+    if technique not in LINUX_PRIVESC_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(LINUX_PRIVESC_TECHNIQUES)}")
+    result = generate_linux_privesc(technique, payload, name)
+    return LinuxPrivescResponse(
+        command=result.command, technique=result.technique, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+# ── Cloud Endpoints ────────────────────────────────────────────────────────────
+
+@app.post("/cloud", response_model=CloudResponse)
+def cloud_post(req: CloudRequest):
+    """Generate cloud environment attack commands (AWS/Azure/GCP/Kubernetes)."""
+    result = generate_cloud(req.technique, req.outfile, req.lhost)
+    return CloudResponse(
+        command=result.command, technique=result.technique,
+        platform=result.platform, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+@app.get("/cloud", response_model=CloudResponse)
+def cloud_get(
+    technique: Annotated[str, Query(description=f"Cloud technique: {', '.join(CLOUD_TECHNIQUES)}")],
+    outfile: Annotated[str, Query(description="Output file for harvested data")] = "/tmp/cloud_loot.json",
+    lhost: Annotated[str, Query(description="Attacker host")] = "192.168.1.100",
+):
+    if technique not in CLOUD_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(CLOUD_TECHNIQUES)}")
+    result = generate_cloud(technique, outfile, lhost)
+    return CloudResponse(
+        command=result.command, technique=result.technique,
+        platform=result.platform, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+# ── Initial Access Endpoints ───────────────────────────────────────────────────
+
+@app.post("/initial_access", response_model=InitialAccessResponse)
+def initial_access_post(req: InitialAccessRequest):
+    """Generate initial access payloads: VBA macros, HTML smuggling, HTA droppers, LNK shortcuts."""
+    result = generate_initial_access(req.technique, req.lhost, req.lport, req.obfuscate)
+    return InitialAccessResponse(
+        payload=result.payload, technique=result.technique,
+        delivery_hint=result.delivery_hint, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
+
+
+@app.get("/initial_access", response_model=InitialAccessResponse)
+def initial_access_get(
+    technique: Annotated[str, Query(description=f"Initial access technique: {', '.join(INITIAL_ACCESS_TECHNIQUES)}")],
+    lhost: Annotated[str, Query(min_length=1, description="Attacker listener host")],
+    lport: Annotated[int, Query(ge=1, le=65535, description="Attacker listener port")],
+    obfuscate: Annotated[bool, Query(description="Apply obfuscation")] = True,
+):
+    if not _LHOST_RE.match(lhost):
+        raise HTTPException(status_code=422, detail="Invalid lhost.")
+    if technique not in INITIAL_ACCESS_TECHNIQUES:
+        raise HTTPException(status_code=422, detail=f"Unsupported technique '{technique}'. Supported: {', '.join(INITIAL_ACCESS_TECHNIQUES)}")
+    result = generate_initial_access(technique, lhost, lport, obfuscate)
+    return InitialAccessResponse(
+        payload=result.payload, technique=result.technique,
+        delivery_hint=result.delivery_hint, notes=result.notes,
+        techniques=result.techniques, risk=result.risk, detections=result.detections,
+    )
 
 
 if __name__ == "__main__":

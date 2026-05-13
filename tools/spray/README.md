@@ -61,6 +61,8 @@ python spray.py --userlist users.txt --password 'Spring2026!' \
 |---|---|
 | `--proxy URL` | Route all requests through HTTP/SOCKS proxy (e.g. `socks5h://127.0.0.1:9050` for Tor). |
 | `--user-agents PATH\|STRING` | Rotate user-agents from a file (one per line) or use a literal UA. Defaults to a pool of recent browser UAs. |
+| `--xff-rotate` | Attach a random public IPv4 `X-Forwarded-For` header to every request. Useful when the target's WAF / SIEM correlates by client IP and you've already broken egress IP via `--proxy`. |
+| `--header KEY:VALUE` | Add a custom header on every request. Repeatable. Example: `--header 'X-Forwarded-Host: portal.acme.com' --header 'X-Original-URL: /admin'`. |
 | `--insecure` | Disable TLS verification for self-signed lab targets. |
 | `--delay` / `--jitter` | Base + random sleep between attempts. |
 | `--lockout-threshold` | Skip account after N lockout responses (default 3). |

@@ -6,8 +6,31 @@ import pytest
 
 from spray import (
     _build_pairs, _build_proxies, _build_ua_pool, _load_lines,
-    _load_state, _save_state,
+    _load_state, _random_public_ipv4, _save_state,
 )
+
+
+def test_random_public_ipv4_format():
+    ip = _random_public_ipv4()
+    parts = ip.split(".")
+    assert len(parts) == 4
+    a, b, c, d = (int(p) for p in parts)
+    assert 1 <= a <= 223
+    assert 0 <= b <= 255
+    assert 0 <= c <= 255
+    assert 1 <= d <= 254
+
+
+def test_random_public_ipv4_excludes_rfc1918_and_loopback():
+    """Sample many addresses; none should be in 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254/16, or ≥224.0.0.0."""
+    for _ in range(500):
+        ip = _random_public_ipv4()
+        a, b, _, _ = (int(p) for p in ip.split("."))
+        assert a not in (10, 127), f"loopback/private leaked: {ip}"
+        assert not (a == 172 and 16 <= b <= 31), f"RFC1918 leaked: {ip}"
+        assert not (a == 192 and b == 168), f"RFC1918 leaked: {ip}"
+        assert not (a == 169 and b == 254), f"link-local leaked: {ip}"
+        assert a < 224, f"multicast/reserved leaked: {ip}"
 
 
 def test_build_pairs_orders_password_outer_user_inner():

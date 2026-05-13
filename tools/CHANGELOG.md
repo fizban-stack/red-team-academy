@@ -1,5 +1,95 @@
 # Changelog
 
+## v4.2.0 — 2026-05-13
+
+### Evasion catalog growth (12 → 31 techniques)
+
+**Patchless AMSI / ETW** — hardware-breakpoint bypasses that don't write any bytes
+to amsi.dll or ntdll.dll, defeating module-integrity scans:
+- `amsi_hwbp` — DR0 on AmsiScanBuffer + VEH rewriting RAX.
+- `etw_hwbp` — DR1 on EtwEventWrite + VEH skipping the function body.
+- `amsi_provider_unregister` — wipe AMSI provider COM registration.
+- `amsi_wldp_downgrade` — flip WLDP into audit mode.
+
+**Direct & indirect syscalls** — C# stub templates:
+- `direct_syscalls` — HellsGate-style resolution from a fresh on-disk NTDLL copy.
+- `indirect_syscalls` — SysWhispers3-style; callstack lands inside ntdll.dll for legitimacy.
+- `ntdll_unhook` — KnownDlls-style refresh of the .text section to wipe userland EDR hooks.
+
+**Sleep masking & process tradecraft:**
+- `sleep_obfuscation_ekko` — Timer-Queue RC4 mask during beacon sleep.
+- `ppid_spoof` — parent-PID spoofing via UpdateProcThreadAttribute.
+- `process_hollowing`, `module_stomping`, `thread_hijack` — C# templates for the
+  three classic injection patterns, threaded with `lhost`/`lport`.
+
+**More LOLBAS:**
+- `lolbas_msbuild` — MSBuild inline-task XML.
+- `lolbas_installutil` — InstallUtil /U abuse via the Uninstall override.
+- `lolbas_cmstp` — INF-based execution via cmstp.exe.
+- `lolbas_msxsl`, `lolbas_wmic_xsl` — XSL transform JScript execution.
+- `lolbas_syncappv` — SyncAppvPublishingServer.vbs argument injection.
+- `lolbas_pubprn` — pubprn.vbs `script:` URL pivot.
+
+**Backfilled MITRE metadata** on the 9 legacy evasion techniques — every one of
+the 31 now returns `techniques` + `risk` + `detections`.
+
+### New module: `/anti_forensics` (12 techniques)
+
+Post-engagement artifact cleanup, separate from `/evasion` (which targets
+real-time detection during operations):
+- `clear_event_logs` — Security / System / Application / PowerShell / Sysmon / TaskScheduler.
+- `disable_usn_journal` — wipe $UsnJrnl on all volumes.
+- `clear_prefetch` — wipe + disable Prefetcher.
+- `clear_recent_files` — Recent + Office MRU + RecentDocs + TypedPaths + RunMRU.
+- `clear_recycle_bin` — all drives.
+- `time_stomp` — copy kernel32.dll timestamps onto a target file.
+- `ads_hide_payload` — store binary in NTFS Alternate Data Stream.
+- `self_delete` — C# SetFileInformationByHandle + FileDispositionInfo stub.
+- `clear_shellbags` — wipe ShellBag registry trees.
+- `clear_amcache` — disable PcaSvc + rename Amcache.hve.
+- `clear_jumplists` — AutomaticDestinations + CustomDestinations.
+- `clear_powershell_history` — PSReadLine history + session.
+
+### New module: `/sandbox_evasion` (12 techniques)
+
+Environmental gates that make payload execution conditional. Operator wraps the
+real payload inside the `if (check) { ... }` branch:
+- `vm_detect_cpuid`, `vm_detect_wmi`, `vm_detect_artifacts` — VM detection layers.
+- `sandbox_check_uptime` — minimum uptime threshold (default 20 min).
+- `sandbox_check_ram` — minimum RAM (default 4 GB).
+- `sandbox_check_user_interaction` — mouse-movement gate via WinForms.Cursor.
+- `sandbox_check_recent_files` — minimum recent-files count.
+- `sandbox_check_domain_joined` — require AD domain membership.
+- `sandbox_geofence` — IP geolocation allow-list via ifconfig.io + ipapi.co.
+- `sandbox_time_delay` — wall-clock DO-UNTIL loop that defeats sleep-NOP sandboxes.
+- `anti_debug` — IsDebuggerPresent + CheckRemoteDebuggerPresent + PEB hint.
+- `sandbox_screen_resolution` — minimum display dimensions.
+
+### Chain endpoint
+
+`/chain` now accepts `anti_forensics` and `sandbox_evasion` step types via the
+discriminated-union schema. Single chain: sandbox gate → evasion stack → payload →
+cleanup.
+
+### Spray-side evasion
+
+- `--xff-rotate` — random public IPv4 `X-Forwarded-For` per request.
+- `--header KEY:VALUE` (repeatable) — custom headers (e.g. `X-Forwarded-Host`).
+- `_random_public_ipv4()` helper excludes RFC1918, loopback, link-local, multicast.
+
+### Tests
+
+- 173 revshell-api tests (was 99) — every new evasion / anti-forensics /
+  sandbox-evasion technique has parametrized smoke + at least one targeted assertion.
+- 12 spray tests (was 10) — XFF generator covered.
+
+### Docs
+
+- README documents all three new endpoints with a full evasion-stack chain example.
+- Spray README documents `--xff-rotate` and `--header`.
+
+---
+
 ## v4.1.0 — 2026-05-13
 
 ### Bug fixes

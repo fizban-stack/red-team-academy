@@ -169,3 +169,70 @@ def test_initial_access_onenote():
         "lhost": "10.0.0.5", "lport": 4444,
     })
     assert r.status_code == 200, r.text
+
+
+# ── Extended evasion ──────────────────────────────────────────────────────────
+
+def test_anti_forensics_get_clear_event_logs():
+    r = client.get("/anti_forensics", params={"technique": "clear_event_logs"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "wevtutil" in body["command"]
+    assert "T1070.001" in body["techniques"]
+
+
+def test_anti_forensics_post_time_stomp():
+    r = client.post("/anti_forensics", json={
+        "technique": "time_stomp", "target": "C:\\Windows\\Temp\\demo.exe",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert "C:\\Windows\\Temp\\demo.exe" in body["command"]
+
+
+def test_sandbox_evasion_get_uptime():
+    r = client.get("/sandbox_evasion", params={
+        "technique": "sandbox_check_uptime", "threshold": 900,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert "900" in body["command"]
+
+
+def test_sandbox_evasion_post_geofence():
+    r = client.post("/sandbox_evasion", json={"technique": "sandbox_geofence"})
+    assert r.status_code == 200
+    body = r.json()
+    assert "ifconfig.io" in body["command"]
+
+
+def test_evasion_amsi_hwbp():
+    r = client.get("/evasion", params={"technique": "amsi_hwbp"})
+    assert r.status_code == 200
+    body = r.json()
+    assert "AmsiScanBuffer" in body["command"]
+    assert body["risk"] == "CRITICAL"
+
+
+def test_evasion_direct_syscalls():
+    r = client.get("/evasion", params={
+        "technique": "direct_syscalls", "lhost": "10.0.0.5", "lport": 4444,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert "10.0.0.5" in body["command"]
+
+
+def test_chain_anti_forensics_step():
+    r = client.post("/chain", json={
+        "lhost": "10.0.0.5", "lport": 4444,
+        "steps": [
+            {"module": "anti_forensics", "technique": "clear_event_logs"},
+            {"module": "sandbox_evasion", "technique": "sandbox_check_ram", "threshold": 8},
+        ],
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total_steps"] == 2
+    assert body["steps"][0]["module"] == "anti_forensics"
+    assert body["steps"][1]["module"] == "sandbox_evasion"

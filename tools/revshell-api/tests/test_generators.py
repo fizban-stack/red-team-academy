@@ -23,25 +23,28 @@ def _build(language: str, obfuscate: bool = False, seed: int | None = None):
 
 
 import base64
+import re
+
+_B64_RE = re.compile(r"[A-Za-z0-9+/=]{16,}")
 
 
 def _contains_anywhere(command: str, needle: str) -> bool:
     """
-    Some generators base64-encode their source (golang, csharp, etc.). For those
-    we have to decode embedded base64 blobs to check lhost was actually threaded.
+    Some generators base64-encode their source (golang, csharp, lolbins-mshta,
+    etc.) — sometimes as UTF-8, sometimes as UTF-16LE for PowerShell's
+    -EncodedCommand. Scan literal text first, then every base64-looking blob
+    in both encodings.
     """
     if needle in command:
         return True
-    # Scan whitespace-separated tokens for base64-decodable strings.
-    for tok in command.replace("\n", " ").split():
-        if len(tok) < 16:
-            continue
-        try:
-            decoded = base64.b64decode(tok, validate=True).decode("utf-8", errors="replace")
-        except Exception:
-            continue
-        if needle in decoded:
-            return True
+    for blob in _B64_RE.findall(command):
+        for encoding in ("utf-8", "utf-16-le"):
+            try:
+                decoded = base64.b64decode(blob, validate=False).decode(encoding, errors="replace")
+            except Exception:
+                continue
+            if needle in decoded:
+                return True
     return False
 
 

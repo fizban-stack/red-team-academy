@@ -82,6 +82,13 @@ def _amsi_reflection(payload: str, obfuscate: bool) -> EvasionResult:
             "Run before any malicious cmdlet. "
             "Effect is per-process — must re-run in each new PS session."
         ),
+        techniques=["T1562.001"],
+        risk="HIGH",
+        detections=[
+            "PowerShell ScriptBlock log entry containing AmsiUtils reflection",
+            "Defender real-time scan of amsiInitFailed field access",
+            "Sysmon Event 4104 with NonPublic,Static reflection on AMSI",
+        ],
     )
 
 
@@ -1263,6 +1270,52 @@ _DISPATCH = {
 }
 
 
+# Backfill MITRE metadata for the legacy evasion techniques that pre-date the
+# uniform-metadata refactor. Newer techniques set their own values; values here
+# only apply when the dispatched function returned an empty list.
+_LEGACY_MITRE = {
+    "amsi_patch_clr": ("T1562.001", "CRITICAL", [
+        "amsi.dll .text section content drift from disk hash",
+        "Add-Type compilation in a process with no benign use case",
+        "VirtualProtect call sequence flipping amsi.dll to RWX",
+    ]),
+    "etw_patch": ("T1562.006", "HIGH", [
+        "EtwEventWrite first byte modified to 0xC3 (memory scan)",
+        "VirtualProtect on ntdll!EtwEventWrite",
+        "Sudden ETW provider silence per-process",
+    ]),
+    "clm_bypass_runspace": ("T1059.001", "HIGH", [
+        "Add-Type emitting C# that creates FullLanguage runspace",
+        "PowerShell child runspace with non-default LanguageMode",
+        "Sysmon Event 4104 with InitialSessionState.CreateDefault2",
+    ]),
+    "scriptblock_logging_disable": ("T1562.002", "HIGH", [
+        "Event 4657 on ScriptBlockLogging / Transcription policy keys",
+        "EnableScriptBlockLogging value set to 0",
+    ]),
+    "defender_add_exclusion": ("T1562.001", "HIGH", [
+        "Add-MpPreference -ExclusionPath in ScriptBlock log",
+        "Defender event 5007 (real-time config changed)",
+        "Tamper Protection event log entries",
+    ]),
+    "defender_disable": ("T1562.001", "CRITICAL", [
+        "Set-MpPreference -DisableRealtimeMonitoring \"true\" (high-fidelity)",
+        "Defender event 5001 (real-time protection disabled)",
+        "Microsoft-Windows-Windows Defender/Operational alert",
+    ]),
+    "obfuscate_base64": ("T1027", "MEDIUM", [
+        "PowerShell -EncodedCommand argument in process command line",
+        "Long base64 string in PS log (Event 4104)",
+        "AMSI scanning the decoded inner command",
+    ]),
+    "lolbas_mshta": ("T1218.005", "HIGH", [
+        "mshta.exe with javascript:/vbscript: URI (Sysmon Event 1)",
+        "mshta.exe spawning powershell.exe / cmd.exe",
+        "Defender ASR rule 'Block executable use of mshta'",
+    ]),
+}
+
+
 def generate_evasion(
     technique: str,
     payload: str = "powershell.exe",
@@ -1274,7 +1327,13 @@ def generate_evasion(
         raise ValueError(f"Unknown technique '{technique}'. Supported: {', '.join(SUPPORTED_TECHNIQUES)}")
     fn = _DISPATCH[technique]
     if technique in _NETWORK_TECHNIQUES:
-        return fn(payload, obfuscate, lhost, lport)
-    # All others have the (payload, obfuscate) signature; the new HW-bp /
-    # process / sleep / unhook ones happen to match it as well.
-    return fn(payload, obfuscate)
+        result = fn(payload, obfuscate, lhost, lport)
+    else:
+        result = fn(payload, obfuscate)
+    # Backfill MITRE if the function didn't set any (legacy techniques).
+    if not result.techniques and technique in _LEGACY_MITRE:
+        tid, risk, detections = _LEGACY_MITRE[technique]
+        result.techniques = [tid]
+        result.risk = risk
+        result.detections = detections
+    return result

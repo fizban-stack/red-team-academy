@@ -18,6 +18,7 @@ from routers import (
     c2 as c2_router,
     chain as chain_router,
     cloud as cloud_router,
+    evasion_extended as evasion_extended_router,
     initial_access as initial_access_router,
     linux_postex as linux_router,
     reporting as reporting_router,
@@ -80,6 +81,7 @@ app.include_router(linux_router.router)
 app.include_router(cloud_router.router)
 app.include_router(webshell_router.router)
 app.include_router(initial_access_router.router)
+app.include_router(evasion_extended_router.router)
 app.include_router(chain_router.router)
 app.include_router(reporting_router.router)
 

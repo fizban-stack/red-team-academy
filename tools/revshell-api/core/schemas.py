@@ -14,7 +14,9 @@ from generators.c2profile import SUPPORTED_PLATFORMS
 from generators.cloud import SUPPORTED_TECHNIQUES as CLOUD_TECHNIQUES
 from generators.encode import SUPPORTED_TECHNIQUES as ENCODE_TECHNIQUES
 from generators.adattack import SUPPORTED_TECHNIQUES as ADATTACK_TECHNIQUES
+from generators.anti_forensics import SUPPORTED_TECHNIQUES as ANTI_FORENSICS_TECHNIQUES
 from generators.evasion import SUPPORTED_TECHNIQUES as EVASION_TECHNIQUES
+from generators.sandbox_evasion import SUPPORTED_TECHNIQUES as SANDBOX_EVASION_TECHNIQUES
 from generators.harvest import SUPPORTED_TECHNIQUES as HARVEST_TECHNIQUES
 from generators.initial_access import SUPPORTED_TECHNIQUES as INITIAL_ACCESS_TECHNIQUES
 from generators.lateral import SUPPORTED_TECHNIQUES as LATERAL_TECHNIQUES
@@ -467,10 +469,55 @@ class EvasionStep(_StepBase):
     obfuscate: bool = True
 
 
+# ── Anti-forensics ────────────────────────────────────────────────────────────
+
+class AntiForensicsRequest(_TechniqueBase):
+    technique: str = Field(..., description=f"Anti-forensics technique: {', '.join(ANTI_FORENSICS_TECHNIQUES)}")
+    target: str = Field(default="auto", description="Optional target path (used by time_stomp, ads_hide_payload)")
+
+    @field_validator("technique")
+    @classmethod
+    def _vt(cls, v: str) -> str:
+        if v not in ANTI_FORENSICS_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(ANTI_FORENSICS_TECHNIQUES)}")
+        return v
+
+
+class AntiForensicsStep(_StepBase):
+    module: Literal["anti_forensics"]
+    technique: str
+    target: str = "auto"
+    obfuscate: bool = True
+
+
+# ── Sandbox evasion ───────────────────────────────────────────────────────────
+
+class SandboxEvasionRequest(_TechniqueBase):
+    technique: str = Field(..., description=f"Sandbox evasion technique: {', '.join(SANDBOX_EVASION_TECHNIQUES)}")
+    threshold: int = Field(default=0, ge=0, description=(
+        "Per-technique threshold (seconds, GB, pixels, file count). 0 = use technique default."
+    ))
+
+    @field_validator("technique")
+    @classmethod
+    def _vt(cls, v: str) -> str:
+        if v not in SANDBOX_EVASION_TECHNIQUES:
+            raise ValueError(f"Unsupported technique '{v}'. Supported: {', '.join(SANDBOX_EVASION_TECHNIQUES)}")
+        return v
+
+
+class SandboxEvasionStep(_StepBase):
+    module: Literal["sandbox_evasion"]
+    technique: str
+    threshold: int = 0
+    obfuscate: bool = True
+
+
 AnyStep = Annotated[
     Union[
         GenerateStep, HarvestStep, PersistStep, ADAttackStep,
         LinuxPersistStep, CloudStep, InitialAccessStep, LateralStep, EvasionStep,
+        AntiForensicsStep, SandboxEvasionStep,
     ],
     Field(discriminator="module"),
 ]

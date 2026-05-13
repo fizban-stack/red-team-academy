@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from core.auth import require_token
 from core.schemas import (
-    ADAttackStep, ChainRequest, ChainResponse, ChainStep,
+    ADAttackStep, AntiForensicsStep, ChainRequest, ChainResponse, ChainStep,
     CloudStep, EvasionStep, GenerateStep, HarvestStep, InitialAccessStep,
-    LateralStep, LinuxPersistStep, PersistStep, ShellRequest,
+    LateralStep, LinuxPersistStep, PersistStep, SandboxEvasionStep, ShellRequest,
 )
 from generators import REGISTRY
 from generators.adattack import generate_adattack
+from generators.anti_forensics import generate_anti_forensics
 from generators.cloud import generate_cloud
 from generators.evasion import generate_evasion
 from generators.harvest import generate_harvest
@@ -18,6 +19,7 @@ from generators.initial_access import generate_initial_access
 from generators.lateral import generate_lateral
 from generators.linux_persist import generate_linux_persist
 from generators.persist import generate_persist
+from generators.sandbox_evasion import generate_sandbox_evasion
 
 from .shell import _build_shell
 from ._helpers import audit
@@ -100,6 +102,14 @@ def chain_build(
                     step.technique, step.payload, step.obfuscate, req.lhost, req.lport,
                 )
                 results.append(_to_chain_step(i, "evasion", r))
+
+            elif isinstance(step, AntiForensicsStep):
+                r = generate_anti_forensics(step.technique, step.target, step.obfuscate)
+                results.append(_to_chain_step(i, "anti_forensics", r))
+
+            elif isinstance(step, SandboxEvasionStep):
+                r = generate_sandbox_evasion(step.technique, step.threshold, step.obfuscate)
+                results.append(_to_chain_step(i, "sandbox_evasion", r))
 
             else:
                 # Unreachable — pydantic discriminator would have raised already.

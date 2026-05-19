@@ -442,6 +442,12 @@
       title: Engagement Infrastructure
     - url: /c2-frameworks/teamserver-buildout/
       title: Teamserver Buildout
+    - url: /c2-frameworks/poshc2/
+      title: PoshC2
+    - url: /c2-frameworks/merlin/
+      title: Merlin C2
+    - url: /c2-frameworks/ghost-c2/
+      title: ghost-c2 (Custom)
 
 - num: "09"
   title: Web Hacking
@@ -854,6 +860,8 @@
       title: "BOF: Network Enumeration"
     - url: /tool-dev/bof-opsec/
       title: "BOF: OPSEC & Memory Cleanup"
+    - url: /tool-dev/ghost-ad/
+      title: "ghost-ad: Rust AD Enumeration"
 
 - num: "15"
   title: Reporting

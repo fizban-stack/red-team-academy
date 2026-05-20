@@ -67,6 +67,12 @@
       title: DNSChef — DNS Proxy
     - url: /recon/nettacker/
       title: OWASP Nettacker
+    - url: /recon/content-discovery/
+      title: Content Discovery — gobuster, feroxbuster, nuclei
+    - url: /recon/osint-automation/
+      title: OSINT Automation — SpiderFoot, reconFTW
+    - url: /recon/secrets-scanning/
+      title: Secrets Scanning — TruffleHog, Gitrob, CloudBrute
 
 - num: "03"
   title: Active Directory
@@ -148,6 +154,8 @@
       title: DPAPI Abuse & Credential Extraction
     - url: /active-directory/ad-tools-reference/
       title: AD Tools Reference
+    - url: /active-directory/ad-assessment-tools/
+      title: AD Assessment — PingCastle, ADRecon, adidnsdump
 
 - num: "04"
   title: Pivoting & Tunneling
@@ -258,6 +266,8 @@
       title: EDR Internals & Architecture
     - url: /evasion/linux-ebpf-evasion/
       title: Linux eBPF Evasion
+    - url: /evasion/edr-bypass-tools/
+      title: EDR Bypass Tools — ScareCrow, Freeze, Mangle
 
 - num: "06"
   title: Exploitation
@@ -344,6 +354,10 @@
       title: "Custom C2 Protocol Design"
     - url: /exploitation/dependency-confusion/
       title: Dependency Confusion & Package Poisoning
+    - url: /exploitation/payload-dev-tools/
+      title: Payload Dev Tools — CUPP, WordSteal, VBA, HTA
+    - url: /exploitation/advanced-phishing/
+      title: Advanced Phishing — CredMaster, EvilQR, SquarePhish
 
 - num: "07"
   title: Post-Exploitation
@@ -396,6 +410,16 @@
       title: Linux Post-Exploitation
     - url: /post-exploitation/container-escape-post/
       title: Container Escape (Post-Exploitation)
+    - url: /post-exploitation/snaffler/
+      title: Snaffler — File Share Credential Hunting
+    - url: /post-exploitation/credential-hunting-tools/
+      title: Credential Hunting — eviltree, PCredz, MailSniper
+    - url: /post-exploitation/fileless-lateral-movement/
+      title: Fileless Lateral — PowerLessShell, LiquidSnake, ADFSpoof
+    - url: /post-exploitation/exfil-toolkit/
+      title: Exfil Toolkit — goshs, PyExfil, GD-Thief
+    - url: /post-exploitation/impact-techniques/
+      title: Impact Techniques — SlowLoris, USBKill, Keytap
 
 - num: "08"
   title: C2 Frameworks
@@ -436,6 +460,8 @@
       title: GoPhish Phishing Framework
     - url: /c2-frameworks/evilginx/
       title: Evilginx AiTM Framework
+    - url: /c2-frameworks/phishing-stack-docker/
+      title: Traefik + GoPhish + Evilginx Docker Stack
     - url: /c2-frameworks/custom-c2-server/
       title: Custom C2 Server Development
     - url: /c2-frameworks/engagement-infrastructure/
@@ -448,6 +474,10 @@
       title: Merlin C2
     - url: /c2-frameworks/ghost-c2/
       title: ghost-c2 (Custom)
+    - url: /c2-frameworks/lightweight-c2-frameworks/
+      title: Lightweight C2 — Covenant, Pupy, NimPlant, Hoaxshell
+    - url: /c2-frameworks/lots-project/
+      title: Living Off Trusted Sites (LOTS)
 
 - num: "09"
   title: Web Hacking

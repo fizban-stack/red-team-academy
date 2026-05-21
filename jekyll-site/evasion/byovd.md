@@ -77,11 +77,23 @@ del C:\Windows\Temp\vuln.sys</code></pre>
 # HP OMEN Gaming Hub (HpPortIox64.sys) — CVE-2021-3437
 # - Port-mapped I/O, arbitrary read/write</code></pre>
 
+<h3>2025 Zero-Days</h3>
+
+<pre><code># BioNTdrv.sys — Paragon Partition Manager (exploited as zero-day, 2025)
+# CVE-2025-0289, CVE-2025-0290, CVE-2025-0291, CVE-2025-0292, CVE-2025-0293
+# Five vulnerabilities in versions 1.3.0 and 1.5.1
+# Exploited by ransomware gangs for privilege escalation to SYSTEM
+# More severe than standard admin — bypasses even SYSTEM-level controls
+# SHA256: fb0dbc3b9c897b7571b94fb2203ffb1ac0facfe366b2cb1f91904ea5335018f0
+sc.exe create BioNTdrv type=kernel binPath=C:\windows\temp\BioNTdrv.sys
+sc.exe start BioNTdrv</code></pre>
+
 <h3>LOLDrivers Database</h3>
 
 <pre><code># LOLDrivers project — comprehensive catalog of vulnerable drivers
 # Website: loldrivers.io
 # GitHub: github.com/magicsword-io/LOLDrivers
+# See also: /evasion/loldrivers-reference/ — full database reference, API usage, detection
 
 # Search for drivers by capability
 # Categories:

@@ -422,6 +422,8 @@
       title: Exfil Toolkit — goshs, PyExfil, GD-Thief
     - url: /post-exploitation/impact-techniques/
       title: Impact Techniques — SlowLoris, USBKill, Keytap
+    - url: /post-exploitation/winpwn-techniques/
+      title: WinPwn Techniques — Internal Windows Pentest
 
 - num: "08"
   title: C2 Frameworks

@@ -932,6 +932,14 @@
       title: Findings Severity Matrix
     - url: /reporting/red-team-metrics/
       title: Red Team Metrics & ROI
+    - url: /reporting/engagement-scoping-deep-dive/
+      title: Engagement Scoping Deep Dive
+    - url: /reporting/deconfliction-playbook/
+      title: Deconfliction Playbook
+    - url: /reporting/red-team-program-maturity/
+      title: Red Team Program Maturity
+    - url: /reporting/post-engagement-debrief/
+      title: Post-Engagement Debrief Framework
 
 - num: "16"
   title: Social Engineering
@@ -1102,6 +1110,12 @@
       title: ret2libc & ROP Chains
     - url: /exploit-dev/kernel-exploitation-windows/
       title: Windows Kernel Exploitation
+    - url: /exploit-dev/browser-exploit-primer/
+      title: Browser Exploit Primer — V8, JSC, SpiderMonkey
+    - url: /exploit-dev/linux-kernel-exploit-2025/
+      title: Linux Kernel Exploitation — io_uring, eBPF, slab
+    - url: /exploit-dev/nday-weaponization-pipeline/
+      title: N-Day Weaponization Pipeline
 
 - num: "23"
   title: Purple Team
@@ -1120,6 +1134,10 @@
       title: Tabletop Exercises
     - url: /purple-team/threat-hunting/
       title: Threat Hunting Playbooks
+    - url: /purple-team/bas-platform-comparison/
+      title: BAS Platform Comparison
+    - url: /purple-team/detection-engineering-pipeline/
+      title: Detection Engineering Pipeline
 
 - num: "24"
   title: Scenarios
@@ -1142,6 +1160,12 @@
       title: SaaS-to-IaaS Pivot — 2024 Breach Pattern
     - url: /scenarios/telecom-intrusion-salt-typhoon/
       title: Salt Typhoon — Telecom Carrier Intrusion
+    - url: /scenarios/detection-recovery-mid-op/
+      title: Detection Recovery Mid-Op
+    - url: /scenarios/long-dwell-credential-harvest/
+      title: Long-Dwell Credential Harvesting
+    - url: /scenarios/ransomware-operator-emulation/
+      title: Ransomware Operator Emulation
 
 - num: "25"
   title: OT/ICS Security
@@ -1284,6 +1308,12 @@
       title: Dynamic RE with x64dbg
     - url: /reverse-engineering/ghidra-static-re/
       title: Static RE with Ghidra
+    - url: /reverse-engineering/dotnet-reversing/
+      title: .NET Reverse Engineering
+    - url: /reverse-engineering/macho-rebuilding/
+      title: Mach-O Reverse Engineering (macOS)
+    - url: /reverse-engineering/elf-rebuilding/
+      title: ELF Reverse Engineering (Linux)
 
 - num: "33"
   title: Interactive Tools
@@ -1342,3 +1372,19 @@
       title: Linux — GTFOBins & Privilege Escalation
     - url: /living-off-the-land/macos-lotl/
       title: macOS — AppleScript, TCC & Built-in Tools
+
+- num: "36"
+  title: macOS
+  pages:
+    - url: /macos/overview/
+      title: macOS Red Team — Module Overview
+    - url: /macos/gatekeeper-xprotect/
+      title: Gatekeeper, XProtect, MRT, Notarization
+    - url: /macos/tcc-bypass/
+      title: TCC — Transparency, Consent, Control
+    - url: /macos/sip-bypass/
+      title: SIP — System Integrity Protection
+    - url: /macos/persistence-catalog/
+      title: macOS Persistence Catalog
+    - url: /macos/mdm-jamf-kandji-abuse/
+      title: MDM Abuse — Jamf, Kandji, Mosyle, Intune

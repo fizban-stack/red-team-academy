@@ -678,6 +678,8 @@
       title: OAuth Device Code Phishing
     - url: /web/browser-extension-attacks/
       title: Browser Extension Supply Chain Attacks
+    - url: /web/browser-exploitation/
+      title: Browser Exploitation — Security Features & Bypass Tradecraft
     - url: /web/crypto-attacks/
       title: Cryptographic Attacks (JWT, Padding Oracle, ECDSA)
     - url: /web/passkey-bypass/

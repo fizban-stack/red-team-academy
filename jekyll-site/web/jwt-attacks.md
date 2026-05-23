@@ -306,6 +306,12 @@ jwt_tool TOKEN --crack -d rockyou.txt   # brute force HMAC secret
 
 ## JWT Labs & Tools
 
+**PortSwigger Practice Labs (recommended in sequence):**
+- JWT authentication bypass via unverified signature — `portswigger.net/web-security/jwt/lab-jwt-authentication-bypass-via-unverified-signature`
+- JWT authentication bypass via weak signing key — `portswigger.net/web-security/jwt/lab-jwt-authentication-bypass-via-weak-signing-key`
+- JWT authentication bypass via jwk header injection — `portswigger.net/web-security/jwt/lab-jwt-authentication-bypass-via-jwk-header-injection`
+- JWT authentication bypass via algorithm confusion — `portswigger.net/web-security/jwt/lab-jwt-authentication-bypass-via-algorithm-confusion`
+
 - PortSwigger JWT labs — `portswigger.net/web-security/jwt`
 - jwt_tool — `github.com/ticarpi/jwt_tool`
 - jwt.io — online decoder/debugger

@@ -24,10 +24,13 @@ render_with_liquid: false
 | Metric | Count |
 |---|---|
 | Total driver entries | 623 |
+| Total driver samples (hashes) | 2,133 |
 | Vulnerable drivers | 511 |
 | Malicious drivers | 112 |
-| Unique SHA256 hashes | 1,924 |
-| Unique driver filenames | 473 |
+| Unique SHA256 hashes | 1,924+ |
+| Drivers bypassing HVCI | 465 (21.8% of samples) |
+| Drivers NOT yet on Microsoft blocklist | 730 (34.2% of samples) |
+| Cross-signed by third-party CAs | ~81% of all samples |
 
 The database is continuously updated. Sigma, Sysmon, YARA, ClamAV, and WDAC detection artifacts are generated from the YAML source and published alongside each update.
 
@@ -66,7 +69,8 @@ The most versatile capability — arbitrary physical memory access enables: read
 | `dbutil_2_3.sys` | Dell BIOS Utility | CVE-2021-21551 | `0296e2ce999e67c76352613a71...` |
 | `iqvw64e.sys` | Intel Ethernet Diagnostics | CVE-2015-2291 | `4429f32db1cc705679195ee...` |
 | `gdrv.sys` | Gigabyte App Center | CVE-2018-19320 through 19323 | `31f4cfb4c71da4412075...` |
-| `WinRing0x64.sys` | OpenHardwareMonitor / EVGA | CVE-2020-14979 | varies |
+| `LnvMSRIO.sys` | Lenovo Process Management (pre-installed) | CVE-2025-8061 | varies — no DACL, any user can open `\\.\WinMsrDev` |
+| `WinRing0x64.sys` | OpenHardwareMonitor / EVGA / Corsair iCUE / NZXT CAM | CVE-2020-14979 | varies |
 | `HpPortIox64.sys` | HP OMEN Gaming Hub | CVE-2021-3437 | `c5050a2017490fff7aa5...` |
 | `AsrOmgDrv.sys` | ASRock RGB utility | N/A | `950a4c0c772021cee260...` |
 | `atillk64.sys` | ATI GPU utility | N/A | varies |
@@ -83,15 +87,17 @@ The most versatile capability — arbitrary physical memory access enables: read
 
 Drivers that can terminate PPL-protected processes from kernel mode — bypassing tamper protection.
 
-| Driver | Vendor/Source | Notes |
-|---|---|---|
-| `zam64.sys` / `zamguard64.sys` | Zemana Anti-Logger | Used by Terminator/SpyBoy EDR killer, sold on dark forums |
-| `PROCEXP152.sys` | Sysinternals Process Explorer (Microsoft-signed) | Used by AuKill (BlackCat/ALPHV affiliates) |
-| `probmon.sys` | Unknown vendor | Categorized as EDR Kill in LOLDrivers |
-| `kavservice.bin` | AV-related | Categorized as EDR Kill |
-| `BootRepair.sys` | BootRepair | Unauthenticated IOCTL handler for arbitrary process kill including PPL |
-| `PoisonX.sys` | Unknown | Kill EDR / Privilege Escalation |
-| `STProcessMonitor.sys` | Safetica | Documented disable security tools capability |
+| Driver | Vendor/Source | CVE | Notes |
+|---|---|---|---|
+| `zam64.sys` / `zamguard64.sys` | Zemana Anti-Logger | N/A | Used by Terminator/SpyBoy EDR killer, sold for $3,000 on dark forums |
+| `PROCEXP152.sys` | Sysinternals Process Explorer (Microsoft-signed) | N/A | Used by AuKill (BlackCat/ALPHV affiliates) — legitimately signed by Microsoft |
+| `STProcessMonitor.sys` | Safetica | CVE-2025-70795 | Disable security tools / EDR kill |
+| `K7RKScan.sys` | K7 Computing AV | CVE-2025-52915 | Process termination → EDR kill |
+| `viragt64.sys` | VirIT antivirus | N/A | Used by Kasseika ransomware (2024) — EDR bypass before encryption |
+| `BdApiUtil64.sys` | Baidu AntiVirus | CVE-2024-51324 | EDR kill |
+| `probmon.sys` | Unknown vendor | N/A | Categorized as EDR Kill in LOLDrivers |
+| `BootRepair.sys` | BootRepair | N/A | Unauthenticated IOCTL handler for arbitrary process kill including PPL |
+| `mhyprot2.sys` | miHoYo Genshin Impact anti-cheat | N/A | ZwTerminateProcess from ring 0 — widely abused due to game's popularity |
 
 ### Direct Kernel Code Execution
 
@@ -129,13 +135,18 @@ Documented real-world BYOVD by threat actors:
 | Threat Actor | Driver Used | Effect | Source |
 |---|---|---|---|
 | Lazarus Group (DPRK) | `dbutil_2_3.sys` | Kernel memory R/W for payload delivery | SentinelOne Labs |
+| Lazarus Group (DPRK) | `AFD.sys` (Windows built-in, CVE-2024-38193) | FUDModule rootkit — disabled CrowdStrike, Defender, AhnLab V3, HitmanPro | Gen Digital |
 | BlackByte ransomware | `RTCore64.sys` | EDR bypass, kernel callbacks removed | Sophos |
 | RobbinHood ransomware | `gdrv.sys` | Kernel memory R/W, EDR bypass | |
 | Scattered Spider (UNC3944) | `iqvw64e.sys` | BYOVD for detection avoidance | CrowdStrike |
 | BlackCat/ALPHV (AuKill) | `PROCEXP152.sys` | Kill EDR/AV processes | Mandiant |
-| Terminator/SpyBoy (sold) | `zam64.sys` | Kill 24+ EDR/AV products | Crowdstrike/Reddit |
+| RansomHub / 7 affiliate groups (EDRKillShifter) | `RentDrv2`, `ThreatFireMonitor` | Shared EDR killer used by BlackSuit, Medusa, Qilin, DragonForce, Crytox, Lynx, INC Ransom | Help Net Security / Arete IR |
+| Terminator/SpyBoy (sold) | `zam64.sys` | Kill 24+ EDR/AV products | CrowdStrike |
+| Kasseika ransomware (2024) | `viragt64.sys` (VirIT antivirus) | EDR bypass before encryption | Trend Micro |
+| Silver Fox APT | vulnerable drivers (unspecified) | Disable EDR before deploying ValleyRAT backdoor | Check Point Research |
 | Akira ransomware | `hlpdrv.sys` | Disable Windows Defender via registry | GuidePoint Security |
 | APT (state-sponsored) | `daxin_blank5.sys` + variants | Deep rootkit stealth | Symantec |
+| Unknown (HiddenGh0st RAT, 2025) | `truesight.sys` (~2,500 hash variants) | EDR bypass — 2,500 PE-modified variants generated to evade blocklist | The Hacker News |
 | Multiple ransomware (2025) | `BioNTdrv.sys` | Zero-day privilege escalation | Paragon/Bleeping Computer |
 
 ### POORTRY Driver Family

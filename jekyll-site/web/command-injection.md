@@ -334,5 +334,10 @@ When there is no visible output, confirm injection with out-of-band techniques:
 - commix — Automated Command Injection Tool — `github.com/commixproject/commix`
 - interactsh — OOB Interaction Server — `github.com/projectdiscovery/interactsh`
 - Argument Injection Vectors — SonarSource — `sonarsource.github.io/argument-injection-vectors`
+**PortSwigger Practice Labs (recommended in sequence):**
+- OS command injection, simple case — `portswigger.net/web-security/os-command-injection/lab-simple`
+- Blind OS command injection with time delays — `portswigger.net/web-security/os-command-injection/lab-blind-time-delays`
+- Blind OS command injection with out-of-band interaction — `portswigger.net/web-security/os-command-injection/lab-blind-out-of-band`
+
 - PortSwigger OS Command Injection — `portswigger.net/web-security/os-command-injection`
 - WorstFit: Unveiling Hidden Transformers in Windows ANSI — Orange Tsai — `blog.orange.tw/posts/2025-01-worstfit-unveiling-hidden-transformers-in-windows-ansi`

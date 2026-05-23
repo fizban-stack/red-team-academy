@@ -428,6 +428,11 @@ Content-Disposition: form-data; name="file"; filename*=utf-8''shell%2Ephp
 
 ## Tools & Resources
 
+**PortSwigger Practice Labs (recommended in sequence):**
+- Remote code execution via web shell upload — `portswigger.net/web-security/file-upload/lab-file-upload-remote-code-execution-via-web-shell-upload`
+- Web shell upload via Content-Type restriction bypass — `portswigger.net/web-security/file-upload/lab-file-upload-web-shell-upload-via-content-type-restriction-bypass`
+- Web shell upload via race condition — `portswigger.net/web-security/file-upload/lab-file-upload-web-shell-upload-via-race-condition`
+
 - PortSwigger File Upload labs — `portswigger.net/web-security/file-upload`
 - exiftool — metadata manipulation
 - Burp Suite — modify Content-Type, filename, extension

@@ -376,6 +376,10 @@ python3 sstimap.py -i -A -m POST -l 5 -H 'Authorization: Basic BASE64'
 ## Resources
 
 - tplmap — SSTI exploitation tool — `github.com/epinna/tplmap`
+**PortSwigger Practice Labs:**
+- Basic server-side template injection — `portswigger.net/web-security/server-side-template-injection/exploiting/lab-server-side-template-injection-basic`
+- SSTI using documentation — `portswigger.net/web-security/server-side-template-injection/exploiting/lab-server-side-template-injection-basic-code-context`
+
 - PortSwigger SSTI labs — `portswigger.net/web-security/server-side-template-injection`
 - PayloadsAllTheThings SSTI — `github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Server%20Side%20Template%20Injection`
 - SSTI payloads collection — `github.com/payloadbox/ssti-payloads`

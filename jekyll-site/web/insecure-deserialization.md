@@ -352,6 +352,11 @@ DES:                  NzY1NDMyMTA=
 - phpggc — PHP gadget chain generator — `github.com/ambionics/phpggc`
 - Java Deserialization Cheat Sheet — GrrrDog — `github.com/GrrrDog/Java-Deserialization-Cheat-Sheet`
 - marshalsec — Java unmarshaller security — `github.com/mbechler/marshalsec`
+**PortSwigger Practice Labs (recommended in sequence):**
+- Modifying serialized data types — `portswigger.net/web-security/deserialization/exploiting/lab-deserialization-modifying-serialized-data-types`
+- Arbitrary object injection in PHP — `portswigger.net/web-security/deserialization/exploiting/lab-deserialization-arbitrary-object-injection-in-php`
+- Exploiting Java deserialization with Apache Commons — `portswigger.net/web-security/deserialization/exploiting/lab-deserialization-exploiting-java-deserialization-with-apache-commons`
+
 - PortSwigger Deserialization Web Security Academy — `portswigger.net/web-security/deserialization`
 - Exploiting Deserialization in ASP.NET via ViewState — Soroush Dalili — `soroush.secproject.com/blog/2019/04/exploiting-deserialisation-in-asp-net-via-viewstate`
 - DeserLab — Java deserialization practice lab — `github.com/NickstaDB/DeserLab`

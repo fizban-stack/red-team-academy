@@ -156,6 +156,8 @@
       title: AD Tools Reference
     - url: /active-directory/ad-assessment-tools/
       title: AD Assessment — PingCastle, ADRecon, adidnsdump
+    - url: /active-directory/entra-connect-compromise/
+      title: Entra Connect / AAD Connect Compromise
 
 - num: "04"
   title: Pivoting & Tunneling
@@ -270,6 +272,12 @@
       title: EDR Bypass Tools — ScareCrow, Freeze, Mangle
     - url: /evasion/loldrivers-reference/
       title: LOLDrivers Reference — 623 Drivers, API, Detection
+    - url: /evasion/mde-tradecraft/
+      title: Microsoft Defender for Endpoint Tradecraft
+    - url: /evasion/crowdstrike-tradecraft/
+      title: CrowdStrike Falcon Evasion Tradecraft
+    - url: /evasion/sentinelone-tradecraft/
+      title: SentinelOne Singularity Evasion Tradecraft
 
 - num: "06"
   title: Exploitation
@@ -360,6 +368,8 @@
       title: Payload Dev Tools — CUPP, WordSteal, VBA, HTA
     - url: /exploitation/advanced-phishing/
       title: Advanced Phishing — CredMaster, EvilQR, SquarePhish
+    - url: /exploitation/edge-device-wave-2024/
+      title: Edge Device Exploitation — 2023-2025 Wave
 
 - num: "07"
   title: Post-Exploitation
@@ -1034,6 +1044,14 @@
       title: Kubernetes Security Attacks
     - url: /cloud/container-escape/
       title: Container Escape Techniques
+    - url: /cloud/saas-data-plane-attacks/
+      title: SaaS Data Plane Attacks — Snowflake, Databricks, Okta
+    - url: /cloud/oidc-trust-abuse/
+      title: OIDC Trust Abuse — GitHub Actions, GitLab CI → Cloud
+    - url: /cloud/cross-tenant-azure/
+      title: Cross-Tenant Azure Attacks
+    - url: /cloud/cloud-native-c2/
+      title: Cloud-Native C2 Infrastructure
 
 - num: "21"
   title: Programming
@@ -1120,6 +1138,10 @@
       title: Zero Trust Architecture Bypass
     - url: /scenarios/how-i-got-caught/
       title: How I Got Caught — Detection Scenarios
+    - url: /scenarios/saas-pivot-iaas/
+      title: SaaS-to-IaaS Pivot — 2024 Breach Pattern
+    - url: /scenarios/telecom-intrusion-salt-typhoon/
+      title: Salt Typhoon — Telecom Carrier Intrusion
 
 - num: "25"
   title: OT/ICS Security

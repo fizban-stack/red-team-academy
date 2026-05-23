@@ -39,6 +39,42 @@ sc stop VulnDriver
 sc delete VulnDriver
 del C:\Windows\Temp\vuln.sys</code></pre>
 
+<h2>Pre-Installed OEM Vulnerable Drivers on Windows 11</h2>
+
+<p>On OEM hardware, the weapon is often already loaded. These drivers ship with Dell, ASUS, Lenovo, GIGABYTE, and MSI machines — or are installed automatically by companion software (GIGABYTE App Center, ASUS Armoury Crate, Corsair iCUE, NZXT CAM). An attacker who already has user-land code execution can communicate with an already-loaded driver's device object via DeviceIoControl without dropping or installing anything — no service creation event, no driver load event.</p>
+
+<table>
+<tr><th>Driver</th><th>Vendor / Ships With</th><th>CVE</th><th>Capability</th></tr>
+<tr><td><code>DBUtil_2_3.sys</code></td><td>Dell — firmware update utility (ships on Dell PCs)</td><td>CVE-2021-21551</td><td>Arbitrary physical memory R/W → SYSTEM token theft</td></tr>
+<tr><td><code>RtCore64.sys</code></td><td>MSI Afterburner (GPU OC tool — common on gaming PCs)</td><td>CVE-2019-16098</td><td>Arbitrary physical memory R/W, MSR R/W, port I/O</td></tr>
+<tr><td><code>gdrv.sys</code></td><td>GIGABYTE App Center, AORUS Engine, OC Guru II</td><td>CVE-2018-19320 to 19323</td><td>Physical mem R/W, MSR R/W, ring0 memcpy</td></tr>
+<tr><td><code>LnvMSRIO.sys</code></td><td>Lenovo Process Management (ships on Lenovo laptops)</td><td>CVE-2025-8061</td><td>Physical mem R/W + MSR write, no DACL — any unprivileged user</td></tr>
+<tr><td><code>LenovoDiagnosticsDriver.sys</code></td><td>Lenovo Diagnostics</td><td>CVE-2022-3699</td><td>Privilege escalation to SYSTEM</td></tr>
+<tr><td><code>WinRing0.sys</code> / <code>WinRing0x64.sys</code></td><td>ASUS monitoring tools, Corsair iCUE, NZXT CAM, OpenHardwareMonitor</td><td>CVE-2020-14979</td><td>MSR R/W, port I/O, physical memory R/W</td></tr>
+<tr><td><code>AsrDrv103.sys</code> / <code>AsrIbDrv.sys</code></td><td>ASRock hardware utilities (ASRock Polychrome, A-Tuning)</td><td>N/A</td><td>Kernel R/W</td></tr>
+<tr><td><code>mhyprot2.sys</code></td><td>miHoYo Genshin Impact anti-cheat (user-installed)</td><td>N/A</td><td>ZwTerminateProcess from ring 0 — EDR kill</td></tr>
+<tr><td><code>empntdrv.sys</code></td><td>EaseUS partition manager (common on consumer/managed PCs)</td><td>N/A</td><td>Kernel access</td></tr>
+</table>
+
+<p><strong>Attack path without dropping anything:</strong></p>
+
+<pre><code># Step 1: Enumerate drivers already loaded on the target
+sc query type= driver
+driverquery /v /fo csv
+# Or PowerShell:
+Get-WmiObject Win32_SystemDriver | Select-Object Name, PathName, State | Format-Table
+
+# Step 2: Check against the pre-installed driver list above
+# If gdrv.sys is present AND GIGABYTE App Center is installed:
+Get-WmiObject Win32_SystemDriver | Where-Object { $_.PathName -match "gdrv" }
+
+# Step 3: If driver is loaded (Running state), open its device handle directly
+# No sc create, no driver drop, no service install event (Windows Event ID 7045)
+# The device object is already registered — just open and exploit IOCTLs
+Get-ChildItem \\.\  # Enumerate accessible device objects</code></pre>
+
+<p><strong>CVE-2025-8061 (Lenovo LnvMSRIO.sys) — critical detail:</strong> The device object <code>\\.\WinMsrDev</code> is created with <strong>no DACL</strong> — any process, including unprivileged ones, can open a handle. The driver exposes physical memory R/W and MSR R/W IOCTLs without any authentication check. A Quarkslab proof-of-concept demonstrates overwriting the <code>LSTAR</code> MSR (which holds the <code>KiSystemCall64()</code> address) to redirect all syscall dispatch to attacker shellcode, then using a ROP chain to disable SMEP/SMAP via CR4 modification. Sources: <a href="https://blog.quarkslab.com/exploiting-lenovo-driver-cve-2025-8061.html">Quarkslab Part 1</a>, <a href="https://blog.quarkslab.com/exploiting-lenovo-driver-cve-2025-8061_part2.html">Part 2 (rootkit)</a>.</p>
+
 <h2>Common Vulnerable Drivers</h2>
 
 <p>The LOLDrivers project catalogs vulnerable drivers. Key ones used in real attacks:</p>
@@ -76,6 +112,20 @@ del C:\Windows\Temp\vuln.sys</code></pre>
 
 # HP OMEN Gaming Hub (HpPortIox64.sys) — CVE-2021-3437
 # - Port-mapped I/O, arbitrary read/write</code></pre>
+
+<h3>Notable 2024-2025 CVEs</h3>
+
+<table>
+<tr><th>CVE</th><th>Driver</th><th>Vendor</th><th>Impact</th></tr>
+<tr><td>CVE-2025-8061</td><td>LnvMSRIO.sys</td><td>Lenovo Process Management</td><td>Physical mem R/W + MSR write, no DACL → Ring 0</td></tr>
+<tr><td>CVE-2024-38193</td><td>AFD.sys (Windows built-in)</td><td>Microsoft — Ancillary Function Driver</td><td>Zero-day — Lazarus Group used to deploy FUDModule rootkit, disable CrowdStrike, Defender, AhnLab V3</td></tr>
+<tr><td>CVE-2025-52915</td><td>K7RKScan.sys</td><td>K7 Computing AV</td><td>Process termination → EDR kill</td></tr>
+<tr><td>CVE-2025-70795</td><td>STProcessMonitor.sys</td><td>Safetica</td><td>EDR kill</td></tr>
+<tr><td>CVE-2024-51324</td><td>BdApiUtil64.sys</td><td>Baidu AntiVirus</td><td>EDR kill</td></tr>
+<tr><td>CVE-2022-3699</td><td>LenovoDiagnosticsDriver.sys</td><td>Lenovo Diagnostics</td><td>Privilege escalation — still unpatched on many fleets</td></tr>
+</table>
+
+<p><strong>CVE-2024-38193 (AFD.sys) is particularly significant:</strong> AFD.sys is a <em>built-in Windows driver</em> — it is not a third-party component, it does not appear in the LOLDrivers database, and it cannot be blocked via the vulnerable driver blocklist. Lazarus Group (DPRK) exploited it as a zero-day to deploy the FUDModule rootkit — a kernel-level implant that directly disabled CrowdStrike Falcon, Windows Defender, AhnLab V3, and HitmanPro by manipulating kernel data structures. Patched August 2024 (KB5041585). Any unpatched Windows 11 system with AFD.sys is exploitable from user mode with standard user privileges.</p>
 
 <h3>2025 Zero-Days</h3>
 
@@ -364,13 +414,81 @@ Get-CimInstance -Namespace root\Microsoft\Windows\CI -ClassName MSFT_VSPolicy
 Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard | 
   Select VirtualizationBasedSecurityStatus, HypervisorEnforcedCodeIntegrityStatus</code></pre>
 
+<h2>EDR Killer Ecosystem (2024-2025)</h2>
+
+<p>BYOVD moved from APT-exclusive to commodity ransomware in 2024. 54 distinct EDR killer tools now use BYOVD, collectively abusing 35 different signed drivers. Kaspersky measured a 23% quarter-on-quarter increase in BYOVD-targeted attacks in Q2 2024.</p>
+
+<table>
+<tr><th>Tool</th><th>Driver(s) Used</th><th>Who Uses It</th><th>Notes</th></tr>
+<tr><td><strong>EDRKillShifter</strong></td><td>RentDrv2, ThreatFireMonitor</td><td>RansomHub, BlackSuit, Medusa, Qilin, DragonForce, Crytox, Lynx, INC Ransom (8 groups share builds)</td><td>Developed by RansomHub for their RaaS affiliates. Cross-group sharing operationally links RansomHub to Play, BianLian.</td></tr>
+<tr><td><strong>Terminator / SpyBoy</strong></td><td><code>zamguard64.sys</code> (Zemana Anti-Logger)</td><td>Sold for $3,000 on dark forums</td><td>Kills 24+ EDR/AV/XDR products. Signed driver, no DSE trigger.</td></tr>
+<tr><td><strong>AuKill</strong></td><td><code>PROCEXP152.sys</code> (Microsoft-signed Process Explorer)</td><td>BlackCat/ALPHV affiliates</td><td>Drops a legitimate Microsoft-signed binary to kill PPL-protected processes.</td></tr>
+<tr><td><strong>Poortry</strong></td><td>WHQL-signed driver variants with stolen/leaked MS certs</td><td>BlackCat/ALPHV, Cl0p, Cuba, Hive</td><td>Fraudulently signed via Microsoft's signing portal.</td></tr>
+<tr><td><strong>truesight.sys campaign</strong></td><td>RogueKiller Antirootkit v2.0.2 (~2,500 PE metadata variants)</td><td>Unknown — deployed HiddenGh0st RAT</td><td>Attackers generated 2,500 variants with identical signatures but different hashes to evade blocklist. Microsoft added v2.0.2 December 17, 2024. The version predates the July 29, 2015 blocklist cutoff, making it exempt from signature-based enforcement.</td></tr>
+<tr><td><strong>KDMapper</strong></td><td><code>iqvw64e.sys</code> (Intel Network Adapter Diagnostic)</td><td>APTs, red teams</td><td>Loads unsigned kernel implants without disabling Secure Boot. Now on blocklist; forks active.</td></tr>
+</table>
+
+<pre><code># Detect EDRKillShifter deployment artifacts
+# Looks for service creation events with kernel driver type shortly before EDR process exits
+
+# Event ID 7045 — kernel service install (precedes kill)
+Get-WinEvent -FilterHashtable @{LogName='System'; Id=7045} | 
+  Where-Object { $_.Properties[3].Value -eq '1' } |  # ServiceType = KernelDriver
+  Select-Object TimeCreated, @{N='ServiceName';E={$_.Properties[0].Value}},
+                @{N='Path';E={$_.Properties[1].Value}}
+
+# EDR process exit events — cross-correlate with driver load timestamp
+Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4689} |
+  Where-Object { $_.Properties[5].Value -match "MsMpEng|CSFalcon|SentinelAgent|cb\.exe" }</code></pre>
+
+<h2>Windows 11 Defenses and Their Limits</h2>
+
+<table>
+<tr><th>Defense</th><th>Default State</th><th>Red Team Reality</th></tr>
+<tr><td><strong>Microsoft Vulnerable Driver Blocklist</strong></td><td>On by default (Win 11 2022 Update+)</td><td>Updated quarterly — leaves months-long exploitation windows. 730 drivers in LOLDrivers are NOT yet on the blocklist.</td></tr>
+<tr><td><strong>HVCI (Memory Integrity)</strong></td><td>On by default on new OEM devices with compatible hardware</td><td>465 drivers in LOLDrivers bypass HVCI. Not sufficient alone.</td></tr>
+<tr><td><strong>WDAC (App Control)</strong></td><td>Requires explicit enterprise configuration</td><td>Strongest defense — explicit allowlisting. Rarely deployed due to operational complexity.</td></tr>
+<tr><td><strong>ASR: Block abuse of vulnerable signed drivers</strong></td><td>Requires Defender for Endpoint Plan 2</td><td>Blocks writing a new driver to disk. Does NOT block already-installed OEM drivers from being opened and exploited.</td></tr>
+<tr><td><strong>Smart App Control</strong></td><td>Consumer only — enabled on fresh installs</td><td>Enterprise systems typically disable or bypass SAC within days of deployment.</td></tr>
+</table>
+
+<p><strong>April 2026 — Microsoft removes cross-signed driver trust:</strong> Starting April 2026 (rolling out in evaluation mode first), Microsoft removes default OS trust for all kernel drivers signed through the deprecated cross-signed root CA program (deprecated 2021). Applies to Windows 11 24H2/25H2/26H1 and Server 2025. 81% of LOLDrivers samples are cross-signed — this structurally attacks the majority of the BYOVD inventory. However: evaluation mode means audit-only initially; enforcement timelines are per-system; the blocklist update lag problem is not addressed; and the 465 HVCI-bypass drivers remain a threat vector on older builds.</p>
+
+<pre><code># Enumerate Windows 11 BYOVD attack surface on a target
+# Run from an already-compromised user-mode session
+
+# 1. Check HVCI status (if disabled, full BYOVD toolkit available)
+Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard |
+    Select VirtualizationBasedSecurityStatus, HypervisorEnforcedCodeIntegrityStatus
+# 2 = running, 0 = disabled
+
+# 2. Check if blocklist enforcement is active
+Get-CimInstance -Namespace root\Microsoft\Windows\CI -ClassName MSFT_VSPolicy 2>$null
+
+# 3. Enumerate loaded kernel drivers and cross-reference against OEM list
+Get-WmiObject Win32_SystemDriver | 
+    Select-Object Name, PathName, State |
+    Where-Object { $_.PathName -match "rtcore|gdrv|iqvw|dbutil|winring|lnvmsr|asrdrv|empnt|mhyprot" } |
+    Format-Table -AutoSize
+
+# 4. Check Windows Update patch level — unpatched AFD.sys (pre-Aug 2024) = immediate zero-day
+(Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").UBR
+# Cross-reference: AFD.sys CVE-2024-38193 patched in KB5041585 (Aug 13, 2024)</code></pre>
+
 <h2>Resources</h2>
 
 <ul>
   <li>LOLDrivers Project — <code>loldrivers.io</code></li>
   <li>KDU (Kernel Driver Utility) — <code>github.com/hfiref0x/KDU</code></li>
   <li>EDRSandblast — <code>github.com/wavestone-cdt/EDRSandblast</code></li>
-  <li>Microsoft Recommended Driver Block Rules — <code>learn.microsoft.com/en-us/windows/security/application-security/application-control/windows-defender-application-control/design/microsoft-recommended-driver-block-rules</code></li>
+  <li>BYOVDKit — <code>github.com/Hagrid29/BYOVDKit</code></li>
+  <li>BlackSnufkin/BYOVD research (CVE-2025-52915, CVE-2025-1055) — <code>github.com/BlackSnufkin/BYOVD</code></li>
+  <li>Microsoft Recommended Driver Block Rules — <code>learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/microsoft-recommended-driver-block-rules</code></li>
   <li>CheekyBlinder — kernel callback removal — <code>github.com/br-sn/CheekyBlinder</code></li>
-  <li>"BYOVD Attacks in the Wild" — Sophos Labs research</li>
+  <li>Quarkslab — CVE-2025-8061 Lenovo Driver Exploitation Part 1 — <code>blog.quarkslab.com/exploiting-lenovo-driver-cve-2025-8061.html</code></li>
+  <li>Quarkslab — CVE-2025-8061 Part 2 (rootkit) — <code>blog.quarkslab.com/exploiting-lenovo-driver-cve-2025-8061_part2.html</code></li>
+  <li>Talos — Exploring Vulnerable Windows Drivers — <code>blog.talosintelligence.com/exploring-vulnerable-windows-drivers/</code></li>
+  <li>The Hacker News — 2,500 truesight.sys Variants (2025) — <code>thehackernews.com/2025/02/2500-truesightsys-driver-variants.html</code></li>
+  <li>Check Point Research — Breaking Boundaries: Investigating Vulnerable Drivers (2024) — <code>research.checkpoint.com/2024/breaking-boundaries-investigating-vulnerable-drivers-and-mitigating-risks/</code></li>
+  <li>Help Net Security — RansomHub EDRKillShifter shared across 8 groups (2025) — <code>helpnetsecurity.com/2025/03/26/ransomhub-edrkillshifter-tool/</code></li>
 </ul>

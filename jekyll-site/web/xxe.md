@@ -408,6 +408,11 @@ Systematically identify every XML processing surface and test whether the parser
 
 ## Tools & Resources
 
+**PortSwigger Practice Labs (recommended in sequence):**
+- Exploiting XXE using external entities to retrieve files — `portswigger.net/web-security/xxe/lab-exploiting-xxe-to-retrieve-files`
+- Exploiting XXE to perform SSRF attacks — `portswigger.net/web-security/xxe/lab-exploiting-xxe-to-perform-ssrf`
+- Exploiting XXE via image file upload — `portswigger.net/web-security/xxe/lab-xxe-via-file-upload`
+
 - PortSwigger XXE labs — `portswigger.net/web-security/xxe`
 - PayloadsAllTheThings XXE — `github.com/swisskyrepo/PayloadsAllTheThings/tree/master/XXE%20Injection`
 - XXEinjector — `github.com/enjoiz/XXEinjector`

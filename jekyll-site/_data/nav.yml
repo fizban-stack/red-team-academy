@@ -158,6 +158,8 @@
       title: AD Assessment — PingCastle, ADRecon, adidnsdump
     - url: /active-directory/entra-connect-compromise/
       title: Entra Connect / AAD Connect Compromise
+    - url: /active-directory/lapsv2-abuse/
+      title: Windows LAPS (v2) Abuse
 
 - num: "04"
   title: Pivoting & Tunneling
@@ -370,6 +372,10 @@
       title: Advanced Phishing — CredMaster, EvilQR, SquarePhish
     - url: /exploitation/edge-device-wave-2024/
       title: Edge Device Exploitation — 2023-2025 Wave
+    - url: /exploitation/aitm-evilgophish-modlishka/
+      title: AitM Phishing — Evilginx, EvilGoPhish, Modlishka
+    - url: /exploitation/mfa-fatigue-tradecraft/
+      title: MFA Fatigue Tradecraft — Post-Uber-2022
 
 - num: "07"
   title: Post-Exploitation
@@ -434,6 +440,10 @@
       title: Impact Techniques — SlowLoris, USBKill, Keytap
     - url: /post-exploitation/winpwn-techniques/
       title: WinPwn Techniques — Internal Windows Pentest
+    - url: /post-exploitation/slack-teams-discord-postex/
+      title: Slack, Teams, Discord — Workspace Post-Ex
+    - url: /post-exploitation/intune-attacks/
+      title: Microsoft Intune Attacks
 
 - num: "08"
   title: C2 Frameworks
@@ -792,6 +802,10 @@
       title: AI Security CTF Challenges
     - url: /ai-agents/genai-offensive-workflow/
       title: GenAI for Offensive Security — Practitioner Workflow
+    - url: /ai-agents/live-ops-with-llm-copilot/
+      title: Live Ops with LLM Copilot — Vibe Hacking
+    - url: /ai-agents/deepfake-voice-vishing-ops/
+      title: Deepfake Voice & Vishing Operations
 
 - num: "13"
   title: Red Team Tools
@@ -940,6 +954,8 @@
       title: Red Team Program Maturity
     - url: /reporting/post-engagement-debrief/
       title: Post-Engagement Debrief Framework
+    - url: /reporting/metrics-that-matter/
+      title: Metrics That Matter — MTTD, MTTR, Dwell
 
 - num: "16"
   title: Social Engineering
@@ -1166,6 +1182,8 @@
       title: Long-Dwell Credential Harvesting
     - url: /scenarios/ransomware-operator-emulation/
       title: Ransomware Operator Emulation
+    - url: /scenarios/engagement-lifecycle-walkthrough/
+      title: Engagement Lifecycle Walkthrough — End-to-End
 
 - num: "25"
   title: OT/ICS Security
@@ -1226,6 +1244,10 @@
       title: Phishing Email Infrastructure
     - url: /infrastructure/opsec-failures/
       title: OPSEC Failure Post-Mortems
+    - url: /infrastructure/terraform-redirector-stack/
+      title: Terraform Redirector Stack — IaC for Engagement Infra
+    - url: /infrastructure/opsec-failure-case-library/
+      title: OPSEC Failure Case Library — Annotated Burns
 
 - num: "28"
   title: Vulnerability Research
@@ -1284,6 +1306,16 @@
       title: Bug Bounty Starter (4 Weeks)
     - url: /learning-paths/zero-trust-bypass/
       title: Zero Trust Bypass (8 Weeks)
+    - url: /learning-paths/osep-prep/
+      title: OSEP Preparation Path
+    - url: /learning-paths/oswe-prep/
+      title: OSWE Preparation Path
+    - url: /learning-paths/pnpt-prep/
+      title: PNPT Preparation Path
+    - url: /learning-paths/htb-cpts-prep/
+      title: HTB CPTS Preparation Path
+    - url: /learning-paths/htb-cwee-prep/
+      title: HTB CWEE Preparation Path
 
 - num: "31"
   title: Reference

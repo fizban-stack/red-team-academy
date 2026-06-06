@@ -833,6 +833,8 @@
     - url: /tools/wireless-tools/
       title: Wireless Attack Tools
 
+    - url: /tools/self-hosted-tools/
+      title: Self-Hosted Adversary Emulation
     - url: /tools/caldera/
       title: MITRE Caldera (Adversary Emulation)
     - url: /tools/atomic-red-team/

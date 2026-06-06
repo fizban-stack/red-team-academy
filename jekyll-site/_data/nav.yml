@@ -839,6 +839,16 @@
       title: MITRE Caldera (Adversary Emulation)
     - url: /tools/atomic-red-team/
       title: Atomic Red Team (Detection Tests)
+    - url: /tools/vectr/
+      title: VECTR (Purple Team Tracking)
+    - url: /tools/openaev/
+      title: OpenAEV (Adversarial Exposure Validation)
+    - url: /tools/purplesharp/
+      title: PurpleSharp (AD Simulation)
+    - url: /tools/ludus/
+      title: Ludus (Red Team Range)
+    - url: /tools/velociraptor/
+      title: Velociraptor (Endpoint Visibility)
     - url: /tools/pentest-resources/
       title: Pentesting Resources Bible
     - url: /tools/red-teaming-toolkit/
